@@ -5,7 +5,7 @@
 #include <map>
 
 enum CalibState {kEnd, kStart, kConfirm};
-enum CalibStatus {kOnCalib, kSaveCalib, kConfirmCalib};
+enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 class BasicInfoBar;
 class CalibrationPage : public QWidget {
@@ -15,11 +15,17 @@ public:
     CalibrationPage(QWidget* parent = nullptr);
     ~CalibrationPage(){}
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void InitPage();
     QWidget* CreateControlArea();
     QWidget* CreatePIDSettingArea();
     QWidget* CreateDisplacementArea();
+    void InitCalibState(QPushButton *calib_btn);
+    void InitCalibValues(int col);
+    void SetRowCalib(int row, bool calib);
     QWidget* CreateSignalResponseArea();
 
     QWidget* CreateWaveformArea();
@@ -34,14 +40,28 @@ private slots:
     void OnPIDMotionBtnClicked();
     void OnPIDSaveBtnClicked();
 
+    void OnSaveCalibValueBtnCLicked();
+
     void OnSineWaveBtnClicked();
     void OnSawtoothWaveBtnClicked();
 
 private:
     QHBoxLayout* main_layout_ = nullptr;
     BasicInfoBar* basic_info_bar_ = nullptr;
+    QGroupBox* control_group_ = nullptr;
+    QGroupBox* pid_group_ = nullptr;
+    QGroupBox* displacement_group_ = nullptr;
+    QGroupBox* signal_group_ = nullptr;
+    QGroupBox* waveform_group_ = nullptr;
+
+    QTableWidget* displace_table_ = nullptr;
+    QRangeSlider* range_slider_ = nullptr;
+    int select_calib_ = 0;
+
     std::map<QPushButton*, CalibState> states_map_;
-    CalibStatus calib_state_ = kOnCalib;
+    std::vector<QPushButton*> calib_btns_;
+    CalibState calib_state_ = kEnd; //标定按钮
+    CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
 };
 
 

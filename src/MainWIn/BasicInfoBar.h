@@ -8,7 +8,10 @@ enum LayoutStyle {
     kVal
 };
 
-static bool IsOnTest = false;
+enum TestState {
+    kTestStart,
+    kTestEnd
+};
 
 class BasicInfoBar : public QGroupBox {
     Q_OBJECT
@@ -32,6 +35,9 @@ public:
     void SetProtocol(const QString& protocol);
     QString GetProtocol() const;
 
+signals:
+    void SendTestState(TestState state);
+
 private slots:
     void OnStartBtnClicked();
 
@@ -52,6 +58,8 @@ private:
     QInfoEdit* baud_rate_edit_ = nullptr;      //波特率
     QInfoEdit* protocol_edit_ = nullptr;       //协议
     QPushButton* start_btn_ = nullptr;         //测试开始按钮
+
+    TestState state_ = kTestEnd;
 };
 
 

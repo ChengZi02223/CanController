@@ -29,6 +29,8 @@ void SettingPage::InitPage() {
     auto sub_layout = new QHBoxLayout();
     setting_info_table_ = new SettingInfoTable(this);
     function_btn_area_ = new FunctionBtnArea(this);
+    setting_info_table_->setEnabled(false);
+    function_btn_area_->setEnabled(false);
 
     sub_layout->addWidget(setting_info_table_);
     sub_layout->addWidget(function_btn_area_);
@@ -40,6 +42,10 @@ void SettingPage::InitPage() {
     connect(function_btn_area_, &FunctionBtnArea::SendClearModifyValue, setting_info_table_, &SettingInfoTable::OnClearModifyValues);
     connect(function_btn_area_, &FunctionBtnArea::SendConfirmValues, setting_info_table_, &SettingInfoTable::OnConfirmAllValues);
     connect(function_btn_area_, &FunctionBtnArea::SendInputMode, this, &SettingPage::SendInputMode);
+    connect(basic_info_bar_, &BasicInfoBar::SendTestState, [=](TestState state){
+        setting_info_table_->setEnabled(state == kTestStart);
+        function_btn_area_->setEnabled(state == kTestStart);
+    });
 }
 
 SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
@@ -73,11 +79,13 @@ void SettingInfoTable::InitTable() {
         // 对象字典
         int objDict = 0x2001 + i;
         auto obj_item = new QTableWidgetItem(QString("0x%1").arg(objDict, 4, 16, QChar('0')).toUpper());
+        obj_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
         obj_item->setTextAlignment(Qt::AlignCenter);
         setItem(i, INFO_TABLE_OBJ_COLUMN, obj_item);
         // 索引
         int indexVal = 0x01 + i; 
         auto idx_item = new QTableWidgetItem(QString("0x%1").arg(indexVal, 2, 16, QChar('0')).toUpper());
+        idx_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
         idx_item->setTextAlignment(Qt::AlignCenter);
         setItem(i, INFO_TABLE_IDX_COLUMN, idx_item);
 
@@ -86,7 +94,9 @@ void SettingInfoTable::InitTable() {
             value_item->setTextAlignment(Qt::AlignCenter);
             if(j == INFO_TABLE_MODIFY_COLUMN) {
                 value_item->setFlags(value_item->flags() | Qt::ItemIsEditable);
-            }
+            } else {
+                value_item->setFlags(value_item->flags() & ~Qt::ItemIsEditable);
+            } 
             setItem(i, j, value_item);
         }
 
@@ -190,11 +200,13 @@ void FunctionBtnArea::ConnectSignles() {
 }
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
-
+    QString file_path = QFileDialog::getOpenFileName(nullptr, "Open File", "", "(*)");
+    qDebug() << "Open File:" << file_path;
 }
 
 void FunctionBtnArea::OnSaveSettingBtnClicked() {
-
+    QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
+    qDebug() << "Save File:" << save_path;
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {

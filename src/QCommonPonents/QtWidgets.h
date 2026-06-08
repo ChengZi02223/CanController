@@ -14,6 +14,12 @@
 #include <QComboBox>
 #include <QHeaderView>
 #include <QSlider>
+#include <QFileDialog>
+#include <QDebug>
+#include <QColor>
+#include <QBrush>
+
+#include <QResizeEvent>
 
 #include "QInfoEdit.h"
 #include "QRangeSlider.h"

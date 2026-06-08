@@ -14,27 +14,35 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
     serial_num_edit_ = new QInfoEdit("序列号：", this);     //序列号
     serial_num_edit_->setAlignment(Qt::AlignCenter);
     // serial_num_edit_->setReadOnly(true);
+    serial_num_edit_->setEnabled(false);
     date_edit_ = new QInfoEdit("日期：", this);           //日期
     date_edit_->setAlignment(Qt::AlignCenter);
     // date_edit_->setReadOnly(true);
+    date_edit_->setEnabled(false);
     model_edit_ = new QInfoEdit("型号：", this);          //型号  
     model_edit_->setAlignment(Qt::AlignCenter);
     // model_edit_->setReadOnly(true);
+    model_edit_->setEnabled(false);
     channel_count_edit_ = new QInfoEdit("联数：", this);  //联数
     channel_count_edit_->setAlignment(Qt::AlignCenter);
     // channel_count_edit_->setReadOnly(true);
+    channel_count_edit_->setEnabled(false);
     manufacturer_edit_ = new QInfoEdit("厂家：", this);   //厂家
     manufacturer_edit_->setAlignment(Qt::AlignCenter);
     // manufacturer_edit_->setReadOnly(true);
+    manufacturer_edit_->setEnabled(false);
     version_edit_ = new QInfoEdit("版本：", this);        //版本
     version_edit_->setAlignment(Qt::AlignCenter);
     // version_edit_->setReadOnly(true);
+    version_edit_->setEnabled(false);
     baud_rate_edit_ = new QInfoEdit("波特率：", this);      //波特率
     baud_rate_edit_->setAlignment(Qt::AlignCenter);
     // baud_rate_edit_->setReadOnly(true);
+    baud_rate_edit_->setEnabled(false);
     protocol_edit_ = new QInfoEdit("协议：", this);       //协议
     protocol_edit_->setAlignment(Qt::AlignCenter);
     // protocol_edit_->setReadOnly(true);
+    protocol_edit_->setEnabled(false);
 
     if(style == LayoutStyle::kHar) {
         CreateHarBar();
@@ -60,7 +68,7 @@ void BasicInfoBar::CrateValBar() {
 }
 
 void BasicInfoBar::CreateHarBar() {
-    start_btn_ = new QPushButton("测试开始", this);
+    start_btn_ = new QPushButton("测试结束", this);
     main_layout_->addWidget(serial_num_edit_);
     main_layout_->addWidget(date_edit_);
     main_layout_->addWidget(model_edit_);
@@ -149,19 +157,21 @@ void BasicInfoBar::InitData() {
 }
 
 void BasicInfoBar::OnStartBtnClicked() {
-    if (!IsOnTest) {
+    if (state_ == kTestStart) {
         start_btn_->setText("测试结束");
-        IsOnTest = true;
+        state_ = kTestEnd;
     } else {
         start_btn_->setText("测试开始");
-        IsOnTest = false;
+        state_ = kTestStart;
     }
-    serial_num_edit_->setDisabled(IsOnTest);
-    date_edit_->setDisabled(IsOnTest);
-    model_edit_->setDisabled(IsOnTest);
-    channel_count_edit_->setDisabled(IsOnTest);
-    manufacturer_edit_->setDisabled(IsOnTest);
-    version_edit_->setDisabled(IsOnTest);
-    baud_rate_edit_->setDisabled(IsOnTest);
-    protocol_edit_->setDisabled(IsOnTest);
+    serial_num_edit_->setDisabled(state_);
+    date_edit_->setDisabled(state_);
+    model_edit_->setDisabled(state_);
+    channel_count_edit_->setDisabled(state_);
+    manufacturer_edit_->setDisabled(state_);
+    version_edit_->setDisabled(state_);
+    baud_rate_edit_->setDisabled(state_);
+    protocol_edit_->setDisabled(state_);
+
+    emit SendTestState(state_);
 }
