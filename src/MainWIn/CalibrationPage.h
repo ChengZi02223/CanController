@@ -5,6 +5,7 @@
 #include <map>
 
 enum CalibState {kEnd, kStart, kConfirm};
+enum CalibStatus {kOnCalib, kSaveCalib, kConfirmCalib};
 
 class BasicInfoBar;
 class CalibrationPage : public QWidget {
@@ -40,6 +41,7 @@ private:
     QHBoxLayout* main_layout_ = nullptr;
     BasicInfoBar* basic_info_bar_ = nullptr;
     std::map<QPushButton*, CalibState> states_map_;
+    CalibStatus calib_state_ = kOnCalib;
 };
 
 

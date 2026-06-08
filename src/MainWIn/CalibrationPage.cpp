@@ -198,7 +198,6 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         displace_table->setCellWidget(2, i, calib_btn);
         states_map_[calib_btn] = kEnd;
         connect(calib_btn, &QPushButton::clicked, this, [this, i, calib_btn](){
-            // OnEnterBtnClicked(i);
             auto state = states_map_[calib_btn];
             switch(state) {
                 case kEnd:
@@ -236,8 +235,25 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     auto target_flow_edit = new QLineEdit();
     target_flow_edit->setAlignment(Qt::AlignCenter);
 
-    auto state_btn = new QPushButton("标定状态");
-
+    auto state_btn = new QPushButton("标定进行中");
+    connect(state_btn, &QPushButton::clicked, this, [this, state_btn](){
+        switch(calib_state_) {
+            case kOnCalib:
+                state_btn->setText("保存标定值");
+                calib_state_ = kSaveCalib;
+                break;
+            case kSaveCalib:
+                state_btn->setText("验证标定值");
+                calib_state_ = kConfirmCalib;
+                break;
+            case kConfirmCalib:
+                state_btn->setText("标定进行中");
+                calib_state_ = kOnCalib;
+                break;
+            default:
+                break;
+        }
+    });
     sub_layout->addWidget(displace_target_label);
     sub_layout->addWidget(displace_target_edit);
     sub_layout->addStretch();
@@ -292,9 +308,9 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     auto cycle_count_label = new QLabel("循环次数");
     auto target_value_label = new QLabel("目标值");
-    auto up_time_label = new QLabel("上升时间");
-    auto down_time_label = new QLabel("下降时间");
-    auto stop_time_label = new QLabel("中位滞留时间");
+    auto up_time_label = new QLabel("上升时间(s)");
+    auto down_time_label = new QLabel("下降时间(s)");
+    auto stop_time_label = new QLabel("中位滞留时间(s)");
 
     auto cycle_count_edit = new QLineEdit();
     auto target_value_edit = new QLineEdit();
@@ -304,6 +320,9 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     auto mode_select_label = new QLabel("模式选择:");
     auto mode_select_combo = new QComboBox();
+    mode_select_combo->setFixedHeight(30);
+    mode_select_combo->setMinimumWidth(300);
+    mode_select_combo->addItems({"1侧曲线运动", "2侧曲线运动", "双侧曲线运动"});
 
     auto grid_layout = new QGridLayout();
 
@@ -317,13 +336,18 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
     grid_layout->addWidget(up_time_edit, 1, 2, Qt::AlignCenter);
     grid_layout->addWidget(down_time_edit, 1, 3, Qt::AlignCenter);
     grid_layout->addWidget(stop_time_edit, 1, 4, Qt::AlignCenter);
-    grid_layout->addWidget(mode_select_label, 2, 0, Qt::AlignCenter);
-    grid_layout->addWidget(mode_select_combo, 2, 1, Qt::AlignCenter);    
+    // grid_layout->addWidget(mode_select_label, 2, 0, Qt::AlignCenter);
 
     auto button_layout = new QHBoxLayout();
     auto sine_wave_btn = new QPushButton("正弦波");
+    sine_wave_btn->setMinimumWidth(300);
+    sine_wave_btn->setEnabled(false);
     auto sawtooth_wave_btn = new QPushButton("锯齿波");
+    sawtooth_wave_btn->setMinimumWidth(300);
 
+    button_layout->addWidget(mode_select_label);
+    button_layout->addWidget(mode_select_combo);
+    button_layout->addStretch();
     button_layout->addWidget(sine_wave_btn);
     button_layout->addWidget(sawtooth_wave_btn);
 
@@ -332,6 +356,9 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     connect(sine_wave_btn, &QPushButton::clicked, this, &CalibrationPage::OnSineWaveBtnClicked);
     connect(sawtooth_wave_btn, &QPushButton::clicked, this, &CalibrationPage::OnSawtoothWaveBtnClicked);
+    connect(mode_select_combo, &QComboBox::currentTextChanged, this, [=](const QString &text){
+        sine_wave_btn->setEnabled(text == "双侧曲线运动");
+    });
 
     return signal_group;
 }
