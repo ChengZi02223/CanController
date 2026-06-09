@@ -26,6 +26,7 @@ private:
     void InitCalibState(QPushButton *calib_btn);
     void InitCalibValues(int col);
     void SetRowCalib(int row, bool calib);
+    void UpdateCalibInfo();
     QWidget* CreateSignalResponseArea();
 
     QWidget* CreateWaveformArea();
@@ -56,6 +57,7 @@ private:
 
     QTableWidget* displace_table_ = nullptr;
     QRangeSlider* range_slider_ = nullptr;
+    QLabel* info_label_ = nullptr;
     int select_calib_ = 0;
 
     std::map<QPushButton*, CalibState> states_map_;

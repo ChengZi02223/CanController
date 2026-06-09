@@ -18,10 +18,13 @@
 #include <QDebug>
 #include <QColor>
 #include <QBrush>
+#include <QListWidgetItem>
+#include <QButtonGroup>
 
 #include <QResizeEvent>
 
 #include "QInfoEdit.h"
 #include "QRangeSlider.h"
+#include "QPerfCurve.h"
 
 #endif // QT_WIDGETS_H

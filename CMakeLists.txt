@@ -34,7 +34,11 @@ file(GLOB SRCS
 #     ${PROJECT_SOURCE_DIR}/src/Res/Uis/*.ui
 # )
 
-add_executable(${PROJECT_NAME} ${SRCS} ${HDRS})
+file(GLOB QRC_FILE
+    ${PROJECT_SOURCE_DIR}/src/Res/tools/tool.qrc
+)
+
+add_executable(${PROJECT_NAME} ${SRCS} ${HDRS} ${QRC_FILE})
 
 # 头文件路径
 target_include_directories(${PROJECT_NAME} PRIVATE

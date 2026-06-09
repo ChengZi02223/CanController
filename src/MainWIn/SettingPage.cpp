@@ -61,6 +61,7 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
             save_item->setForeground(QBrush(Qt::black));
         }
     });
+    setObjectName("SettingInfoTable");
 }
 
 void SettingInfoTable::InitTable() {
@@ -101,6 +102,7 @@ void SettingInfoTable::InitTable() {
         }
 
         auto enter_btn = new QPushButton("确认", this);
+        enter_btn->setObjectName("EnterBtn");
         setCellWidget(i, COLUMN_COUNT - 1, enter_btn);
         connect(enter_btn, &QPushButton::clicked, this, [this, i](){
             OnEnterBtnClicked(i);
@@ -160,20 +162,28 @@ void FunctionBtnArea::InitButtons() {
 
     load_setting_btn_ = new QPushButton("读取配置参数文件", this);
     load_setting_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    load_setting_btn_->setObjectName("FuncBtn");
     save_setting_btn_ = new QPushButton("保存配置参数文件", this);
     save_setting_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    save_setting_btn_->setObjectName("FuncBtn");
     mode_change_btn_ = new QPushButton("手输模式", this);
     mode_change_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    mode_change_btn_->setObjectName("FuncBtn");
     save_default_btn_ = new QPushButton("保存默认参数", this);
     save_default_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    save_default_btn_->setObjectName("FuncBtn");
     save_eeprom_btn_ = new QPushButton("保存到EEPROM", this);
     save_eeprom_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    save_eeprom_btn_->setObjectName("FuncBtn");
     load_to_table_btn_ = new QPushButton("读取参数到表格", this);
     load_to_table_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    load_to_table_btn_->setObjectName("FuncBtn");
     clear_setting_btn_ = new QPushButton("清空配置参数", this);
     clear_setting_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    clear_setting_btn_->setObjectName("FuncBtn");
     confirm_btn_ = new QPushButton("一键确认", this);
     confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    confirm_btn_->setObjectName("FuncBtn");
 
     main_layout->addWidget(load_setting_btn_);
     main_layout->addWidget(save_setting_btn_);

@@ -47,6 +47,7 @@ void CalibrationPage::resizeEvent(QResizeEvent* event)  {
 // Implementation for creating control area
 QWidget* CalibrationPage::CreateControlArea() {
     control_group_ = new QGroupBox("开环控制指令区", this);
+    control_group_->setObjectName("ControlGroup");
 
     auto main_layout = new QVBoxLayout(control_group_);
 
@@ -69,9 +70,12 @@ QWidget* CalibrationPage::CreateControlArea() {
 
     auto control_1_btn = new QPushButton("1 侧开环控制");
     // control_1_btn->setMinimumWidth(150);
+    control_1_btn->setObjectName("ControlBtn");
     auto control_2_btn = new QPushButton("2 侧开环控制");
     // control_2_btn->setMinimumWidth(150);
+    control_2_btn->setObjectName("ControlBtn");
     auto cycle_btn = new QPushButton("开环循环动作");
+    cycle_btn->setObjectName("CycleBtn");
     cycle_btn->setMinimumWidth(300);
 
     auto grid_layout = new QGridLayout();
@@ -117,6 +121,7 @@ void CalibrationPage::OnCycleBtnClicked() {
 // Implementation for creating PID setting area
 QWidget* CalibrationPage::CreatePIDSettingArea() {
     pid_group_ = new QGroupBox("PID参数调试区", this);
+    pid_group_->setObjectName("PIDGroup");
 
     auto main_layout = new QVBoxLayout(pid_group_);
 
@@ -150,9 +155,13 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     side_combo->setFixedHeight(30);
     side_combo->addItems({"1侧","2侧"});
     auto step_btn = new QPushButton("闭环阶跃响应");
+    step_btn->setObjectName("ResponceBtn");
     auto ramp_btn = new QPushButton("闭环斜坡响应");
+    ramp_btn->setObjectName("ResponceBtn");
     auto motion_btn = new QPushButton("往复动作");
+    motion_btn->setObjectName("CycleBtn");
     auto save_btn = new QPushButton("保存PID参数");
+    save_btn->setObjectName("CycleBtn");
 
     button_layout->addWidget(side_combo);
     button_layout->addWidget(step_btn);
@@ -190,6 +199,7 @@ void CalibrationPage::OnPIDSaveBtnClicked() {
 // Implementation for creating displacement area
 QWidget* CalibrationPage::CreateDisplacementArea() {
     displacement_group_ = new QGroupBox("位移流量标定区", this);
+    displacement_group_->setObjectName("DisplacGroup");
 
     auto main_layout = new QVBoxLayout(displacement_group_);
 
@@ -232,15 +242,19 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                     calib_btn->setText("结束标定");
                     calib_state_ = kEnd;
                     SetRowCalib(i, false);
+                    UpdateCalibInfo();
                     return;
                 default:
                     break;
             }
+            UpdateCalibInfo();
             InitCalibValues(i);
         });
     }
     displace_table_->setVerticalHeaderLabels(h_headers);
     displace_table_->setHorizontalHeaderLabels({"标定值", "控制值", "标定"});
+
+    info_label_ = new QLabel("当前标定：");
 
     auto sub_layout = new QHBoxLayout();
     auto displace_target_label = new QLabel("位移目标值:");
@@ -293,6 +307,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     sub_layout->addWidget(state_btn, Qt::AlignRight);
     sub_layout->addWidget(save_btn, Qt::AlignRight);
 
+    main_layout->addWidget(info_label_, 0, Qt::AlignRight);    
     main_layout->addWidget(displace_table_, 1);
     main_layout->addStretch();
     main_layout->addLayout(sub_layout);
@@ -319,6 +334,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         auto selected_calib_item = displace_table_->item(select_calib_, 1);
         selected_calib_item->setText(QString::number(value));
         real_flow_edit->setText(QString::number(value));
+        UpdateCalibInfo();
     });
     // connect(displace_table_, &QTableWidget::cellPressed, [=](int row, int col) {
     //     if(col != 1) {
@@ -330,6 +346,22 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     connect(save_btn, &QPushButton::clicked , this, CalibrationPage::OnSaveCalibValueBtnCLicked);
 
     return displacement_group_;
+}
+
+void CalibrationPage::UpdateCalibInfo() {
+    auto v_head = displace_table_->verticalHeaderItem(select_calib_)->text();
+    auto calib_item = displace_table_->item(select_calib_, 0);
+    auto control_item = displace_table_->item(select_calib_, 1);
+    QString state_str = "";
+    if(calib_state_ == kStart) {
+        state_str = "开始标定";
+    } else if (calib_state_ == kConfirm) {
+        state_str = "确认标定";
+    } else if (calib_state_ == kEnd) {
+        state_str = "结束标定";
+    }
+    auto text = QString("当前标定：%1 | %2 | %3 | %4").arg(v_head).arg(calib_item->text()).arg(control_item->text()).arg(state_str);
+    info_label_->setText(text);
 }
 
 void CalibrationPage::OnSaveCalibValueBtnCLicked() {
@@ -391,6 +423,7 @@ void CalibrationPage::SetRowCalib(int row, bool calib) {
 // Implementation for creating signal response area
 QWidget* CalibrationPage::CreateSignalResponseArea() {
     signal_group_ = new QGroupBox("周期信号响应区", this);
+    signal_group_->setObjectName("SignalGroup");
 
     auto main_layout = new QVBoxLayout(signal_group_);
 
@@ -480,7 +513,16 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     sub_layout->addWidget(bottom_agix_combo);
     sub_layout->addStretch();
 
-    auto waveform_display = new QWidget(); // Placeholder for actual waveform display widget
+    // auto waveform_display = new QWidget(); // Placeholder for actual waveform display widget
+    QPerfCurve *waveform_display = new QPerfCurve();
+
+    QVector<double> time = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    QVector<double> displacement = {0, 10, 30, 60, 100, 150, 210, 280, 360, 450, 550};
+    QVector<double> flow = {0, 20, 45, 70, 100, 130, 160, 180, 190, 195, 200};
+
+    waveform_display->setTimeData(time);
+    waveform_display->addCurve("Displacement", displacement, AxisType::Left);
+    waveform_display->addCurve("Flow", flow, AxisType::Right);
 
     main_layout->addLayout(sub_layout);
     main_layout->addWidget(waveform_display);
