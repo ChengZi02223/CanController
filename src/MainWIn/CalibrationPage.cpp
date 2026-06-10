@@ -69,14 +69,17 @@ QWidget* CalibrationPage::CreateControlArea() {
     // work_time_edit->setMinimumWidth(150);
 
     auto control_1_btn = new QPushButton("1 侧开环控制");
-    // control_1_btn->setMinimumWidth(150);
+    control_1_btn->setFixedHeight(30);
+    control_1_btn->setMinimumWidth(150);
     control_1_btn->setObjectName("ControlBtn");
     auto control_2_btn = new QPushButton("2 侧开环控制");
-    // control_2_btn->setMinimumWidth(150);
+    control_2_btn->setFixedHeight(30);
+    control_2_btn->setMinimumWidth(150);
     control_2_btn->setObjectName("ControlBtn");
     auto cycle_btn = new QPushButton("开环循环动作");
     cycle_btn->setObjectName("CycleBtn");
     cycle_btn->setMinimumWidth(300);
+    cycle_btn->setFixedHeight(30);
 
     auto grid_layout = new QGridLayout();
 
@@ -156,12 +159,16 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     side_combo->addItems({"1侧","2侧"});
     auto step_btn = new QPushButton("闭环阶跃响应");
     step_btn->setObjectName("ResponceBtn");
+    step_btn->setFixedHeight(30);
     auto ramp_btn = new QPushButton("闭环斜坡响应");
     ramp_btn->setObjectName("ResponceBtn");
+    ramp_btn->setFixedHeight(30);
     auto motion_btn = new QPushButton("往复动作");
     motion_btn->setObjectName("CycleBtn");
+    motion_btn->setFixedHeight(30);
     auto save_btn = new QPushButton("保存PID参数");
     save_btn->setObjectName("CycleBtn");
+    save_btn->setFixedHeight(30);
 
     button_layout->addWidget(side_combo);
     button_layout->addWidget(step_btn);
@@ -189,7 +196,7 @@ void CalibrationPage::OnPIDRampBtnClicked() {
 }
 
 void CalibrationPage::OnPIDMotionBtnClicked() {
-    
+    qDebug()<<"OnPIDMotionBtnClicked";
 }
 
 void CalibrationPage::OnPIDSaveBtnClicked() {
@@ -204,6 +211,8 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     auto main_layout = new QVBoxLayout(displacement_group_);
 
     displace_table_ = new QTableWidget(11, 3, this);
+    displace_table_->setObjectName("DisplaceTable");
+    // save_item->setForeground(QBrush(Qt::green));
 
     QStringList h_headers;
     for (int i = 0; i < 11; ++i) {
@@ -223,6 +232,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         // 标定 
         auto calib_btn = new QPushButton("结束标定");
         calib_btn->setMinimumWidth(90);
+        calib_btn->setObjectName("CalibBtn");
         displace_table_->setCellWidget(i, 2, calib_btn);
         calib_btns_.push_back(calib_btn);
         connect(calib_btn, &QPushButton::clicked, this, [this, i, calib_btn](){
@@ -271,6 +281,9 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     target_flow_edit->setAlignment(Qt::AlignCenter);
 
     auto state_btn = new QPushButton("标定终止");
+    state_btn->setObjectName("StateBtn");
+    state_btn->setFixedHeight(30);
+    state_btn->setMinimumWidth(100);
     connect(state_btn, &QPushButton::clicked, this, [this, state_btn](){
         switch(calib_status_) {
             case kStopCalib:
@@ -291,6 +304,9 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     });
 
     auto save_btn = new QPushButton("保存标定值");
+    save_btn->setObjectName("StateBtn");
+    save_btn->setFixedHeight(30);
+    save_btn->setMinimumWidth(100);
 
     sub_layout->addWidget(displace_target_label);
     sub_layout->addWidget(displace_target_edit);
@@ -393,16 +409,16 @@ void CalibrationPage::InitCalibState(QPushButton *calib_btn) {
     }
 }
 
-void CalibrationPage::InitCalibValues(int col) {
-    if(col < 0 || col > displace_table_->rowCount() - 1) {
+void CalibrationPage::InitCalibValues(int row) {
+    if(row < 0 || row > displace_table_->rowCount() - 1) {
         return;
     }
     for(int i = 0; i < displace_table_->rowCount(); i++) {
         auto control_item = displace_table_->item(i, 1); 
-        if(i == col) {
+        if(i == row) {
             range_slider_->setValue(control_item->text().toInt());
         }
-        SetRowCalib(i, i == col);
+        SetRowCalib(i, i == row);
     }
 }
 
@@ -461,10 +477,14 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     auto button_layout = new QHBoxLayout();
     auto sine_wave_btn = new QPushButton("正弦波");
-    // sine_wave_btn->setMinimumWidth(300);
+    sine_wave_btn->setMinimumWidth(150);
+    sine_wave_btn->setObjectName("WaveBtn");
+    sine_wave_btn->setFixedHeight(30);
     sine_wave_btn->setEnabled(false);
     auto sawtooth_wave_btn = new QPushButton("锯齿波");
-    // sawtooth_wave_btn->setMinimumWidth(300);
+    sawtooth_wave_btn->setMinimumWidth(150);
+    sawtooth_wave_btn->setObjectName("WaveBtn");
+    sawtooth_wave_btn->setFixedHeight(30);
 
     button_layout->addWidget(mode_select_label);
     button_layout->addWidget(mode_select_combo);

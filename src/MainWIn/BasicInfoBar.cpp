@@ -69,6 +69,9 @@ void BasicInfoBar::CrateValBar() {
 
 void BasicInfoBar::CreateHarBar() {
     start_btn_ = new QPushButton("测试结束", this);
+    start_btn_->setObjectName("StartBtn");
+    start_btn_->setFixedHeight(50);
+    start_btn_->setMinimumWidth(100);
     main_layout_->addWidget(serial_num_edit_);
     main_layout_->addWidget(date_edit_);
     main_layout_->addWidget(model_edit_);

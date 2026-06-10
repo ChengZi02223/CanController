@@ -21,32 +21,57 @@ QPushButton#TestPageTabBtn:checked {
     color: white;
 }
 
+QPushButton#StartBtn {
+    border-radius: 4px;
+    background-color:#19e16c;
+    color: white;
+    font-weight: bold;
+}
+
+QPushButton#StartBtn:disabled {
+    border-radius: 4px;
+    background-color:rgb(28, 118, 5);
+    color: white;
+}
+
+QPushButton#StartBtn:hover {
+    border-radius: 4px;
+    background-color:rgb(73, 243, 6);
+    color: white;
+}
+
+QPushButton#StartBtn:pressed {
+    border-radius: 4px;
+    background-color:rgb(19, 242, 7);
+    color: white;
+}
+
 QPushButton#EnterBtn {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:#ff9844;
     color: white;
 }
 
 QPushButton#EnterBtn:disabled {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:rgba(190, 73, 5, 0.507);
     color: white;
 }
 
 QPushButton#EnterBtn:hover {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:rgb(236, 91, 7);
     color: white;
 }
 
 QPushButton#EnterBtn:pressed {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:rgb(158, 61, 4);
     color: white;
 }
 
 QPushButton#FuncBtn {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:#0d6cd8;
     color: white; 
 }
@@ -64,7 +89,7 @@ QPushButton#FuncBtn:pressed {
 }
 
 QPushButton#ControlBtn {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:#3498DB;
     color: white; 
 }
@@ -81,26 +106,30 @@ QPushButton#ControlBtn:pressed {
     background-color:#054792;
 }
 
-QPushButton#CycleBtn {
-    border-radius: 2px;
+QPushButton#CycleBtn,
+QPushButton#CalibBtn {
+    border-radius: 4px;
     background-color:#E67E22;
     color: white; 
 }
 
-QPushButton#CycleBtn:disabled {
+QPushButton#CycleBtn:disabled,
+QPushButton#CalibBtn:disabled {
     background-color:#e67d22a8;
 }
 
-QPushButton#CycleBtn:hover {
+QPushButton#CycleBtn:hover,
+QPushButton#CalibBtn:hover {
     background-color:#fd6804;
 }
 
-QPushButton#CycleBtn:pressed {
+QPushButton#CycleBtn:pressed,
+QPushButton#CalibBtn:pressed {
     background-color:#c76611;
 }
 
 QPushButton#ResponceBtn {
-    border-radius: 2px;
+    border-radius: 4px;
     background-color:#8E44AD;
     color: white; 
 }
@@ -115,6 +144,42 @@ QPushButton#ResponceBtn:hover {
 
 QPushButton#ResponceBtn:pressed {
     background-color:#5c1a79;
+}
+
+QPushButton#StateBtn {
+    border-radius: 4px;
+    background-color:#e622ab;
+    color: white; 
+}
+
+QPushButton#StateBtn:disabled {
+    background-color:#9f0e3ce3;
+}
+
+QPushButton#StateBtn:hover {
+    background-color:#d51756;
+}
+
+QPushButton#StateBtn:pressed {
+    background-color:#d51756;
+}
+
+QPushButton#WaveBtn {
+    border-radius: 4px;
+    background-color:#c8172c;
+    color: white; 
+}
+
+QPushButton#WaveBtn:disabled {
+    background-color:#870303;
+}
+
+QPushButton#WaveBtn:hover {
+    background-color:#ed0707;
+}
+
+QPushButton#WaveBtn:pressed {
+    background-color:#f83232;
 }
 
 /* 整个表格 */
@@ -141,6 +206,21 @@ QTableWidget#SettingInfoTable QHeaderView::section {
     color: #ffffff;                     /* 表头文字颜色 */
     font-weight: bold;
     border: 1px solid #225588;
+    padding: 6px;                       /* 表头内边距 */
+}
+
+QTableWidget#DisplaceTable {
+    background-color: transparent;         /* 表格背景 */
+    gridline-color: #dddddd;           /* 网格线颜色（行列分隔线） */
+    border: 1px;
+}
+
+/* ========== 表头背景色（关键） ========== */
+QTableWidget#DisplaceTable QHeaderView::section:horizontal {
+    background-color: #F4D03F;         /* 表头背景色（你要的） */
+    color: black;                     /* 表头文字颜色 */
+    font-weight: bold;
+    border: 1px;
     padding: 6px;                       /* 表头内边距 */
 }
 

@@ -110,6 +110,16 @@ void SettingInfoTable::InitTable() {
     }
 }
 
+void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
+    if(columnCount() < 0){
+        return; 
+    }
+    auto col_width = width() / columnCount();
+    for(int i = 0; i < columnCount(); ++i) {
+        setColumnWidth(i, col_width);
+    }
+}
+
 void SettingInfoTable::OnChangeInputMode(InputMode mode) {
     bool editable = (mode == kHand);
 

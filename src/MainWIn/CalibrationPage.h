@@ -24,7 +24,7 @@ private:
     QWidget* CreatePIDSettingArea();
     QWidget* CreateDisplacementArea();
     void InitCalibState(QPushButton *calib_btn);
-    void InitCalibValues(int col);
+    void InitCalibValues(int row);
     void SetRowCalib(int row, bool calib);
     void UpdateCalibInfo();
     QWidget* CreateSignalResponseArea();

@@ -20,6 +20,8 @@
 #include <QBrush>
 #include <QListWidgetItem>
 #include <QButtonGroup>
+#include <QGuiApplication>
+#include <QScreen>
 
 #include <QResizeEvent>
 

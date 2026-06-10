@@ -5,6 +5,13 @@
 CanController::CanController(QWidget* parent)
     : QWidget(parent) {
     InitWindow();
+    QScreen* primaryScreen = QGuiApplication::primaryScreen();
+
+    // 屏幕完整宽高（像素，包含任务栏）
+    QRect fullRect = primaryScreen->geometry();
+    int screenW = fullRect.width();
+    int screenH = fullRect.height();
+    setMinimumSize(screenW * 1 / 2, screenH * 1 / 2);
 }
 
 CanController::~CanController() {}

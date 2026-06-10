@@ -36,6 +36,9 @@ public:
     SettingInfoTable(QWidget* parent = nullptr);
     ~SettingInfoTable(){}
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 public slots:
     void OnChangeInputMode(InputMode mode);
     void OnClearModifyValues();
