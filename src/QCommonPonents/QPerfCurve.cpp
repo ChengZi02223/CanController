@@ -204,7 +204,7 @@ QPerfCurve::QPerfCurve(QWidget *parent)
     m_controlPanel = new QWidget(this);
     m_controlLayout = new QHBoxLayout(m_controlPanel);
     m_controlLayout->setContentsMargins(5, 5, 5, 5);
-    m_controlLayout->setSpacing(10);
+    m_controlLayout->setSpacing(30);
     // 允许换行：使用 QHBoxLayout 并设置控件的 sizePolicy 即可（自动换行需配合 FlowLayout，简单起见保持水平滚动）
     m_controlPanel->setLayout(m_controlLayout);
     m_controlPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -363,8 +363,8 @@ void QPerfCurve::rebuildControlPanel()
         QHBoxLayout *layout = new QHBoxLayout(container);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(4);
-        layout->addWidget(colorLabel);
         layout->addWidget(checkBox);
+        layout->addWidget(colorLabel);
         layout->addWidget(axisBtn);
         container->setLayout(layout);
         container->setContextMenuPolicy(Qt::CustomContextMenu);

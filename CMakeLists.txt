@@ -17,7 +17,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
-set(PCAN_INCLUDE "D:/Desktop/yc/PartTimeJobs/Windows/PCAN-Basic/Include")
+set(PCAN_DIR  ${PROJECT_SOURCE_DIR}/third_party/PCANBasic)
+set(PCAN_INCLUDE_DIR ${PCAN_DIR}/include)
+set(PCAN_LIB_DIR ${PCAN_DIR}/lib)
+
+add_library(PCANBasic::PCANBasic SHARED IMPORTED)
+
+set_target_properties(PCANBasic::PCANBasic PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${PCAN_INCLUDE_DIR}
+    IMPORTED_LOCATION ${PCAN_LIB_DIR}/PCANBasic.dll
+    IMPORTED_IMPLIB ${PCAN_LIB_DIR}/PCANBasic.lib
+)
 
 file(GLOB HDRS
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents/*.h
@@ -47,10 +57,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src/CO_Utils
     ${PROJECT_SOURCE_DIR}/src/MainWin
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents
-    ${PCAN_INCLUDE}
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Widgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Widgets PCANBasic::PCANBasic)
 
 # 自动复制 DLL
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
