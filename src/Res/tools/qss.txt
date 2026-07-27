@@ -1,0 +1,245 @@
+QWidget {
+    font-family: "Microsoft YaHei", "SimHei", "Arial", sans-serif;
+    font-size: 14px;
+    font-weight: normal;  /* 加粗用 bold */
+}
+
+/* 未选中：灰色背景 */
+QPushButton#SettingPageTabBtn,
+QPushButton#TestPageTabBtn {
+    background-color: #4b4747; /* 灰色 */
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+}
+
+/* 选中：红色背景 */
+QPushButton#SettingPageTabBtn:checked,
+QPushButton#TestPageTabBtn:checked {
+    background-color: #ff4444; /* 红色 */
+    color: white;
+}
+
+QPushButton#StartBtn {
+    border-radius: 4px;
+    background-color:#19e16c;
+    color: white;
+    font-weight: bold;
+}
+
+QPushButton#StartBtn:disabled {
+    border-radius: 4px;
+    background-color:rgb(28, 118, 5);
+    color: white;
+}
+
+QPushButton#StartBtn:hover {
+    border-radius: 4px;
+    background-color:rgb(73, 243, 6);
+    color: white;
+}
+
+QPushButton#StartBtn:pressed {
+    border-radius: 4px;
+    background-color:rgb(19, 242, 7);
+    color: white;
+}
+
+QPushButton#EnterBtn {
+    border-radius: 4px;
+    background-color:#ff9844;
+    color: white;
+}
+
+QPushButton#EnterBtn:disabled {
+    border-radius: 4px;
+    background-color:rgba(190, 73, 5, 0.507);
+    color: white;
+}
+
+QPushButton#EnterBtn:hover {
+    border-radius: 4px;
+    background-color:rgb(236, 91, 7);
+    color: white;
+}
+
+QPushButton#EnterBtn:pressed {
+    border-radius: 4px;
+    background-color:rgb(158, 61, 4);
+    color: white;
+}
+
+QPushButton#FuncBtn {
+    border-radius: 4px;
+    background-color:#0d6cd8;
+    color: white; 
+}
+
+QPushButton#FuncBtn:disabled {
+    background-color:#143b6b;
+}
+
+QPushButton#FuncBtn:hover {
+    background-color:#0cb0f1;
+}
+
+QPushButton#FuncBtn:pressed {
+    background-color:#054792;
+}
+
+QPushButton#ControlBtn {
+    border-radius: 4px;
+    background-color:#3498DB;
+    color: white; 
+}
+
+QPushButton#ControlBtn:disabled {
+    background-color:#143b6b;
+}
+
+QPushButton#ControlBtn:hover {
+    background-color:#0cb0f1;
+}
+
+QPushButton#ControlBtn:pressed {
+    background-color:#054792;
+}
+
+QPushButton#CycleBtn,
+QPushButton#CalibBtn {
+    border-radius: 4px;
+    background-color:#E67E22;
+    color: white; 
+}
+
+QPushButton#CycleBtn:disabled,
+QPushButton#CalibBtn:disabled {
+    background-color:#e67d22a8;
+}
+
+QPushButton#CycleBtn:hover,
+QPushButton#CalibBtn:hover {
+    background-color:#fd6804;
+}
+
+QPushButton#CycleBtn:pressed,
+QPushButton#CalibBtn:pressed {
+    background-color:#c76611;
+}
+
+QPushButton#ResponceBtn {
+    border-radius: 4px;
+    background-color:#8E44AD;
+    color: white; 
+}
+
+QPushButton#ResponceBtn:disabled {
+    background-color:#8d44ade3;
+}
+
+QPushButton#ResponceBtn:hover {
+    background-color:#ab03f3;
+}
+
+QPushButton#ResponceBtn:pressed {
+    background-color:#5c1a79;
+}
+
+QPushButton#StateBtn {
+    border-radius: 4px;
+    background-color:#e622ab;
+    color: white; 
+}
+
+QPushButton#StateBtn:disabled {
+    background-color:#9f0e3ce3;
+}
+
+QPushButton#StateBtn:hover {
+    background-color:#d51756;
+}
+
+QPushButton#StateBtn:pressed {
+    background-color:#d51756;
+}
+
+QPushButton#WaveBtn {
+    border-radius: 4px;
+    background-color:#c8172c;
+    color: white; 
+}
+
+QPushButton#WaveBtn:disabled {
+    background-color:#870303;
+}
+
+QPushButton#WaveBtn:hover {
+    background-color:#ed0707;
+}
+
+QPushButton#WaveBtn:pressed {
+    background-color:#f83232;
+}
+
+/* 整个表格 */
+QTableWidget#SettingInfoTable {
+    background-color: #ffffff;         /* 表格背景 */
+    gridline-color: #dddddd;           /* 网格线颜色（行列分隔线） */
+    border: 1px solid #cccccc;
+}
+
+QTableWidget#SettingInfoTable::item {
+    padding: 3px;                       /* 上下左右内边距 → 单元格之间变“疏松” */
+    border: none;
+}
+
+/* 选中行样式（可选） */
+QTableWidget#SettingInfoTable::item:selected {
+    background-color: #ccebff;
+    color: #000000;
+}
+
+/* ========== 表头背景色（关键） ========== */
+QTableWidget#SettingInfoTable QHeaderView::section {
+    background-color: #0d6cd8;         /* 表头背景色（你要的） */
+    color: #ffffff;                     /* 表头文字颜色 */
+    font-weight: bold;
+    border: 1px solid #225588;
+    padding: 6px;                       /* 表头内边距 */
+}
+
+QTableWidget#DisplaceTable {
+    background-color: transparent;         /* 表格背景 */
+    gridline-color: #dddddd;           /* 网格线颜色（行列分隔线） */
+    border: 1px;
+}
+
+/* ========== 表头背景色（关键） ========== */
+QTableWidget#DisplaceTable QHeaderView::section:horizontal {
+    background-color: #F4D03F;         /* 表头背景色（你要的） */
+    color: black;                     /* 表头文字颜色 */
+    font-weight: bold;
+    border: 1px;
+    padding: 6px;                       /* 表头内边距 */
+}
+
+QGroupBox#ControlGroup {
+    background-color: #EBF5FB;  
+    border: 1px solid #85C1E9;
+}
+
+QGroupBox#PIDGroup {
+    background-color: #F5EEF8;  
+    border: 1px solid #BB8FCE;
+}
+
+QGroupBox#DisplacGroup {
+    background-color: #FEF9E7;  
+    border: 1px solid #F4D03F;
+}
+
+QGroupBox#SignalGroup {
+    background-color: #FDEDEC;  
+    border: 1px solid #F1948A;
+}

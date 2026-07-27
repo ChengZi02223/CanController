@@ -1,4 +1,5 @@
-#include "CanController.h"
+// #include "CanController.h"
+#include "CanConfig.h"
 
 #include <QApplication>
 #include <QFile>
@@ -7,13 +8,14 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    QFile file(":/style.qss");
+    QFile file(":/new_style.qss");
     file.open(QFile::ReadOnly);
     QString qss = file.readAll();
     file.close();
     a.setStyleSheet(qss);
 
-    CanController *w  = new CanController();
+    // CanController *w  = new CanController();
+    CanConfigWin *w = new CanConfigWin();
     w->show();
     return a.exec();
 } 

@@ -24,8 +24,11 @@ extern "C" {
 /*=============================================================================
  * 1. NMT 网络管理命令 (COB-ID = 0x000)
  *    数据长度 2 字节: [NMT命令, NodeID] (NodeID=0 表示广播)
+ *      NodeID = 0：表示广播消息，网络中所有的从站设备都会执行这条 NMT 命令
+ *      NodeID = 1~127：只控制指定单个节点
  *============================================================================*/
 #define NMT_COB_ID                      0x000u
+#define NMT_DLC                         2
 
 /* NMT 命令码 (Command Specifier) */
 #define NMT_CMD_START_NODE              0x01u   /* 启动节点 -> Operational 状态 */
@@ -34,6 +37,7 @@ extern "C" {
 #define NMT_CMD_RESET_NODE              0x81u   /* 复位节点 (全复位) */
 #define NMT_CMD_RESET_COMMUNICATION     0x82u   /* 复位通信 (仅协议栈) */
 #define NMT_CMD_CLEAR_FAULT             0x83u   /* 清除故障 */
+#define NMT_CMD_KEEP                    0x8Fu   /* 保留 */
 
 /* 辅助函数：构建 NMT 命令帧数据 (返回 2 字节数据) */
 static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
@@ -44,9 +48,11 @@ static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
  * 2. SDO 服务数据对象命令 (主站 -> 从站，COB-ID = 0x600 + NodeID)
  *    快速下载/上传，分段传输等
  *============================================================================*/
-#define SDO_BASE_COB_ID(node)           (0x600u + (node))
+#define SDO_RX_BASE_COB_ID(node)           (0x600u + (node))  // 主站->从站请求
+#define SDO_TX_BASE_COB_ID(node)           (0x580u + (node))  // 从站->主站响应
 
 /* 快速下载 (写) 命令码 */
+#define SDO_CMD_DOWNLOAD_REQUEST        0x60u   /* 下载初始化 */
 #define SDO_CMD_DOWNLOAD_1_BYTE         0x2Fu   /* 写入 1 字节数据 */
 #define SDO_CMD_DOWNLOAD_2_BYTE         0x2Bu   /* 写入 2 字节数据 */
 #define SDO_CMD_DOWNLOAD_3_BYTE         0x27u   /* 写入 3 字节数据 */
@@ -54,6 +60,10 @@ static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
 
 /* 快速上传 (读) 命令码 */
 #define SDO_CMD_UPLOAD_REQUEST          0x40u   /* 请求读取对象字典 */
+#define SDO_CMD_UPLOAD_1_BYTE           0x4Fu   /* 读取 1 字节数据 */
+#define SDO_CMD_UPLOAD_2_BYTE           0x4Bu   /* 读取 2 字节数据 */
+#define SDO_CMD_UPLOAD_3_BYTE           0x47u   /* 读取 3 字节数据 */
+#define SDO_CMD_UPLOAD_4_BYTE           0x43u   /* 读取 4 字节数据 */
 
 /* 分段下载命令码 */
 #define SDO_CMD_SEG_DOWNLOAD_INIT       0x00u   /* 分段下载初始化 (带总长度) */
@@ -159,6 +169,16 @@ static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
  * 8. 心跳相关 (主站作为消费者，不发送心跳命令，仅配置)
  *    生产者心跳周期 0x1017 由主站通过 SDO 配置，无专门命令帧
  *============================================================================*/
+
+#define HEART_COB_ID(node)              (0x700u + (node))
+#define HEART_DLC                       1
+
+#define HEART_STATE_BOOTUP              0x00u  // 初始化状态
+#define HEART_STATE_STOPPED             0x01u  // 停止状态
+#define HEART_STATE_PER_OPT             0x02u  // 预操作状态
+#define HEART_STATE_OPT                 0x05u  // 操作状态
+#define HEART_STATE_RESET_NODE          0x7Fu  // 重置节点状态
+#define HEART_STATE_RESET_COMM          0x80u  // 重置通信状态
 
 #ifdef __cplusplus
 }

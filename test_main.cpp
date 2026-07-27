@@ -1,105 +1,83 @@
+
 // #include "CanDriver.h"
-// #include "CO_ObjectDictionary.h"
-// #include "CO_SDO.h"
-// #include "CO_NMT.h"
-// #include "CO_Heartbeat.h"
-// #include "CO_PDO.h"
-// #include "CO_SYNC.h"
-// #include "CO_EMCY.h"
 // #include <iostream>
-// #include <atomic>
-// #include <signal.h>
 // #include <thread>
 // #include <chrono>
+// #include <iomanip>
+// #include <windows.h>
 
-// static std::atomic<bool> running(true);
-// void signalHandler(int) { running = false; }
-
-// int main(int argc, char* argv[]) {
-//     if (argc != 3) {
-//         std::cerr << "Usage: " << argv[0] << " <device> <node_id>\n";
-//         std::cerr << "Example: canopen_slave PCAN_USBBUS1 10\n";
-//         return 1;
-//     }
-//     std::string device = argv[1];
-//     uint8_t nodeId = static_cast<uint8_t>(std::stoi(argv[2]));
-    
-//     // 初始化 CAN 驱动
+// int main()
+// {
+//     SetConsoleOutputCP(CP_UTF8);
+//     // 1. 创建 CAN 驱动实例
 //     CanDriver can;
-//     if (!can.init(device, 250000)) {
-//         std::cerr << "Failed to init CAN on " << device << std::endl;
+
+//     // 2. 初始化设备（使用 PCAN_USBBUS1，波特率 250kbps）
+//     std::string device = "PCAN_USBBUS1";
+//     unsigned int baudrate = 500000; // 500 kbps
+
+//     if (!can.init(device, baudrate)) {
+//         std::cerr << "CAN 初始化失败，程序退出。" << std::endl;
 //         return 1;
 //     }
-//     std::cout << "CAN driver initialized on " << device << std::endl;
-    
-//     // 构建对象字典
-//     CO_ObjectDictionary od;
-//     od.addEntry(0x1000, 0, ODDataType::UINT32, 4, 1, {0,0,0,0});   // Device type
-//     od.addEntry(0x1001, 0, ODDataType::UINT8, 1, 1, {0});          // Error register
-//     od.addEntry(0x1018, 1, ODDataType::UINT32, 4, 1, {1,2,3,4});   // Vendor ID
-//     od.addEntry(0x2000, 0, ODDataType::UINT16, 2, 3, {0x12,0x34}); // Application var
-//     od.addEntry(0x2001, 0, ODDataType::UINT32, 4, 3, {0,0,0,0});
-//     od.addEntry(0x2002, 0, ODDataType::UINT16, 2, 3, {0,0});
-//     od.dump();
-    
-//     // 各服务模块
-//     CO_NMT nmt(can, nodeId);
-//     nmt.setInitialState(NmtState::PRE_OPERATIONAL);  // 启动后立即进入预操作
-//     CO_SDO sdo(od, can, nodeId);
-//     CO_Heartbeat heartbeat(can, nodeId, nmt);
-//     CO_PDO pdo(od, can, nmt, nodeId);
-//     CO_SYNC sync(can, nmt, pdo);
-//     CO_EMCY emcy(od, can, nodeId);
-    
-//     // 发送 boot-up 消息
-//     can_frame boot;
-//     boot.can_id = 0x700 + nodeId;
-//     boot.can_dlc = 1;
-//     boot.data[0] = 0;
-//     can.send(boot);
-    
-//     // 启动心跳线程
-//     heartbeat.start();
-    
-//     // 设置信号处理
-//     signal(SIGINT, signalHandler);
-//     signal(SIGTERM, signalHandler);
-    
-//     std::cout << "CANopen slave node " << (int)nodeId << " is running...\n";
-    
-//     while (running) {
-//         can_frame frame;
-//         if (can.receive(frame, 50)) {
-//             uint32_t cob = frame.can_id & 0x7FF;
-//             if (cob == 0x000) nmt.processCommand(frame);
-//             else if (cob == (0x600 + nodeId)) sdo.processRequest(frame);
-//             else if (cob == 0x80) sync.processSync(frame);
-//             else if ((cob & 0x7F) == nodeId) {
-//                 // 检查是否是 RPDO COB-ID: 0x200+nodeId 等，交给PDO处理
-//                 pdo.processRPDO(frame);
+//     std::cout << "CAN 设备 " << device << " 初始化成功，波特率 " << baudrate << " bps" << std::endl;
+
+
+//     // can_frame testFrame;
+//     // testFrame.can_id = 0x123;
+//     // testFrame.can_dlc = 8;
+//     // for (int i = 0; i < 8; ++i) testFrame.data[i] = i + 1;
+
+//     // if (can.send(testFrame)) {
+//     //     std::cout << "已发送测试帧 ID=0x123, 数据: ";
+//     //     for (int i = 0; i < 8; ++i)
+//     //         std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)testFrame.data[i] << " ";
+//     //     std::cout << std::dec << std::endl;
+//     // } else {
+//     //     std::cerr << "发送测试帧失败" << std::endl;
+//     // }
+
+//     // 3. 构建并发送 CANopen NMT 启动节点命令
+//     //    NMT 报文：COB-ID = 0x000，数据[0] = 命令码(0x01=启动)，数据[1] = 节点 ID(64)
+//     can_frame nmtFrame;
+//     nmtFrame.can_id = 0x000;           // NMT COB-ID
+//     nmtFrame.can_dlc = 2;
+//     nmtFrame.data[0] = 0x01;           // 启动节点命令
+//     nmtFrame.data[1] = 64;             // 目标节点 ID
+
+//     if (can.send(nmtFrame)) {
+//         std::cout << "已发送 NMT 启动节点命令 (节点 64)" << std::endl;
+//     } else {
+//         std::cerr << "发送 NMT 命令失败" << std::endl;
+//     }
+
+//     // 4. 接收循环：尝试接收 10 个 CAN 帧，超时 100ms
+//     std::cout << "开始接收 CAN 帧..." << std::endl;
+//     int frameCount = 0;
+//     const int maxFrames = 10;
+//     const int timeoutMs = 100;
+
+
+//     while (1) {
+//         can_frame rxFrame;
+//         if (can.receive(rxFrame, timeoutMs)) {
+//             // 打印接收到的帧信息
+//             std::cout << "收到帧 " << frameCount+1 << ": ID=0x" << std::hex << rxFrame.can_id 
+//                       << " DLC=" << std::dec << (int)rxFrame.can_dlc << " Data=";
+//             for (int i = 0; i < rxFrame.can_dlc; ++i) {
+//                 std::cout << std::hex << std::setw(2) << std::setfill('0') 
+//                           << (int)rxFrame.data[i] << " ";
 //             }
-//         }
-//         // 定期检查事件触发 TPDO
-//         pdo.processEventDriven();
-//         // 定期检查错误寄存器变化并发送 EMCY
-//         emcy.checkAndSend();
-//         // 模拟：每秒随机产生一个错误演示（实际应由应用程序触发）
-//         static int cnt=0;
-//         if (++cnt % 100 == 0) {
-//             // 演示：设置一次通用错误，然后清除
-//             static bool errSet = false;
-//             if (!errSet) {
-//                 emcy.setError(0xFF01, 0x10);
-//                 errSet = true;
-//             } else {
-//                 emcy.clearError();
-//                 errSet = false;
-//             }
+//             std::cout << std::dec << std::endl;
+//             frameCount++;
+//         } else {
+//             // 超时未收到数据，继续等待
+//             std::cout << "." << std::flush;
 //         }
 //     }
-    
-//     heartbeat.stop();
+
+//     // 5. 关闭设备
 //     can.close();
-//     std::cout << "Exited." << std::endl;
+//     std::cout << "\nCAN 设备已关闭，程序退出。" << std::endl;
 //     return 0;
 // }

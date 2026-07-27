@@ -38,6 +38,7 @@ file(GLOB SRCS
     ${PROJECT_SOURCE_DIR}/src/CO_Utils/*.cpp
     ${PROJECT_SOURCE_DIR}/src/MainWin/*.cpp
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/CmdManager/*.cpp
 )
 
 # file(GLOB UI_FILES
@@ -57,6 +58,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src/CO_Utils
     ${PROJECT_SOURCE_DIR}/src/MainWin
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents
+     ${PROJECT_SOURCE_DIR}/src/CmdManager
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Widgets PCANBasic::PCANBasic)

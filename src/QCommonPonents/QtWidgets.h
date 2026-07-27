@@ -22,6 +22,13 @@
 #include <QButtonGroup>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QSpinBox>
+#include <QMessageBox>
+#include <QDateTime>
+#include <QTextEdit>
+
+#include <QThread>
+#include <chrono>
 
 #include <QResizeEvent>
 

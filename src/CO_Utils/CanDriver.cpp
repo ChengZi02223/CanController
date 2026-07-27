@@ -1,10 +1,17 @@
 #include "CanDriver.h"
-#include <windows.h>
-#include <PCANBasic.h>  // 官方头文件
 #include <iostream>
 #include <cstring>
 
-// 不再需要函数指针和 LoadLibrary
+static bool GetPcanHandle(const std::string& device, TPCANHandle& outHandle)
+{
+    auto it = StrToDevMap.find(device);
+    if (it != StrToDevMap.end())
+    {
+        outHandle = it->second;
+        return true;
+    }
+    return false;
+}
 
 CanDriver::CanDriver()
     : handle_(nullptr), isInitialized_(false)
@@ -16,16 +23,10 @@ CanDriver::~CanDriver()
     close();
 }
 
-bool CanDriver::init(const std::string& device, unsigned int baudrate)
+bool CanDriver::init(const std::string& device, uint32_t baudrate)
 {
     TPCANHandle pcanHandle;
-    if (device == "PCAN_USBBUS1") {
-        pcanHandle = PCAN_USBBUS1;
-    } else if (device == "PCAN_USBBUS2") {
-        pcanHandle = PCAN_USBBUS2;
-    } else if (device == "PCAN_PCIBUS1") {
-        pcanHandle = PCAN_PCIBUS1;
-    } else {
+    if (!GetPcanHandle(device, pcanHandle)) {
         std::cerr << "不支持设备: " << device << std::endl;
         return false;
     }

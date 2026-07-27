@@ -1,0 +1,307 @@
+/* 全局基础样式统一 */
+QWidget {
+    font-family: "Microsoft YaHei", "SimHei", "Arial", sans-serif;
+    font-size: 14px;
+    font-weight: normal;
+    color: #222222;
+}
+
+/* 通用按钮基础公共样式（统一圆角、无边框、白色文字，消除重复代码） */
+QPushButton#SettingPageTabBtn,
+QPushButton#TestPageTabBtn,
+QPushButton#StartBtn,
+QPushButton#EnterBtn,
+QPushButton#FuncBtn,
+QPushButton#ControlBtn,
+QPushButton#CycleBtn,
+QPushButton#CalibBtn,
+QPushButton#ResponceBtn,
+QPushButton#StateBtn,
+QPushButton#WaveBtn,
+/* 新增CAN配置页面按钮 */
+QPushButton#RefreshBtn,
+QPushButton#InitBtn,
+QPushButton#ReleaseBtn,
+QPushButton#ControllerBtn,
+QPushButton#SendBtn {
+    border-radius: 4px;
+    border: none;
+    color: #ffffff;
+}
+
+/* ===== 顶部标签切换按钮（原有灰+红体系优化） ===== */
+QPushButton#SettingPageTabBtn,
+QPushButton#TestPageTabBtn {
+    background-color: #3c3a3a;
+    padding: 8px 16px;
+}
+QPushButton#SettingPageTabBtn:hover,
+QPushButton#TestPageTabBtn:hover {
+    background-color: #524f4f;
+}
+QPushButton#SettingPageTabBtn:checked,
+QPushButton#TestPageTabBtn:checked {
+    background-color: #f23c3c;
+}
+
+/* ===== 原有业务按钮 ===== */
+/* StartBtn 启动按钮（工业绿） */
+QPushButton#StartBtn {
+    background-color: #16c960;
+    font-weight: bold;
+}
+QPushButton#StartBtn:hover {
+    background-color: #32e078;
+}
+QPushButton#StartBtn:pressed {
+    background-color: #0f9e4a;
+}
+QPushButton#StartBtn:disabled {
+    background-color: #247838;
+    color: #cccccc;
+}
+
+/* EnterBtn 确认按钮（暖橙） */
+QPushButton#EnterBtn {
+    background-color: #f79038;
+}
+QPushButton#EnterBtn:hover {
+    background-color: #ffaa55;
+}
+QPushButton#EnterBtn:pressed {
+    background-color: #d06814;
+}
+QPushButton#EnterBtn:disabled {
+    background-color: #a85c20;
+    color: #dddddd;
+}
+
+/* FuncBtn 功能按钮（深蓝） */
+QPushButton#FuncBtn {
+    background-color: #0b62c2;
+}
+QPushButton#FuncBtn:hover {
+    background-color: #18a0e8;
+}
+QPushButton#FuncBtn:pressed {
+    background-color: #043b7a;
+}
+QPushButton#FuncBtn:disabled {
+    background-color: #20487a;
+    color: #c5d8eb;
+}
+
+/* ControlBtn 控制按钮（浅天蓝） */
+QPushButton#ControlBtn {
+    background-color: #2d92d6;
+}
+QPushButton#ControlBtn:hover {
+    background-color: #4ab8f2;
+}
+QPushButton#ControlBtn:pressed {
+    background-color: #0a5a94;
+}
+QPushButton#ControlBtn:disabled {
+    background-color: #20487a;
+    color: #c5d8eb;
+}
+
+/* Cycle/Calib 循环/校准（暖橘橙） */
+QPushButton#CycleBtn,
+QPushButton#CalibBtn {
+    background-color: #dc751e;
+}
+QPushButton#CycleBtn:hover,
+QPushButton#CalibBtn:hover {
+    background-color: #ff7d22;
+}
+QPushButton#CycleBtn:pressed,
+QPushButton#CalibBtn:pressed {
+    background-color: #b05e16;
+}
+QPushButton#CycleBtn:disabled,
+QPushButton#CalibBtn:disabled {
+    background-color: #b97030;
+    color: #eeeeee;
+}
+
+/* ResponceBtn 响应按钮（柔紫） */
+QPushButton#ResponceBtn {
+    background-color: #8039a0;
+}
+QPushButton#ResponceBtn:hover {
+    background-color: #b046e6;
+}
+QPushButton#ResponceBtn:pressed {
+    background-color: #572070;
+}
+QPushButton#ResponceBtn:disabled {
+    background-color: #754090;
+    color: #e4d4ee;
+}
+
+/* StateBtn 状态按钮（玫红） */
+QPushButton#StateBtn {
+    background-color: #d8209a;
+}
+QPushButton#StateBtn:hover {
+    background-color: #f040b8;
+}
+QPushButton#StateBtn:pressed {
+    background-color: #a01470;
+}
+QPushButton#StateBtn:disabled {
+    background-color: #992068;
+    color: #f2d8e8;
+}
+
+/* WaveBtn 波形按钮（警示深红） */
+QPushButton#WaveBtn {
+    background-color: #c01528;
+}
+QPushButton#WaveBtn:hover {
+    background-color: #f0253b;
+}
+QPushButton#WaveBtn:pressed {
+    background-color: #880f1c;
+}
+QPushButton#WaveBtn:disabled {
+    background-color: #78101c;
+    color: #ffcccc;
+}
+
+/* ===================== 新增CAN配置页面按钮样式 ===================== */
+/* RefreshBtn 刷新设备列表 - 中性查询灰 */
+QPushButton#RefreshBtn {
+    background-color: #636e72;
+}
+QPushButton#RefreshBtn:hover {
+    background-color: #7f8c8d;
+}
+QPushButton#RefreshBtn:pressed {
+    background-color: #485457;
+}
+QPushButton#RefreshBtn:disabled {
+    background-color: #95a5a6;
+    color: #e0e0e0;
+}
+
+/* InitBtn CAN初始化 - 复用启动绿色语义 */
+QPushButton#InitBtn {
+    background-color: #16c960;
+    font-weight: bold;
+}
+QPushButton#InitBtn:hover {
+    background-color: #32e078;
+}
+QPushButton#InitBtn:pressed {
+    background-color: #0f9e4a;
+}
+QPushButton#InitBtn:disabled {
+    background-color: #247838;
+    color: #cccccc;
+}
+
+/* ReleaseBtn 释放CAN - 断开警示红 */
+QPushButton#ReleaseBtn {
+    background-color: #e74c3c;
+}
+QPushButton#ReleaseBtn:hover {
+    background-color: #ec7063;
+}
+QPushButton#ReleaseBtn:pressed {
+    background-color: #a93226;
+}
+QPushButton#ReleaseBtn:disabled {
+    background-color: #c0392b;
+    color: #ffdddd;
+}
+
+/* ControllerBtn 打开控制器窗口 - 功能科技蓝 */
+QPushButton#ControllerBtn {
+    background-color: #0b62c2;
+}
+QPushButton#ControllerBtn:hover {
+    background-color: #18a0e8;
+}
+QPushButton#ControllerBtn:pressed {
+    background-color: #043b7a;
+}
+QPushButton#ControllerBtn:disabled {
+    background-color: #20487a;
+    color: #c5d8eb;
+}
+
+/* SendBtn 发送CAN报文 - 发送确认暖橙 */
+QPushButton#SendBtn {
+    background-color: #f79038;
+}
+QPushButton#SendBtn:hover {
+    background-color: #ffaa55;
+}
+QPushButton#SendBtn:pressed {
+    background-color: #d06814;
+}
+QPushButton#SendBtn:disabled {
+    background-color: #a85c20;
+    color: #dddddd;
+}
+
+/* ========== 表格样式优化（柔和化，降低刺眼边框） ========== */
+/* 设置信息表格 */
+QTableWidget#SettingInfoTable {
+    background-color: #ffffff;
+    gridline-color: #e2e2e2;
+    border: 1px solid #d0d0d0;
+}
+QTableWidget#SettingInfoTable::item {
+    padding: 3px;
+    border: none;
+}
+QTableWidget#SettingInfoTable::item:selected {
+    background-color: #d6ecff;
+    color: #000000;
+}
+QTableWidget#SettingInfoTable QHeaderView::section {
+    background-color: #0b62c2;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #1f5080;
+    padding: 6px;
+}
+
+/* 位移表格 */
+QTableWidget#DisplaceTable {
+    background-color: transparent;
+    gridline-color: #e2e2e2;
+    border: 1px solid #d0d0d0;
+}
+QTableWidget#DisplaceTable QHeaderView::section:horizontal {
+    background-color: #f9d849;
+    color: #1a1a1a;
+    font-weight: bold;
+    border: 1px solid #e0b820;
+    padding: 6px;
+}
+
+/* ========== 分组框GroupBox 色彩柔和优化，匹配对应功能色系 ========== */
+/* 控制组 - 匹配ControlBtn浅蓝 */
+QGroupBox#ControlGroup {
+    background-color: #ebf5fb;
+    border: 1px solid #73b8e6;
+}
+/* PID组 - 匹配Responce紫色系 */
+QGroupBox#PIDGroup {
+    background-color: #f4edf9;
+    border: 1px solid #b490d8;
+}
+/* 位移组 - 匹配Cycle校准橙色 */
+QGroupBox#DisplacGroup {
+    background-color: #fef8e6;
+    border: 1px solid #f2c850;
+}
+/* 信号组 - 匹配Wave警示红色 */
+QGroupBox#SignalGroup {
+    background-color: #fdeeef;
+    border: 1px solid #f09090;
+}
