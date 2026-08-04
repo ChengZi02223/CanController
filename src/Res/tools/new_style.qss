@@ -1,307 +1,636 @@
-/* 全局基础样式统一 */
+/* ============================================================
+   完整白色现代化主题（浅色背景）
+   所有控件 ID 保持不变，直接替换即可
+   已修复 #DisplaceTable 内容显示问题
+   ============================================================ */
+
+/* ---------- 全局 ---------- */
 QWidget {
     font-family: "Microsoft YaHei", "SimHei", "Arial", sans-serif;
     font-size: 14px;
     font-weight: normal;
-    color: #222222;
+    background-color: #f1f5f9;
+    color: #1e293b;
 }
 
-/* 通用按钮基础公共样式（统一圆角、无边框、白色文字，消除重复代码） */
-QPushButton#SettingPageTabBtn,
-QPushButton#TestPageTabBtn,
-QPushButton#StartBtn,
-QPushButton#EnterBtn,
-QPushButton#FuncBtn,
-QPushButton#ControlBtn,
-QPushButton#CycleBtn,
-QPushButton#CalibBtn,
-QPushButton#ResponceBtn,
-QPushButton#StateBtn,
-QPushButton#WaveBtn,
-/* 新增CAN配置页面按钮 */
-QPushButton#RefreshBtn,
-QPushButton#InitBtn,
-QPushButton#ReleaseBtn,
-QPushButton#ControllerBtn,
-QPushButton#SendBtn {
-    border-radius: 4px;
-    border: none;
+/* ========== 通用按钮基础样式（更明亮） ========== */
+QPushButton {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #555555;
+    border-radius: 5px;
+    padding: 6px 14px;
+    background-color: #4a4a4a;
+    color: #ffffff;
+    outline: none;
+}
+
+QPushButton:hover {
+    background-color: #5e5e5e;
+    border-color: #7a7a7a;
+}
+
+QPushButton:pressed {
+    background-color: #333333;
+    border-color: #222222;
+}
+
+QPushButton:disabled {
+    background-color: #3a3a3a;
+    color: #8a8a8a;
+    border-color: #4a4a4a;
+}
+
+/* ==================================================
+   特定按钮 - 亮色高定版
+   ================================================== */
+
+/* 刷新按钮 - 亮银色 */
+#RefreshBtn {
+    background-color: #5c5c5c;
+    border-color: #6e6e6e;
+}
+#RefreshBtn:hover {
+    background-color: #787878;
+    border-color: #9a9a9a;
+}
+#RefreshBtn:pressed {
+    background-color: #404040;
+    border-color: #2a2a2a;
+}
+#RefreshBtn:disabled {
+    background-color: #4a4a4a;
+    color: #777777;
+}
+
+/* 初始化按钮 - 翠绿亮色 (成功/启动) */
+#InitBtn {
+    background-color: #2ecc71;
+    border-color: #27ae60;
     color: #ffffff;
 }
+#InitBtn:hover {
+    background-color: #58d68d;
+    border-color: #2ecc71;
+}
+#InitBtn:pressed {
+    background-color: #1e8449;
+    border-color: #196f3d;
+}
+#InitBtn:disabled {
+    background-color: #3d6b4a;
+    color: #a0c0a8;
+    border-color: #2d5a3a;
+}
 
-/* ===== 顶部标签切换按钮（原有灰+红体系优化） ===== */
+/* Release 按钮 - 珊瑚亮红 (停止/断开) */
+#ReleaseBtn {
+    background-color: #e74c3c;
+    border-color: #c0392b;
+    color: #ffffff;
+}
+#ReleaseBtn:hover {
+    background-color: #f1948a;
+    border-color: #e74c3c;
+}
+#ReleaseBtn:pressed {
+    background-color: #b03a2e;
+    border-color: #922b21;
+}
+#ReleaseBtn:disabled {
+    background-color: #6b3d3a;
+    color: #b0908a;
+    border-color: #5a2d2a;
+}
+
+/* Change 按钮 - 琥珀亮橙 (模式切换) */
+#ChangeBtn {
+    background-color: #f39c12;
+    border-color: #d68910;
+    color: #ffffff;
+}
+#ChangeBtn:hover {
+    background-color: #f7c948;
+    border-color: #f39c12;
+}
+#ChangeBtn:pressed {
+    background-color: #b9770e;
+    border-color: #9a670d;
+}
+#ChangeBtn:disabled {
+    background-color: #6a5530;
+    color: #b0a070;
+    border-color: #5a4520;
+}
+
+/* Controller 按钮 - 天蓝亮色 (打开界面) */
+#ControllerBtn {
+    background-color: #3498db;
+    border-color: #2980b9;
+    color: #ffffff;
+}
+#ControllerBtn:hover {
+    background-color: #6bb5f0;
+    border-color: #3498db;
+}
+#ControllerBtn:pressed {
+    background-color: #1f618d;
+    border-color: #1a5276;
+}
+#ControllerBtn:disabled {
+    background-color: #3a5a7a;
+    color: #90b0d0;
+    border-color: #2a4a6a;
+}
+
+/* Send 按钮 - 紫罗兰亮色 (数据发送) */
+#SendBtn {
+    background-color: #9b59b6;
+    border-color: #7d3c98;
+    color: #ffffff;
+}
+#SendBtn:hover {
+    background-color: #c39bd3;
+    border-color: #9b59b6;
+}
+#SendBtn:pressed {
+    background-color: #6c3483;
+    border-color: #512e5f;
+}
+#SendBtn:disabled {
+    background-color: #5a4a6a;
+    color: #b0a0c0;
+    border-color: #4a3a5a;
+}
+
+/* ---------- 顶部标签页 ---------- */
 QPushButton#SettingPageTabBtn,
 QPushButton#TestPageTabBtn {
-    background-color: #3c3a3a;
-    padding: 8px 16px;
-}
-QPushButton#SettingPageTabBtn:hover,
-QPushButton#TestPageTabBtn:hover {
-    background-color: #524f4f;
+    background-color: #e2e8f0;
+    color: #475569;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 8px 8px 0 0;
+    font-weight: 500;
+    margin-right: 2px;
 }
 QPushButton#SettingPageTabBtn:checked,
 QPushButton#TestPageTabBtn:checked {
-    background-color: #f23c3c;
+    background-color: #ffffff;
+    color: #1e293b;
+    border-bottom: 3px solid #3b82f6;
+    font-weight: 600;
+}
+QPushButton#SettingPageTabBtn:hover,
+QPushButton#TestPageTabBtn:hover {
+    background-color: #cbd5e1;
+}
+QPushButton#SettingPageTabBtn:checked:hover,
+QPushButton#TestPageTabBtn:checked:hover {
+    background-color: #f8fafc;
 }
 
-/* ===== 原有业务按钮 ===== */
-/* StartBtn 启动按钮（工业绿） */
+/* ---------- 开始按钮（翠绿渐变） ---------- */
 QPushButton#StartBtn {
-    background-color: #16c960;
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #22c55e, stop:1 #16a34a);
+    color: #ffffff;
     font-weight: bold;
-}
-QPushButton#StartBtn:hover {
-    background-color: #32e078;
-}
-QPushButton#StartBtn:pressed {
-    background-color: #0f9e4a;
+    border-radius: 20px;
+    padding: 8px 28px;
+    border: none;
 }
 QPushButton#StartBtn:disabled {
-    background-color: #247838;
-    color: #cccccc;
+    background-color: #bbf7d0;
+    color: #86b49a;
+}
+QPushButton#StartBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #4ade80, stop:1 #22c55e);
+}
+QPushButton#StartBtn:pressed {
+    background-color: #15803d;
 }
 
-/* EnterBtn 确认按钮（暖橙） */
+/* ---------- 确认按钮（琥珀橙） ---------- */
 QPushButton#EnterBtn {
-    background-color: #f79038;
-}
-QPushButton#EnterBtn:hover {
-    background-color: #ffaa55;
-}
-QPushButton#EnterBtn:pressed {
-    background-color: #d06814;
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #f59e0b, stop:1 #d97706);
+    color: #ffffff;
+    font-weight: 500;
+    border-radius: 12px;
+    padding: 6px 18px;
+    border: none;
 }
 QPushButton#EnterBtn:disabled {
-    background-color: #a85c20;
-    color: #dddddd;
+    background-color: #fcd34d;
+    color: #a0834a;
+}
+QPushButton#EnterBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #fbbf24, stop:1 #f59e0b);
+}
+QPushButton#EnterBtn:pressed {
+    background-color: #b45309;
 }
 
-/* FuncBtn 功能按钮（深蓝） */
+/* ---------- 功能按钮（蓝色） ---------- */
 QPushButton#FuncBtn {
-    background-color: #0b62c2;
-}
-QPushButton#FuncBtn:hover {
-    background-color: #18a0e8;
-}
-QPushButton#FuncBtn:pressed {
-    background-color: #043b7a;
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #3b82f6, stop:1 #2563eb);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
+    border: none;
 }
 QPushButton#FuncBtn:disabled {
-    background-color: #20487a;
-    color: #c5d8eb;
+    background-color: #93c5fd;
+    color: #7a9bc7;
+}
+QPushButton#FuncBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #60a5fa, stop:1 #3b82f6);
+}
+QPushButton#FuncBtn:pressed {
+    background-color: #1d4ed8;
 }
 
-/* ControlBtn 控制按钮（浅天蓝） */
+/* ---------- 控制按钮（紫色） ---------- */
 QPushButton#ControlBtn {
-    background-color: #2d92d6;
-}
-QPushButton#ControlBtn:hover {
-    background-color: #4ab8f2;
-}
-QPushButton#ControlBtn:pressed {
-    background-color: #0a5a94;
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                      stop:0 #8b5cf6, stop:1 #7c3aed);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
+    border: none;
 }
 QPushButton#ControlBtn:disabled {
-    background-color: #20487a;
-    color: #c5d8eb;
+    background-color: #c4b5fd;
+    color: #9489b0;
+}
+QPushButton#ControlBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                      stop:0 #a78bfa, stop:1 #8b5cf6);
+}
+QPushButton#ControlBtn:pressed {
+    background-color: #6d28d9;
 }
 
-/* Cycle/Calib 循环/校准（暖橘橙） */
+/* ---------- 循环/标定按钮（橙色） ---------- */
 QPushButton#CycleBtn,
 QPushButton#CalibBtn {
-    background-color: #dc751e;
-}
-QPushButton#CycleBtn:hover,
-QPushButton#CalibBtn:hover {
-    background-color: #ff7d22;
-}
-QPushButton#CycleBtn:pressed,
-QPushButton#CalibBtn:pressed {
-    background-color: #b05e16;
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #f97316, stop:1 #ea580c);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
+    border: none;
 }
 QPushButton#CycleBtn:disabled,
 QPushButton#CalibBtn:disabled {
-    background-color: #b97030;
-    color: #eeeeee;
+    background-color: #fdba74;
+    color: #a07a4a;
+}
+QPushButton#CycleBtn:hover,
+QPushButton#CalibBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #fb923c, stop:1 #f97316);
+}
+QPushButton#CycleBtn:pressed,
+QPushButton#CalibBtn:pressed {
+    background-color: #c2410c;
 }
 
-/* ResponceBtn 响应按钮（柔紫） */
+/* ---------- 响应按钮（粉紫） ---------- */
 QPushButton#ResponceBtn {
-    background-color: #8039a0;
-}
-QPushButton#ResponceBtn:hover {
-    background-color: #b046e6;
-}
-QPushButton#ResponceBtn:pressed {
-    background-color: #572070;
-}
-QPushButton#ResponceBtn:disabled {
-    background-color: #754090;
-    color: #e4d4ee;
-}
-
-/* StateBtn 状态按钮（玫红） */
-QPushButton#StateBtn {
-    background-color: #d8209a;
-}
-QPushButton#StateBtn:hover {
-    background-color: #f040b8;
-}
-QPushButton#StateBtn:pressed {
-    background-color: #a01470;
-}
-QPushButton#StateBtn:disabled {
-    background-color: #992068;
-    color: #f2d8e8;
-}
-
-/* WaveBtn 波形按钮（警示深红） */
-QPushButton#WaveBtn {
-    background-color: #c01528;
-}
-QPushButton#WaveBtn:hover {
-    background-color: #f0253b;
-}
-QPushButton#WaveBtn:pressed {
-    background-color: #880f1c;
-}
-QPushButton#WaveBtn:disabled {
-    background-color: #78101c;
-    color: #ffcccc;
-}
-
-/* ===================== 新增CAN配置页面按钮样式 ===================== */
-/* RefreshBtn 刷新设备列表 - 中性查询灰 */
-QPushButton#RefreshBtn {
-    background-color: #636e72;
-}
-QPushButton#RefreshBtn:hover {
-    background-color: #7f8c8d;
-}
-QPushButton#RefreshBtn:pressed {
-    background-color: #485457;
-}
-QPushButton#RefreshBtn:disabled {
-    background-color: #95a5a6;
-    color: #e0e0e0;
-}
-
-/* InitBtn CAN初始化 - 复用启动绿色语义 */
-QPushButton#InitBtn {
-    background-color: #16c960;
-    font-weight: bold;
-}
-QPushButton#InitBtn:hover {
-    background-color: #32e078;
-}
-QPushButton#InitBtn:pressed {
-    background-color: #0f9e4a;
-}
-QPushButton#InitBtn:disabled {
-    background-color: #247838;
-    color: #cccccc;
-}
-
-/* ReleaseBtn 释放CAN - 断开警示红 */
-QPushButton#ReleaseBtn {
-    background-color: #e74c3c;
-}
-QPushButton#ReleaseBtn:hover {
-    background-color: #ec7063;
-}
-QPushButton#ReleaseBtn:pressed {
-    background-color: #a93226;
-}
-QPushButton#ReleaseBtn:disabled {
-    background-color: #c0392b;
-    color: #ffdddd;
-}
-
-/* ControllerBtn 打开控制器窗口 - 功能科技蓝 */
-QPushButton#ControllerBtn {
-    background-color: #0b62c2;
-}
-QPushButton#ControllerBtn:hover {
-    background-color: #18a0e8;
-}
-QPushButton#ControllerBtn:pressed {
-    background-color: #043b7a;
-}
-QPushButton#ControllerBtn:disabled {
-    background-color: #20487a;
-    color: #c5d8eb;
-}
-
-/* SendBtn 发送CAN报文 - 发送确认暖橙 */
-QPushButton#SendBtn {
-    background-color: #f79038;
-}
-QPushButton#SendBtn:hover {
-    background-color: #ffaa55;
-}
-QPushButton#SendBtn:pressed {
-    background-color: #d06814;
-}
-QPushButton#SendBtn:disabled {
-    background-color: #a85c20;
-    color: #dddddd;
-}
-
-/* ========== 表格样式优化（柔和化，降低刺眼边框） ========== */
-/* 设置信息表格 */
-QTableWidget#SettingInfoTable {
-    background-color: #ffffff;
-    gridline-color: #e2e2e2;
-    border: 1px solid #d0d0d0;
-}
-QTableWidget#SettingInfoTable::item {
-    padding: 3px;
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #d946ef, stop:1 #a855f7);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
     border: none;
 }
+QPushButton#ResponceBtn:disabled {
+    background-color: #e879f9;
+    color: #a070a0;
+}
+QPushButton#ResponceBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #e879f9, stop:1 #d946ef);
+}
+QPushButton#ResponceBtn:pressed {
+    background-color: #86198f;
+}
+
+/* ---------- 状态按钮（玫瑰红） ---------- */
+QPushButton#StateBtn {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #f43f5e, stop:1 #e11d48);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
+    border: none;
+}
+QPushButton#StateBtn:disabled {
+    background-color: #fda4af;
+    color: #a06a7a;
+}
+QPushButton#StateBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #fb7185, stop:1 #f43f5e);
+}
+QPushButton#StateBtn:pressed {
+    background-color: #be123c;
+}
+
+/* ---------- 波形按钮（天蓝） ---------- */
+QPushButton#WaveBtn {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #06b6d4, stop:1 #0891b2);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 6px 16px;
+    border: none;
+}
+QPushButton#WaveBtn:disabled {
+    background-color: #67e8f9;
+    color: #5a8a9a;
+}
+QPushButton#WaveBtn:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #22d3ee, stop:1 #06b6d4);
+}
+QPushButton#WaveBtn:pressed {
+    background-color: #0e7490;
+}
+
+/* ---------- 参数配置表格（白底+蓝色表头） ---------- */
+QTableWidget#SettingInfoTable {
+    background-color: #ffffff;
+    gridline-color: #e2e8f0;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    alternate-background-color: #f8fafc;
+}
+QTableWidget#SettingInfoTable::item {
+    padding: 8px 10px;
+    border: none;
+    color: #1e293b;
+}
 QTableWidget#SettingInfoTable::item:selected {
-    background-color: #d6ecff;
-    color: #000000;
+    background-color: #dbeafe;
+    color: #1e293b;
 }
 QTableWidget#SettingInfoTable QHeaderView::section {
-    background-color: #0b62c2;
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #3b82f6, stop:1 #2563eb);
     color: #ffffff;
-    font-weight: bold;
-    border: 1px solid #1f5080;
-    padding: 6px;
+    font-weight: 600;
+    border: none;
+    padding: 10px 12px;
+}
+QTableWidget#SettingInfoTable QHeaderView::section:vertical {
+    background-color: #f1f5f9;
+    color: #475569;
+    font-weight: 400;
 }
 
-/* 位移表格 */
+/* ==========================================================
+   位移流量标定表格（强制纯白底 + 纯黑字，保证内容可见）
+   ========================================================== */
 QTableWidget#DisplaceTable {
-    background-color: transparent;
-    gridline-color: #e2e2e2;
-    border: 1px solid #d0d0d0;
-}
-QTableWidget#DisplaceTable QHeaderView::section:horizontal {
-    background-color: #f9d849;
-    color: #1a1a1a;
-    font-weight: bold;
-    border: 1px solid #e0b820;
-    padding: 6px;
+    background-color: #ffffff;           /* 纯白背景 */
+    gridline-color: #d1d5db;             /* 灰色网格线 */
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    alternate-background-color: #f3f4f6; /* 交替行浅灰 */
 }
 
-/* ========== 分组框GroupBox 色彩柔和优化，匹配对应功能色系 ========== */
-/* 控制组 - 匹配ControlBtn浅蓝 */
+/* ----- 单元格（强制黑白分明） ----- */
+QTableWidget#DisplaceTable::item {
+    color: #000000;                      /* 纯黑文字（最保险） */
+    background-color: #ffffff;           /* 纯白背景 */
+    padding: 6px 8px;
+    border: none;
+}
+
+/* 交替行（如果启用了 setAlternatingRowColors） */
+QTableWidget#DisplaceTable::item:alternate {
+    background-color: #f9fafb;
+}
+
+/* 选中行（高亮为淡蓝，文字保持黑色） */
+QTableWidget#DisplaceTable::item:selected {
+    background-color: #bfdbfe;
+    color: #000000;
+}
+
+/* ----- 表头（水平）保留黄色风格 ----- */
+QTableWidget#DisplaceTable QHeaderView::section:horizontal {
+    background-color: #facc15;           /* 亮黄 */
+    color: #000000;                      /* 纯黑文字 */
+    font-weight: 600;
+    border: none;
+    padding: 8px 12px;
+}
+
+/* 表头（垂直） */
+QTableWidget#DisplaceTable QHeaderView::section:vertical {
+    background-color: #fefce8;
+    color: #000000;
+}
+
+/* 禁用状态下保持可见（如果表格被禁用） */
+QTableWidget#DisplaceTable:disabled::item {
+    color: #4b5563;
+    background-color: #f3f4f6;
+}
+
+/* ---------- 分组框（浅色柔和边框） ---------- */
 QGroupBox#ControlGroup {
-    background-color: #ebf5fb;
-    border: 1px solid #73b8e6;
+    background-color: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-radius: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
 }
-/* PID组 - 匹配Responce紫色系 */
+QGroupBox#ControlGroup::title {
+    subcontrol-origin: margin;
+    left: 16px;
+    padding: 0 10px 0 10px;
+    color: #1e3a8a;
+    font-weight: 600;
+}
+
 QGroupBox#PIDGroup {
-    background-color: #f4edf9;
-    border: 1px solid #b490d8;
+    background-color: #f5f3ff;
+    border: 1px solid #c4b5fd;
+    border-radius: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
 }
-/* 位移组 - 匹配Cycle校准橙色 */
+QGroupBox#PIDGroup::title {
+    subcontrol-origin: margin;
+    left: 16px;
+    padding: 0 10px 0 10px;
+    color: #5b21b6;
+    font-weight: 600;
+}
+
 QGroupBox#DisplacGroup {
-    background-color: #fef8e6;
-    border: 1px solid #f2c850;
+    background-color: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
 }
-/* 信号组 - 匹配Wave警示红色 */
+QGroupBox#DisplacGroup::title {
+    subcontrol-origin: margin;
+    left: 16px;
+    padding: 0 10px 0 10px;
+    color: #92400e;
+    font-weight: 600;
+}
+
 QGroupBox#SignalGroup {
-    background-color: #fdeeef;
-    border: 1px solid #f09090;
+    background-color: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
+}
+QGroupBox#SignalGroup::title {
+    subcontrol-origin: margin;
+    left: 16px;
+    padding: 0 10px 0 10px;
+    color: #991b1b;
+    font-weight: 600;
+}
+
+/* ---------- 输入控件（白色背景，柔和边框） ---------- */
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox,
+QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #1e293b;
+    selection-background-color: #3b82f6;
+}
+QLineEdit:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QComboBox:focus {
+    border-color: #3b82f6;
+    background-color: #f8fafc;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #475569;
+    margin-right: 8px;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+/* ---------- CheckBox / RadioButton ---------- */
+QCheckBox, QRadioButton {
+    spacing: 8px;
+    color: #1e293b;
+}
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+}
+QCheckBox::indicator:unchecked,
+QRadioButton::indicator:unchecked {
+    background-color: #ffffff;
+    border: 1px solid #9ca3af;
+    border-radius: 4px;
+}
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked {
+    background-color: #3b82f6;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+}
+QRadioButton::indicator:unchecked {
+    border-radius: 9px;
+}
+QRadioButton::indicator:checked {
+    border-radius: 9px;
+}
+
+/* ---------- 滚动条（浅色风格） ---------- */
+QScrollBar:vertical {
+    background: #e2e8f0;
+    width: 10px;
+    border-radius: 5px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #94a3b8;
+    border-radius: 5px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #64748b;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background: #e2e8f0;
+    height: 10px;
+    border-radius: 5px;
+    margin: 0px;
+}
+QScrollBar::handle:horizontal {
+    background: #94a3b8;
+    border-radius: 5px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #64748b;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* ---------- 进度条/滑块（可选） ---------- */
+QProgressBar {
+    background-color: #e2e8f0;
+    border-radius: 6px;
+    border: none;
+    text-align: center;
+    color: #1e293b;
+}
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #3b82f6, stop:1 #60a5fa);
+    border-radius: 6px;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #3b82f6;
+    border: 2px solid #ffffff;
+    width: 18px;
+    height: 18px;
+    margin: -6px 0;
+    border-radius: 9px;
+}
+QSlider::handle:horizontal:hover {
+    background: #2563eb;
 }

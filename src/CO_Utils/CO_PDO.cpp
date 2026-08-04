@@ -1,9 +1,10 @@
 #include "CO_PDO.h"
+#include "CanDriver.h"
 #include <cstring>
 #include <iostream>
 
-CO_PDO::CO_PDO(CO_ObjectDictionary& od, CanDriver& can, CO_NMT& nmt, uint8_t nodeId)
-    : od_(od), can_(can), nmt_(nmt), nodeId_(nodeId) {
+CO_PDO::CO_PDO(CO_ObjectDictionary& od,  CO_NMT& nmt, uint8_t nodeId)
+    : od_(od), nmt_(nmt), nodeId_(nodeId) {
     // 硬编码示例：一个 TPDO（索引0x1800+0，映射0x1A00）
     TPDO tpdo0;
     tpdo0.cobId = 0x180 + nodeId;
@@ -102,5 +103,5 @@ void CO_PDO::sendTPDO(const TPDO& tpdo) {
     }
     frame.can_dlc = std::min(8, (int)outData.size());
     memcpy(frame.data, outData.data(), frame.can_dlc);
-    can_.send(frame);
+    CanDriver::GetInstance()->send(frame);
 }

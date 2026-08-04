@@ -16,6 +16,33 @@
 static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限", "操作"});
 static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
 
+// const std::vector<std::pair<uint32_t, QString>> info_table_v_head = {
+//     {0x1000,  QStringLiteral("Device Type")},
+//     {0x1001,  QStringLiteral("Error Register")},
+//     {0x100E,  QStringLiteral("Protocol Switch")},
+//     {0x1010,  QStringLiteral("Store Parameters")},
+//     {0x1011,  QStringLiteral("Restore Defaults")},
+//     {0x1017,  QStringLiteral("Producer Heartbeat Time")},
+//     {0x1018,  QStringLiteral("Identity")},
+//     {0x6040,  QStringLiteral("Control Word")},
+//     {0x6041,  QStringLiteral("Status Word")},
+//     {0x6042,  QStringLiteral("Operation Mode")},
+//     {0x6043,  QStringLiteral("Control Mode")},
+//     {0x604E,  QStringLiteral("Fault Code")},
+//     {0x6110,  QStringLiteral("Sensor Value")},
+//     {0x6300,  QStringLiteral("Position Setpoint")},
+//     {0x6301,  QStringLiteral("Position Feedback")},
+//     {0x6310,  QStringLiteral("Final Demand")},
+//     {0x6350,  QStringLiteral("Control Deviation")},
+//     {0x6361,  QStringLiteral("Dither Amplitude")},
+//     {0x6362,  QStringLiteral("Dither Frequency")},
+//     {0x6380,  QStringLiteral("Pressure Setpoint")},
+//     {0x6381,  QStringLiteral("Pressure Actual")},
+//     {0x2001,  QStringLiteral("PWM Frequency")},
+//     {0x2201,  QStringLiteral("Overcurrent Threshold")},
+//     {0x2202,  QStringLiteral("Overtemperature Threshold")}
+// };
+
 SettingPage::SettingPage(QWidget* parent)
     : QWidget(parent) {
     InitPage();

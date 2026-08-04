@@ -1,9 +1,9 @@
 #ifndef _CAN_CONFIG_WIN_H_
 #define _CAN_CONFIG_WIN_H_
 
+#include "CanDriver.h"
 #include <QMainWindow>
 #include <QTimer>
-#include "CanDriver.h"
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -19,8 +19,10 @@ class CanConfigWin : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit CanConfigWin(QWidget *parent = nullptr);
-    ~CanConfigWin();
+    static CanConfigWin* GetInstance(QWidget *parent = nullptr) {
+        static CanConfigWin instance(parent);
+        return &instance;
+    }
 
 private slots:
     void onRefreshDevices();
@@ -29,11 +31,18 @@ private slots:
     void onOpenController();
     void onSend();
     void onReceiveTimer();
+    void onChangeMode();
 
 private:
+    explicit CanConfigWin(QWidget *parent = nullptr);
+    ~CanConfigWin();
+
     void setupUI();
     void logMessage(const QString &msg, bool isError = false);
+    void SendAndReadSDOInfo();
+    void InitSDOInfo();
     void updateCanStatus(bool initialized);
+    TPCANHandle GetSelectedChannelHandle() const; 
 
     // UI 组件
     QComboBox   *cbDevice;
@@ -41,6 +50,7 @@ private:
     QComboBox   *cbBaudrate;
     QPushButton *btnInit;
     QPushButton *btnRelease;
+    QPushButton *btnChange;
     QPushButton *btnController;
     QTextEdit   *teLog;          // 用于显示状态信息
 
@@ -59,8 +69,8 @@ private:
     QTableWidget *twReceive;     // 显示接收的帧
 
     QTimer      *receiveTimer;
-    CanDriver   canDriver;
     bool        canReady;
+    std::vector<CanChannelInfo> channelList;
 };
 
 #endif //_CAN_CONFIG_WIN_H_

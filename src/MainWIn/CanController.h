@@ -9,10 +9,14 @@ class CanController : public QWidget {
     Q_OBJECT
     
 public:
-    CanController(QWidget* parent = nullptr);
-    ~CanController();
+    static CanController* GetInstance(QWidget* parent = nullptr) {
+        static CanController instance(parent);
+        return &instance;
+    }
 
 private:
+    CanController(QWidget* parent = nullptr);
+    ~CanController();
     void InitWindow();
     void CreateTabButtons();
 

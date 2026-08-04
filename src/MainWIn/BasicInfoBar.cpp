@@ -150,13 +150,13 @@ QString BasicInfoBar::GetProtocol() const {
 
 void BasicInfoBar::InitData() {
     SetSerialNum("TEST-001");
-    SetDate("2026-06-04");
-    SetModel("PRO-V2");
+    SetDate(QDate::currentDate().toString("yyyy-MM-dd"));
+    SetModel("液压设备");
     SetChannelCount("2");
-    SetManufacturer("ABC");
+    SetManufacturer("0x51");
     SetVersion("V1.2");
-    SetBaudRate("115200");
-    SetProtocol("V3.0");
+    SetBaudRate("2500000");
+    SetProtocol("CANopen");
 }
 
 void BasicInfoBar::OnStartBtnClicked() {

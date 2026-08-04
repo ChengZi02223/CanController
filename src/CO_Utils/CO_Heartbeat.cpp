@@ -1,8 +1,9 @@
 #include "CO_Heartbeat.h"
+#include "CanDriver.h"
 #include <chrono>
 
-CO_Heartbeat::CO_Heartbeat(CanDriver& can, uint8_t nodeId, CO_NMT& nmt)
-    : can_(can), nodeId_(nodeId), nmt_(nmt), running_(false) {}
+CO_Heartbeat::CO_Heartbeat( uint8_t nodeId, CO_NMT& nmt)
+    : nodeId_(nodeId), nmt_(nmt), running_(false) {}
 
 CO_Heartbeat::~CO_Heartbeat() { stop(); }
 
@@ -38,5 +39,5 @@ void CO_Heartbeat::sendHeartbeat() {
     frame.can_id = 0x700 + nodeId_;
     frame.can_dlc = 1;
     frame.data[0] = code;
-    can_.send(frame);
+     CanDriver::GetInstance()->send(frame);
 }

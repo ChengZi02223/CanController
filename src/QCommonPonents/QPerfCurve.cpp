@@ -142,7 +142,7 @@ void PlotCanvas::paintEvent(QPaintEvent *event)
         }
         painter.save();
         painter.rotate(-90);
-        painter.drawText(-(plotRect.top() + plotRect.bottom()) / 2, 25, "Left Axis");
+        painter.drawText(-(plotRect.top() + plotRect.bottom()) / 2, 25, "位移");
         painter.restore();
     }
 
@@ -157,7 +157,7 @@ void PlotCanvas::paintEvent(QPaintEvent *event)
         }
         painter.save();
         painter.rotate(90);
-        painter.drawText((plotRect.top() + plotRect.bottom()) / 2, -rect().right() + 15, "Right Axis");
+        painter.drawText((plotRect.top() + plotRect.bottom()) / 2, -rect().right() + 15, "流量");
         painter.restore();
     }
 

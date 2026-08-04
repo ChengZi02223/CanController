@@ -15,7 +15,6 @@ int main(int argc, char *argv[])
     a.setStyleSheet(qss);
 
     // CanController *w  = new CanController();
-    CanConfigWin *w = new CanConfigWin();
-    w->show();
+    CanConfigWin::GetInstance()->show();
     return a.exec();
 } 

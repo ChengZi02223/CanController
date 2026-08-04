@@ -1,7 +1,6 @@
 #ifndef CO_NMT_HPP
 #define CO_NMT_HPP
 
-#include "CanDriver.h"
 #include <cstdint>
 #include <functional>
 
@@ -12,9 +11,10 @@ enum class NmtState : uint8_t {
     STOPPED = 4
 };
 
+struct can_frame;
 class CO_NMT {
 public:
-    CO_NMT(CanDriver& can, uint8_t nodeId);
+    CO_NMT(uint8_t nodeId);
     bool processCommand(const can_frame& frame);
     NmtState getState() const { return state_; }
     void setStateChangeCallback(std::function<void(NmtState, NmtState)> cb);
@@ -22,7 +22,6 @@ public:
 
 private:
     void changeState(NmtState newState);
-    CanDriver& can_;
     uint8_t nodeId_;
     NmtState state_;
     std::function<void(NmtState, NmtState)> stateChangeCallback_;

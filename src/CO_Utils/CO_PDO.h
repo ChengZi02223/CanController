@@ -2,7 +2,6 @@
 #define CO_PDO_HPP
 
 #include "CO_ObjectDictionary.h"
-#include "CanDriver.h"
 #include "CO_NMT.h"
 #include <vector>
 #include <cstdint>
@@ -27,7 +26,7 @@ struct RPDO {
 
 class CO_PDO {
 public:
-    CO_PDO(CO_ObjectDictionary& od, CanDriver& can, CO_NMT& nmt, uint8_t nodeId);
+    CO_PDO(CO_ObjectDictionary& od, CO_NMT& nmt, uint8_t nodeId);
     void processRPDO(const can_frame& frame);
     void processEventDriven();   // 定期调用，检查事件触发TPDO
     void triggerSyncTPDOs();     // 收到SYNC时调用
@@ -38,7 +37,6 @@ private:
     void sendTPDO(const TPDO& tpdo);
     
     CO_ObjectDictionary& od_;
-    CanDriver& can_;
     CO_NMT& nmt_;
     uint8_t nodeId_;
     std::vector<TPDO> tpdoList_;

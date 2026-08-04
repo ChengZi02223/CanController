@@ -1,9 +1,10 @@
 #include "CO_SDO.h"
+#include "CanDriver.h"
 #include <cstring>
 #include <iostream>
 
-CO_SDO::CO_SDO(CO_ObjectDictionary& od, CanDriver& can, uint8_t nodeId)
-    : od_(od), can_(can), nodeId_(nodeId) {
+CO_SDO::CO_SDO(CO_ObjectDictionary& od, uint8_t nodeId)
+    : od_(od), nodeId_(nodeId) {
     sdoRxCobId_ = 0x600 + nodeId;
     sdoTxCobId_ = 0x580 + nodeId;
 }
@@ -27,7 +28,7 @@ bool CO_SDO::processRequest(const can_frame& frame) {
         // 写响应
         uint8_t resp[8] = {0x60, (uint8_t)(idx&0xFF), (uint8_t)(idx>>8), sub, 0,0,0,0};
         can_frame f; f.can_id = sdoTxCobId_; f.can_dlc = 8; memcpy(f.data, resp, 8);
-        can_.send(f);
+        CanDriver::GetInstance()->send(f);
     } else if (cc == 0x40) { // Read
         ODEntry* entry = od_.getEntry(idx, sub);
         if (!entry) { sendAbort(idx, sub, 0x06020000); return true; }
@@ -41,7 +42,7 @@ bool CO_SDO::processRequest(const can_frame& frame) {
         };
         std::copy(entry->data.begin(), entry->data.end(), resp+4);
         can_frame f; f.can_id = sdoTxCobId_; f.can_dlc = 8; memcpy(f.data, resp, 8);
-        can_.send(f);
+        CanDriver::GetInstance()->send(f);
     } else {
         sendAbort(idx, sub, 0x06010000);
     }
@@ -52,5 +53,5 @@ void CO_SDO::sendAbort(uint16_t index, uint8_t subindex, uint32_t abortCode) {
     uint8_t data[8] = {0x80, (uint8_t)(index&0xFF), (uint8_t)(index>>8), subindex};
     memcpy(data+4, &abortCode, 4);
     can_frame f; f.can_id = sdoTxCobId_; f.can_dlc = 8; memcpy(f.data, data, 8);
-    can_.send(f);
+    CanDriver::GetInstance()->send(f);
 }

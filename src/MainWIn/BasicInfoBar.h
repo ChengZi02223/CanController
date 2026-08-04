@@ -22,23 +22,23 @@ public:
     QString GetSerialNum() const;
     void SetDate(const QString& date);
     QString GetDate() const;
-    void SetModel(const QString& model);
     QString GetModel() const;
-    void SetChannelCount(const QString& channel_count);
     QString GetChannelCount() const;
-    void SetManufacturer(const QString& manufacturer);
     QString GetManufacturer() const;
-    void SetVersion(const QString& version);
     QString GetVersion() const;
     void SetBaudRate(const QString& baud_rate);
     QString GetBaudRate() const;
-    void SetProtocol(const QString& protocol);
     QString GetProtocol() const;
 
 signals:
     void SendTestState(TestState state);
 
 private slots:
+    void SetModel(const QString& model);
+    void SetChannelCount(const QString& channel_count);
+    void SetManufacturer(const QString& manufacturer);
+    void SetVersion(const QString& version);   
+    void SetProtocol(const QString& protocol);     
     void OnStartBtnClicked();
 
 private:

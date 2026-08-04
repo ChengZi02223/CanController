@@ -1,53 +1,62 @@
 @echo off
 chcp 65001 >nul
+set "SCRIPT_ROOT=%~dp0"
+cd /d "%SCRIPT_ROOT%"
+
 echo ==============================================
-echo     Qt + MinGW 项目一键编译脚本 (Debug)
+echo     Qt5.12.8 + MinGW73_64 Build Script (Debug)
 echo ==============================================
 echo.
 
-:: --------------------------
-:: 配置（和你的 CMakeLists.txt 对应）
-:: --------------------------
-set QT_DIR=C:\Qt\Qt5.12.8\5.12.8\mingw73_64
-set PATH=%QT_DIR%\bin;%PATH%
-echo [信息] Qt 路径：%QT_DIR%
+:: Config area
+set "QT_BASE=C:\Qt\Qt5.12.8\5.12.8\mingw73_64"
+set "MINGW_TOOL=C:\Qt\Tools\mingw730_64\bin"
+set "CMAKE_TOOL=C:\Qt\Tools\CMake_64\bin"
+
+:: Set environment PATH
+set "PATH=%QT_BASE%\bin;%MINGW_TOOL%;%CMAKE_TOOL%;%PATH%"
+echo [INFO] Qt path: %QT_BASE%
+echo [INFO] MinGW toolchain path: %MINGW_TOOL%
 echo.
 
-@REM :: 1. 清理旧构建目录
-@REM if exist "build" (
-@REM     echo [1/4] 清理旧构建目录...
-@REM     rd /s /q build
-@REM )
-
-@REM :: 2. 创建构建目录
-@REM echo [2/4] 创建 build 目录...
-@REM mkdir build
-
-:: 3. CMake 配置（MinGW 专用）
-echo [3/4] CMake 配置 Debug 模式...
+:: 1. Clean old build dir
+if exist "build" (
+    echo [1/4] Cleaning old build directory...
+    rd /s /q build
+)
+:: 2. Create new build dir
+echo [2/4] Creating build directory...
+mkdir build
 cd build
-cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug
+
+:: 3. CMake configure for Debug
+echo [3/4] Running CMake configure (Debug)...
+cmake .. ^
+-G "MinGW Makefiles" ^
+-DCMAKE_BUILD_TYPE=Debug ^
+-DCMAKE_PREFIX_PATH=%QT_BASE%
 
 if %errorlevel% neq 0 (
     echo.
-    echo 错误：CMake 配置失败！
+    echo ERROR: CMake configure failed! Check Qt/MinGW paths
+    pause
     exit /b 1
 )
 
-:: 4. 编译（MinGW Makefiles 不需要 --config）
+:: 4. Build project
 echo.
-echo [4/4] 编译 Debug 模式...
+echo [4/4] Starting build (Debug)...
 cmake --build .
-
 if %errorlevel% neq 0 (
     echo.
-    echo 错误：编译失败！
+    echo ERROR: Source build failed, check source code and CMakeLists.txt
+    pause
     exit /b 1
 )
 
 echo.
 echo ==============================================
-echo          Debug 编译完成！✅
-echo  可执行文件在 build/ 目录下
+echo          Build completed successfully!
+echo  Output binary path: %SCRIPT_ROOT%build
 echo ==============================================
-echo.
+pause

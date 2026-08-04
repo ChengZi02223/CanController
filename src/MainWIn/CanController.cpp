@@ -1,6 +1,7 @@
 #include "CanController.h"
 #include "SettingPage.h"
 #include "CalibrationPage.h"
+#include "CanConfig.h"
 
 CanController::CanController(QWidget* parent)
     : QWidget(parent) {
@@ -11,7 +12,7 @@ CanController::CanController(QWidget* parent)
     QRect fullRect = primaryScreen->geometry();
     int screenW = fullRect.width();
     int screenH = fullRect.height();
-    setMinimumSize(screenW * 1 / 2, screenH * 1 / 2);
+    setMinimumSize(screenW * 1 / 2, screenH * 3 / 4);
 }
 
 CanController::~CanController() {}
@@ -44,8 +45,21 @@ void CanController::CreateTabButtons() {
     test_page_btn->setCheckable(true);
     test_page_btn->setChecked(false);
 
+    auto can_config_btn = new QPushButton(this);
+    can_config_btn->setFixedSize(30, 30);
+    const QString res_path = ":/icons/config.ico";
+    QFile file(res_path);
+    // qDebug() << "资源路径：" << res_path;
+    // qDebug() << "资源是否存在：" << file.exists();
+    if (file.exists())
+    {
+        can_config_btn->setIcon(QIcon(res_path));
+        can_config_btn->setIconSize(QSize(24,24));
+    }
+
     auto btn_layout = new QHBoxLayout();
     btn_layout->addWidget(setting_page_btn);
+    btn_layout->addWidget(can_config_btn);
     btn_layout->addWidget(test_page_btn);
     main_layout_->addLayout(btn_layout);
 
@@ -61,5 +75,10 @@ void CanController::CreateTabButtons() {
 
     connect(test_page_btn, &QPushButton::clicked, this, [this]() {
         stacked_widget_->setCurrentIndex(1);
+    });
+
+    connect(can_config_btn, &QPushButton::clicked, this, [this]() {
+        // 打开 CAN 配置窗口
+        CanConfigWin::GetInstance()->show();
     });
 }

@@ -1,71 +1,62 @@
 #ifndef CAN_DRIVER_HPP
 #define CAN_DRIVER_HPP
-
 #include <cstdint>
 #include <string>
-#include <unordered_map>
-
+#include <vector>
 #include <windows.h>
-#include <PCANBasic.h>  // 官方头文件
+#include <PCANBasic.h>
 
 // 自定义 CAN 帧结构 (兼容 Linux can_frame 格式)
 struct can_frame {
-    uint32_t can_id;   // CAN ID (11位或29位，本项目只用11位)
+    uint32_t can_id;   // CAN ID (11位或29位)
     uint8_t  can_dlc;  // 数据长度 (0..8)
     uint8_t  data[8];  // 数据字节
 };
 
-static const std::unordered_map<std::string, TPCANHandle> StrToDevMap = {
-    {"PCAN_USBBUS1",  PCAN_USBBUS1},
-    {"PCAN_USBBUS2",  PCAN_USBBUS2},
-    {"PCAN_USBBUS3",  PCAN_USBBUS3},
-    {"PCAN_USBBUS4",  PCAN_USBBUS4},
-    {"PCAN_USBBUS5",  PCAN_USBBUS5},
-    {"PCAN_USBBUS6",  PCAN_USBBUS6},
-    {"PCAN_USBBUS7",  PCAN_USBBUS7},
-    {"PCAN_USBBUS8",  PCAN_USBBUS8},
-    {"PCAN_USBBUS9",  PCAN_USBBUS9},
-    {"PCAN_USBBUS10", PCAN_USBBUS10},
-    {"PCAN_USBBUS11", PCAN_USBBUS11},
-    {"PCAN_USBBUS12", PCAN_USBBUS12},
-    {"PCAN_USBBUS13", PCAN_USBBUS13},
-    {"PCAN_USBBUS14", PCAN_USBBUS14},
-    {"PCAN_USBBUS15", PCAN_USBBUS15},
-    {"PCAN_USBBUS16", PCAN_USBBUS16}
-};
-
-static const std::unordered_map<TPCANHandle, std::string> DevToStrMap = {
-    {PCAN_USBBUS1,  "PCAN_USBBUS1"},
-    {PCAN_USBBUS2,  "PCAN_USBBUS2"},
-    {PCAN_USBBUS3,  "PCAN_USBBUS3"},
-    {PCAN_USBBUS4,  "PCAN_USBBUS4"},
-    {PCAN_USBBUS5,  "PCAN_USBBUS5"},
-    {PCAN_USBBUS6,  "PCAN_USBBUS6"},
-    {PCAN_USBBUS7,  "PCAN_USBBUS7"},
-    {PCAN_USBBUS8,  "PCAN_USBBUS8"},
-    {PCAN_USBBUS9,  "PCAN_USBBUS9"},
-    {PCAN_USBBUS10, "PCAN_USBBUS10"},
-    {PCAN_USBBUS11, "PCAN_USBBUS11"},
-    {PCAN_USBBUS12, "PCAN_USBBUS12"},
-    {PCAN_USBBUS13, "PCAN_USBBUS13"},
-    {PCAN_USBBUS14, "PCAN_USBBUS14"},
-    {PCAN_USBBUS15, "PCAN_USBBUS15"},
-    {PCAN_USBBUS16, "PCAN_USBBUS16"}
+// 扫描返回的通道信息（给QT界面下拉框用）
+struct CanChannelInfo
+{
+    TPCANHandle handle;
+    std::string channelName;   // "PCAN_USBBUS1"
+    std::string hardwareName;  // 硬件型号 "PCAN-USB FD"
+    bool isAvailable;          // true=未被占用可连接
+    bool isFDSupport;          // 是否支持CAN FD
 };
 
 class CanDriver {
 public:
-    CanDriver();
-    ~CanDriver();
+    static CanDriver* GetInstance() {
+        static CanDriver * instance = nullptr;
+        if(instance == nullptr) {
+            instance = new CanDriver();
+        }
+        return instance;
+    }
 
-    bool init(const std::string& device, uint32_t baudrate);
+    // 【新增】自动扫描本机所有PCAN通道，返回全部通道列表
+    std::vector<CanChannelInfo> scanAllChannels();
+
+    // 初始化：现在直接传入扫描得到的handle，不再传字符串设备名
+    bool init(TPCANHandle channelHandle, uint32_t baudrate);
+    bool IsInitialized() const { return isInitialized_; }
     void close();
+
+    bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms = -1);
+    bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
+    // 经典CAN收发（原有逻辑保留）
     bool send(const can_frame& frame);
     bool receive(can_frame& frame, int timeout_ms = -1);
 
+    // 【可选】CAN FD扩展接口（新款硬件必备）
+    bool initFD(TPCANHandle channelHandle, const char* fdBitrateStr);
+    bool sendFD(TPCANMsgFD& fdMsg);
+    bool receiveFD(TPCANMsgFD& fdMsg, TPCANTimestampFD* ts = nullptr);
+
 private:
-    void* handle_;  // 指向 PCAN 句柄的内部类型（实际为TPCANHandle）
+    CanDriver();
+    ~CanDriver();
+
+    void* handle_;
     bool isInitialized_;
 };
-
 #endif // CAN_DRIVER_HPP

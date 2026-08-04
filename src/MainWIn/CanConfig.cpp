@@ -1,22 +1,25 @@
 #include "CanConfig.h"
 #include "QtWidgets.h"
 #include "CanController.h"
-#include "CanDriver.h"
+#include "CO_CMD.h"
+#include "CmdManager.h"
+#include "Utils.h"
+#include "can_cmd.h"
 
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
 
-static std::string FormatChannelName(TPCANHandle handle, DWORD features) {
-    std::string name;
-    auto it = DevToStrMap.find(handle);
-    if (it != DevToStrMap.end()) {
-        name = it->second;
-    }
-    if (features & FEATURE_FD_CAPABLE) name += " (FD)";
-    if (features & FEATURE_XL_CAPABLE) name += " (XL)";
-    return name;
-}
+// static std::string FormatChannelName(TPCANHandle handle, DWORD features) {
+//     std::string name;
+//     auto it = DevToStrMap.find(handle);
+//     if (it != DevToStrMap.end()) {
+//         name = it->second;
+//     }
+//     if (features & FEATURE_FD_CAPABLE) name += " (FD)";
+//     if (features & FEATURE_XL_CAPABLE) name += " (XL)";
+//     return name;
+// }
 
 CanConfigWin::CanConfigWin(QWidget *parent)
     : QMainWindow(parent), canReady(false)
@@ -55,7 +58,7 @@ void CanConfigWin::setupUI()
 
     cbBaudrate = new QComboBox;
     cbBaudrate->addItems({"125 kbps", "250 kbps", "500 kbps", "1 Mbps"});
-    cbBaudrate->setCurrentIndex(2); // 500k
+    cbBaudrate->setCurrentIndex(1); // 500k
 
     connLayout->addWidget(new QLabel("Device:"));
     connLayout->addWidget(cbDevice);
@@ -71,15 +74,20 @@ void CanConfigWin::setupUI()
     btnRelease = new QPushButton("Release");
     btnRelease->setObjectName("ReleaseBtn");
     btnRelease->setFixedSize(100, 30);
+    btnChange = new QPushButton("Change");
+    btnChange->setObjectName("ChangeBtn");
+    btnChange->setFixedSize(100, 30);
     btnController = new QPushButton("Controller");
     btnController->setObjectName("ControllerBtn");
     btnController->setFixedSize(100, 30);
     //TODO: set for false normally
+    btnChange->setEnabled(false);
     btnController->setEnabled(true);
     btnRelease->setEnabled(false);
     btnLayout->addWidget(btnInit);
     btnLayout->addWidget(btnRelease);
     btnLayout->addStretch();
+    btnLayout->addWidget(btnChange, 0, Qt::AlignRight);
     btnLayout->addWidget(btnController, 0, Qt::AlignRight);
 
     teLog = new QTextEdit;
@@ -157,33 +165,61 @@ void CanConfigWin::setupUI()
     connect(btnRefresh, &QPushButton::clicked, this, &CanConfigWin::onRefreshDevices);
     connect(btnInit, &QPushButton::clicked, this, &CanConfigWin::onInit);
     connect(btnRelease, &QPushButton::clicked, this, &CanConfigWin::onRelease);
+    connect(btnChange, &QPushButton::clicked, this, &CanConfigWin::onChangeMode);
     connect(btnController, &QPushButton::clicked, this, &CanConfigWin::onOpenController);
     connect(btnSend, &QPushButton::clicked, this, &CanConfigWin::onSend);
+}
+
+void CanConfigWin::SendAndReadSDOInfo() {
+
+}
+
+void CanConfigWin::InitSDOInfo() {
+
 }
 
 void CanConfigWin::onRefreshDevices()
 {
     cbDevice->clear();
-    uint32_t channelCount = 0;
-    TPCANStatus st = CAN_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS_COUNT, &channelCount, sizeof(channelCount));
-    if (st != PCAN_ERROR_OK || channelCount == 0) {
-        btnInit->setEnabled(false);
+    channelList.clear();
+
+    channelList = CanDriver::GetInstance()->scanAllChannels();
+    if (channelList.empty()) {
+        QMessageBox::information(this, "提示", "未检测到PCAN设备，请检查USB/驱动");
         return;
     }
-
-    // 分配缓冲区获取通道信息
-    TPCANChannelInformation* info = new TPCANChannelInformation[channelCount];
-    st = CAN_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS, info, channelCount * sizeof(TPCANChannelInformation));
-    if (st == PCAN_ERROR_OK) {
-        btnInit->setEnabled(true);
-        for (uint32_t i = 0; i < channelCount; ++i) {
-            if (info[i].channel_condition & PCAN_CHANNEL_AVAILABLE) {
-                std::string name = FormatChannelName(info[i].channel_handle, info[i].device_features);
-                cbDevice->addItem(QString::fromStdString(name), QString::fromStdString(name));
-            }
-        }
+    // 填充下拉框：显示通道名+硬件型号+是否可用
+    for (auto& info : channelList){
+        QString disp = QString("%1 | %2 | %3")
+            .arg(QString::fromStdString(info.channelName))
+            .arg(QString::fromStdString(info.hardwareName))
+            .arg(info.isAvailable ? "空闲可连接" : "已占用");
+        // m_cbxChannel->addItem(disp);
+        qDebug() << "Detected channel: " << disp;
+        cbDevice->addItem(QString::fromStdString(info.channelName), QString::fromStdString(info.channelName));
     }
-    delete[] info;
+
+
+    // uint32_t channelCount = 0;
+    // TPCANStatus st = CAN_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS_COUNT, &channelCount, sizeof(channelCount));
+    // if (st != PCAN_ERROR_OK || channelCount == 0) {
+    //     btnInit->setEnabled(false);
+    //     return;
+    // }
+
+    // // 分配缓冲区获取通道信息
+    // TPCANChannelInformation* info = new TPCANChannelInformation[channelCount];
+    // st = CAN_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS, info, channelCount * sizeof(TPCANChannelInformation));
+    // if (st == PCAN_ERROR_OK) {
+    //     btnInit->setEnabled(true);
+    //     for (uint32_t i = 0; i < channelCount; ++i) {
+    //         if (info[i].channel_condition & PCAN_CHANNEL_AVAILABLE) {
+    //             std::string name = FormatChannelName(info[i].channel_handle, info[i].device_features);
+    //             cbDevice->addItem(QString::fromStdString(name), QString::fromStdString(name));
+    //         }
+    //     }
+    // }
+    // delete[] info;
     logMessage("Device list refreshed!");
 }
 
@@ -199,18 +235,19 @@ void CanConfigWin::onInit()
         return;
     }
     int baudIdx = cbBaudrate->currentIndex();
-    unsigned int baudrate = 125000;
+    uint32_t baudrate = 125000;
     switch (baudIdx) {
         case 0: baudrate = 125000; break;
         case 1: baudrate = 250000; break;
         case 2: baudrate = 500000; break;
         case 3: baudrate = 1000000; break;
     }
-    if (canDriver.init(device.toStdString(), baudrate)) {
+    if (CanDriver::GetInstance()->init(GetSelectedChannelHandle(), baudrate)) {
         canReady = true;
         logMessage(QString("Init OK: %1 @ %2 bps").arg(device).arg(baudrate));
         btnInit->setEnabled(false);
         btnRelease->setEnabled(true);
+        btnChange->setEnabled(true);
         btnController->setEnabled(true);
         btnSend->setEnabled(true);
         updateCanStatus(true);
@@ -222,20 +259,30 @@ void CanConfigWin::onInit()
 void CanConfigWin::onRelease()
 {
     if (!canReady) return;
-    canDriver.close();
+    CanDriver::GetInstance()->close();
     canReady = false;
     logMessage("CAN released.");
     btnInit->setEnabled(true);
     btnRelease->setEnabled(false);
+    btnChange->setEnabled(false);
     btnController->setEnabled(false);
     btnSend->setEnabled(false);
     updateCanStatus(false);
 }
 
+void CanConfigWin::onChangeMode() {
+    if (!canReady) return;
+    CanDriver::GetInstance()->ExecCmd(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD, 200);
+}
+
 void CanConfigWin::onOpenController() {
+    // if (!canReady) return; 
+
     this->close();
-    CanController *w  = new CanController();
-    w->show();
+
+    InitSDOInfo();  // 初始化SDO信息，假设节点ID为0x01
+
+    CanController::GetInstance()->show();
 }
 
 void CanConfigWin::onSend()
@@ -246,11 +293,18 @@ void CanConfigWin::onSend()
     }
     can_frame frame;
     bool ok;
+    // 修复1：明确按16进制解析ID
     frame.can_id = leSendId->text().toUInt(&ok, 16);
+    qDebug() << "Send Id input: " << leSendId->text() << " parsed:"  << frame.can_id;
     if (!ok) {
         logMessage("Invalid ID (hex)", true);
         return;
     }
+    // 修复2：大于0x7FF自动标记扩展帧
+    if(frame.can_id > 0x7FF){
+        frame.can_id |= CAN_EFF_FLAG;
+    }
+
     frame.can_dlc = cbSendDlc->currentText().toUInt();
     // 收集数据字节
     QLineEdit* dataLe[8] = {leSendData0, leSendData1, leSendData2, leSendData3,
@@ -262,8 +316,8 @@ void CanConfigWin::onSend()
             return;
         }
     }
-    if (canDriver.send(frame)) {
-        logMessage(QString("Sent: ID=0x%1 DLC=%2").arg(frame.can_id, 0, 16).arg(frame.can_dlc));
+    if (CanDriver::GetInstance()->send(frame)) {
+        logMessage(QString("Sent: ID=0x%1 DLC=%2").arg(frame.can_id & CAN_EFF_MASK, 0, 16).arg(frame.can_dlc));
     } else {
         logMessage("Send failed", true);
     }
@@ -274,7 +328,7 @@ void CanConfigWin::onReceiveTimer()
     if (!canReady) return;
     can_frame frame;
     // 非阻塞读取（超时0）
-    while (canDriver.receive(frame, 0)) {
+    while (CanDriver::GetInstance()->receive(frame, 0)) {
         // 添加一行到表格
         int row = twReceive->rowCount();
         twReceive->insertRow(row);
@@ -307,4 +361,14 @@ void CanConfigWin::updateCanStatus(bool initialized)
 {
     // 可改变界面元素颜色等，简单记录日志
     logMessage(initialized ? "CAN ready for communication" : "CAN offline");
+}
+
+TPCANHandle CanConfigWin::GetSelectedChannelHandle() const {
+    QString device = cbDevice->currentData().toString();
+    for (const auto& info : channelList) {
+        if (QString::fromStdString(info.channelName) == device) {
+            return info.handle;
+        }
+    }
+    return PCAN_NONEBUS; // 未找到
 }

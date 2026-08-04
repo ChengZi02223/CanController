@@ -1,8 +1,9 @@
 #include "CO_EMCY.h"
+#include "CanDriver.h"
 #include <cstring>
 
-CO_EMCY::CO_EMCY(CO_ObjectDictionary& od, CanDriver& can, uint8_t nodeId)
-    : od_(od), can_(can), nodeId_(nodeId), lastErrorReg_(0), lastErrorCode_(0) {}
+CO_EMCY::CO_EMCY(CO_ObjectDictionary& od, uint8_t nodeId)
+    : od_(od), nodeId_(nodeId), lastErrorReg_(0), lastErrorCode_(0) {}
 
 void CO_EMCY::setError(uint16_t errorCode, uint8_t errorRegisterMask) {
     ODEntry* errReg = od_.getEntry(0x1001, 0);
@@ -44,5 +45,5 @@ void CO_EMCY::sendEMCY(uint16_t errorCode, uint8_t errorReg, const std::vector<u
     frame.data[1] = (errorCode >> 8) & 0xFF;
     frame.data[2] = errorReg;
     for (int i=0; i<5 && i<manufData.size(); i++) frame.data[3+i] = manufData[i];
-    can_.send(frame);
+    CanDriver::GetInstance()->send(frame);
 }

@@ -20,6 +20,7 @@ protected:
 
 private:
     void InitPage();
+    void InitPageValue();
     QWidget* CreateControlArea();
     QWidget* CreatePIDSettingArea();
     QWidget* CreateDisplacementArea();
@@ -50,7 +51,17 @@ private:
     QHBoxLayout* main_layout_ = nullptr;
     BasicInfoBar* basic_info_bar_ = nullptr;
     QGroupBox* control_group_ = nullptr;
+    QLineEdit* output_cycle_1_edit_ = nullptr;
+    QLineEdit* output_cycle_2_edit_ = nullptr;
+    QLineEdit* cycle_count_edit_ = nullptr;
+    QLineEdit* neutral_time_edit_ = nullptr;
+    QLineEdit* work_time_edit_ = nullptr;
     QGroupBox* pid_group_ = nullptr;
+    QLineEdit* p_edit_ = nullptr;
+    QLineEdit* i_edit_ = nullptr;
+    QLineEdit* d_edit_ = nullptr;
+    QLineEdit* target_edit_ = nullptr;
+    QLineEdit* ramp_edit_ = nullptr;
     QGroupBox* displacement_group_ = nullptr;
     QGroupBox* signal_group_ = nullptr;
     QGroupBox* waveform_group_ = nullptr;

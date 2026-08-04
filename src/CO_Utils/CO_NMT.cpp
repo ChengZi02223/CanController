@@ -1,8 +1,9 @@
 #include "CO_NMT.h"
+#include "CanDriver.h"
 #include <iostream>
 
-CO_NMT::CO_NMT(CanDriver& can, uint8_t nodeId)
-    : can_(can), nodeId_(nodeId), state_(NmtState::INITIALIZING) {}
+CO_NMT::CO_NMT(uint8_t nodeId)
+    :  nodeId_(nodeId), state_(NmtState::INITIALIZING) {}
 
 bool CO_NMT::processCommand(const can_frame& frame) {
     if ((frame.can_id & 0x7FF) != 0x000) return false;

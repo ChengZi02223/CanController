@@ -38,18 +38,27 @@ file(GLOB SRCS
     ${PROJECT_SOURCE_DIR}/src/CO_Utils/*.cpp
     ${PROJECT_SOURCE_DIR}/src/MainWin/*.cpp
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents/*.cpp
-    ${PROJECT_SOURCE_DIR}/src/CmdManager/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/Manager/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/CAN_CMD/*.cpp
 )
 
 # file(GLOB UI_FILES
 #     ${PROJECT_SOURCE_DIR}/src/Res/Uis/*.ui
 # )
 
+# add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/drivers drivers_build)
+
 file(GLOB QRC_FILE
     ${PROJECT_SOURCE_DIR}/src/Res/tools/tool.qrc
 )
 
 add_executable(${PROJECT_NAME} ${SRCS} ${HDRS} ${QRC_FILE})
+
+# if(WIN32 AND MINGW)
+#     set_target_properties(CanController PROPERTIES WIN32_EXECUTABLE TRUE)
+#     # MinGW 专用链接参数，剥离控制台子系统
+#     target_link_options(CanController PRIVATE -mwindows)
+# endif()
 
 # 头文件路径
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -58,7 +67,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src/CO_Utils
     ${PROJECT_SOURCE_DIR}/src/MainWin
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents
-     ${PROJECT_SOURCE_DIR}/src/CmdManager
+    ${PROJECT_SOURCE_DIR}/src/Manager
+    ${PROJECT_SOURCE_DIR}/src/CAN_CMD
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Widgets PCANBasic::PCANBasic)

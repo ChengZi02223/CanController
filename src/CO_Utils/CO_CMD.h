@@ -27,7 +27,7 @@ extern "C" {
  *      NodeID = 0：表示广播消息，网络中所有的从站设备都会执行这条 NMT 命令
  *      NodeID = 1~127：只控制指定单个节点
  *============================================================================*/
-#define NMT_COB_ID                      0x000u
+#define NMT_COB_ID_                      0x000u
 #define NMT_DLC                         2
 
 /* NMT 命令码 (Command Specifier) */
@@ -179,6 +179,7 @@ static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
 #define HEART_STATE_OPT                 0x05u  // 操作状态
 #define HEART_STATE_RESET_NODE          0x7Fu  // 重置节点状态
 #define HEART_STATE_RESET_COMM          0x80u  // 重置通信状态
+
 
 #ifdef __cplusplus
 }

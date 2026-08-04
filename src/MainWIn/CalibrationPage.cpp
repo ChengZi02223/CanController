@@ -1,7 +1,9 @@
 #include "CalibrationPage.h"
 
 #include "BasicInfoBar.h"
-
+#include "CmdManager.h"
+#include "CanDriver.h"
+#include "can_cmd.h"
 
 
 CalibrationPage::CalibrationPage(QWidget* parent)
@@ -28,6 +30,13 @@ void CalibrationPage::InitPage() {
 
     main_layout_->addLayout(left_layout, 0.5);
     main_layout_->addLayout(right_layout, 0.5);
+
+    InitPageValue();
+}
+
+void CalibrationPage::InitPageValue() {
+// control area
+
 }
 
 void CalibrationPage::resizeEvent(QResizeEvent* event)  {
@@ -57,16 +66,16 @@ QWidget* CalibrationPage::CreateControlArea() {
     auto neutral_time_label = new QLabel("中位停留时间(s)");
     auto work_time_label = new QLabel("工作位停留时间(s)");
 
-    auto output_cycle_1_edit = new QLineEdit();
-    // output_cycle_1_edit->setMinimumWidth(150);
-    auto output_cycle_2_edit = new QLineEdit();
-    // output_cycle_2_edit->setMinimumWidth(150);
-    auto cycle_count_edit = new QLineEdit();
-    // cycle_count_edit->setMinimumWidth(150);
-    auto neutral_time_edit = new QLineEdit();
-    // neutral_time_edit->setMinimumWidth(150);
-    auto work_time_edit = new QLineEdit();
-    // work_time_edit->setMinimumWidth(150);
+    output_cycle_1_edit_ = new QLineEdit("50");
+    output_cycle_1_edit_->setAlignment(Qt::AlignCenter);
+    output_cycle_2_edit_ = new QLineEdit("50");
+    output_cycle_2_edit_->setAlignment(Qt::AlignCenter);
+    cycle_count_edit_ = new QLineEdit("10");
+    cycle_count_edit_->setAlignment(Qt::AlignCenter);
+    neutral_time_edit_ = new QLineEdit("1000");
+    neutral_time_edit_->setAlignment(Qt::AlignCenter);
+    work_time_edit_ = new QLineEdit("2000");
+    work_time_edit_->setAlignment(Qt::AlignCenter);
 
     auto control_1_btn = new QPushButton("1 侧开环控制");
     control_1_btn->setFixedHeight(30);
@@ -88,11 +97,11 @@ QWidget* CalibrationPage::CreateControlArea() {
     grid_layout->addWidget(cycle_count_label, 0, 2, Qt::AlignCenter);
     grid_layout->addWidget(neutral_time_label, 0, 3, Qt::AlignCenter);
     grid_layout->addWidget(work_time_label, 0, 4, Qt::AlignCenter);
-    grid_layout->addWidget(output_cycle_1_edit, 1, 0, Qt::AlignCenter);
-    grid_layout->addWidget(output_cycle_2_edit, 1, 1, Qt::AlignCenter);
-    grid_layout->addWidget(cycle_count_edit, 1, 2, Qt::AlignCenter);
-    grid_layout->addWidget(neutral_time_edit, 1, 3, Qt::AlignCenter);
-    grid_layout->addWidget(work_time_edit, 1, 4, Qt::AlignCenter);
+    grid_layout->addWidget(output_cycle_1_edit_, 1, 0, Qt::AlignCenter);
+    grid_layout->addWidget(output_cycle_2_edit_, 1, 1, Qt::AlignCenter);
+    grid_layout->addWidget(cycle_count_edit_, 1, 2, Qt::AlignCenter);
+    grid_layout->addWidget(neutral_time_edit_, 1, 3, Qt::AlignCenter);
+    grid_layout->addWidget(work_time_edit_, 1, 4, Qt::AlignCenter);
     grid_layout->addWidget(control_1_btn, 2, 0, Qt::AlignCenter);
     grid_layout->addWidget(control_2_btn, 2, 1, Qt::AlignCenter);
     grid_layout->addWidget(cycle_btn, 2, 2, 1, 3, Qt::AlignCenter);    
@@ -108,7 +117,31 @@ QWidget* CalibrationPage::CreateControlArea() {
 
 // Implementation for control 1 button click
 void CalibrationPage::OnControl1BtnClicked() {
+    bool ok = false;
+    // 1. 读取输入框文本，转数字 100 → 1000（你业务规则：百分比 ×10）
+    int percent = output_cycle_1_edit_->text().toInt(&ok);
+    if(!ok) {
+        qDebug() << "输入数值非法";
+        return;
+    }
+    uint16_t value = static_cast<uint16_t>(percent * 10); // 100 → 1000
 
+    // 2. 复制模板生成待发送指令
+    std::vector<uint8_t> cmd(SDO_WRITE_OPEN_VALUE_CMD.begin(), SDO_WRITE_OPEN_VALUE_CMD.end());
+
+    // 3. 【小端模式】填充第5、6字节（下标4、5）
+    cmd[4] = static_cast<uint8_t>(value & 0xFF);        // 低字节 0xE8
+    cmd[5] = static_cast<uint8_t>((value >> 8) & 0xFF); // 高字节 0x03
+
+    // 此时 cmd = {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
+
+    // for (auto byte : cmd) {
+    //     qDebug() << "byte:" << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper();
+    // }
+    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
+    if(!ret){
+        qDebug().noquote() << "开阀指令发送失败";
+    }
 }
 
 // Implementation for control 2 button click
@@ -118,7 +151,7 @@ void CalibrationPage::OnControl2BtnClicked() {
 
 // Implementation for cycle button click
 void CalibrationPage::OnCycleBtnClicked() {
-    
+
 }
 
 // Implementation for creating PID setting area
@@ -134,11 +167,11 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     auto target_label = new QLabel("目标值");
     auto ramp_label = new QLabel("斜坡时间");
 
-    auto p_edit = new QLineEdit();
-    auto i_edit = new QLineEdit();
-    auto d_edit = new QLineEdit();
-    auto target_edit = new QLineEdit();
-    auto ramp_edit = new QLineEdit();
+    p_edit_ = new QLineEdit();
+    i_edit_ = new QLineEdit();
+    d_edit_ = new QLineEdit();
+    target_edit_ = new QLineEdit();
+    ramp_edit_ = new QLineEdit();
 
     auto grid_layout = new QGridLayout();
 
@@ -147,11 +180,11 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     grid_layout->addWidget(d_label, 0, 2, Qt::AlignCenter);
     grid_layout->addWidget(target_label, 0, 3, Qt::AlignCenter);
     grid_layout->addWidget(ramp_label, 0, 4, Qt::AlignCenter);
-    grid_layout->addWidget(p_edit, 1, 0, Qt::AlignCenter);
-    grid_layout->addWidget(i_edit, 1, 1, Qt::AlignCenter);
-    grid_layout->addWidget(d_edit, 1, 2, Qt::AlignCenter);
-    grid_layout->addWidget(target_edit, 1, 3, Qt::AlignCenter);
-    grid_layout->addWidget(ramp_edit, 1, 4, Qt::AlignCenter);
+    grid_layout->addWidget(p_edit_, 1, 0, Qt::AlignCenter);
+    grid_layout->addWidget(i_edit_, 1, 1, Qt::AlignCenter);
+    grid_layout->addWidget(d_edit_, 1, 2, Qt::AlignCenter);
+    grid_layout->addWidget(target_edit_, 1, 3, Qt::AlignCenter);
+    grid_layout->addWidget(ramp_edit_, 1, 4, Qt::AlignCenter);
 
     auto button_layout = new QHBoxLayout();
     auto side_combo = new QComboBox();
