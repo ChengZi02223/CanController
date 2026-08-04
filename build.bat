@@ -39,7 +39,6 @@ cmake .. ^
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: CMake configure failed! Check Qt/MinGW paths
-    pause
     exit /b 1
 )
 
@@ -50,7 +49,7 @@ cmake --build .
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Source build failed, check source code and CMakeLists.txt
-    pause
+
     exit /b 1
 )
 
@@ -59,4 +58,3 @@ echo ==============================================
 echo          Build completed successfully!
 echo  Output binary path: %SCRIPT_ROOT%build
 echo ==============================================
-pause
