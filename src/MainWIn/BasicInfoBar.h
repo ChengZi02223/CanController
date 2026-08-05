@@ -13,6 +13,17 @@ enum TestState {
     kTestEnd
 };
 
+struct BasicInfo {
+    QString serial_num;     // 序列号
+    QString date;           // 日期
+    QString model;          // 型号
+    QString channel_count;  // 联数
+    QString manufacturer;   // 厂家
+    QString version;        // 版本
+    QString baud_rate;      // 波特率
+    QString protocol;       // 协议
+};
+
 class BasicInfoBar : public QGroupBox {
     Q_OBJECT
 public:
@@ -29,6 +40,7 @@ public:
     void SetBaudRate(const QString& baud_rate);
     QString GetBaudRate() const;
     QString GetProtocol() const;
+    void InitData(BasicInfo info = BasicInfo());
 
 signals:
     void SendTestState(TestState state);
@@ -45,7 +57,7 @@ private:
     void InitBar(LayoutStyle style);
     void CreateHarBar();
     void CrateValBar();
-    void InitData();
+    
 
 private:
     QHBoxLayout* main_layout_ = nullptr;

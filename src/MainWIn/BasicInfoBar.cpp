@@ -148,15 +148,26 @@ QString BasicInfoBar::GetProtocol() const {
     return protocol_edit_->text();
 }
 
-void BasicInfoBar::InitData() {
+void BasicInfoBar::InitData(BasicInfo info) {
+    BasicInfo tem_info{};
+
+    if(memcmp(&info, &tem_info, sizeof(BasicInfo)) == 0) {
+        info.serial_num = "TEST-001";
+        info.model = "液压设备";
+        info.channel_count = "2";
+        info.manufacturer = "0x51";
+        info.version = "V1.2";
+        info.baud_rate = "2500000";
+        info.protocol = "CANopen";
+    }
     SetSerialNum("TEST-001");
     SetDate(QDate::currentDate().toString("yyyy-MM-dd"));
-    SetModel("液压设备");
+    SetModel(info.model);
     SetChannelCount("2");
-    SetManufacturer("0x51");
+    SetManufacturer(info.manufacturer);
     SetVersion("V1.2");
     SetBaudRate("2500000");
-    SetProtocol("CANopen");
+    SetProtocol(info.protocol);
 }
 
 void BasicInfoBar::OnStartBtnClicked() {

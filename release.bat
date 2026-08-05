@@ -7,7 +7,7 @@ if exist .\build (
     rmdir /s /q .\build
 )
 if exist .\build (
-    echo ERROR: build目录删除失败！请关闭占用该目录的程序/资源管理器！
+    echo ERROR: build Faild
     pause
     exit /b 1
 )

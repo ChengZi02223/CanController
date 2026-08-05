@@ -13,7 +13,13 @@
 
 /// 切换CANopen
 #define CHANGE_TO_CANOPEN_COB_ID  0x18EF8122
+#define CHANGE_TO_CANOPEN_RPS_COB_ID  0x18EF2281
 extern const std::vector<uint8_t> CHANGE_TO_CANOPEN_CMD;
+extern const std::vector<uint8_t> CHANGE_TO_CANOPEN_CMD_RPS;
+
+/// 切换J939
+extern const std::vector<uint8_t> CHANGE_TO_J1939_CMD;
+extern const std::vector<uint8_t> CHANGE_TO_J1939_CMD_RPS;
 
 /// SDO读写测试
 #define SDO_COB_ID  0x640
@@ -23,6 +29,12 @@ extern const std::vector<uint8_t> SDO_READ_PROTOCOL_CMD;        //协议
 extern const std::vector<uint8_t> SDO_READ_MANUFACTURER_ID_CMD; //厂商ID
 extern const std::vector<uint8_t> SDO_READ_STATUS_WORD_CMD;     //状态字
 extern const std::vector<uint8_t> SDO_READ_FAULT_WORD_CMD;      //故障字
+// 回复信息
+extern const std::vector<uint8_t> SDO_READ_TYPE_CMD_RPS;            //设备类型
+extern const std::vector<uint8_t> SDO_READ_PROTOCOL_CMD_RPS;        //协议
+extern const std::vector<uint8_t> SDO_READ_MANUFACTURER_ID_CMD_RPS; //厂商ID
+extern const std::vector<uint8_t> SDO_READ_STATUS_WORD_CMD_RPS;     //状态字
+extern const std::vector<uint8_t> SDO_READ_FAULT_WORD_CMD_RPS;      //故障字
 
 // SDO写测试
 extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_VALUE_CMD; //开阀

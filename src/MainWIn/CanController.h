@@ -18,6 +18,10 @@ private:
     CanController(QWidget* parent = nullptr);
     ~CanController();
     void InitWindow();
+    
+    void InitData();
+    void InitBasicInfo();
+    
     void CreateTabButtons();
 
 private:

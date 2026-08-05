@@ -20,13 +20,13 @@ echo [INFO] MinGW toolchain path: %MINGW_TOOL%
 echo.
 
 :: 1. Clean old build dir
-if exist "build" (
-    echo [1/4] Cleaning old build directory...
-    rd /s /q build
-)
+@REM if exist "build" (
+@REM     echo [1/4] Cleaning old build directory...
+@REM     rd /s /q build
+@REM )
 :: 2. Create new build dir
-echo [2/4] Creating build directory...
-mkdir build
+@REM echo [2/4] Creating build directory...
+@REM mkdir build
 cd build
 
 :: 3. CMake configure for Debug

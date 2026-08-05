@@ -7,6 +7,8 @@ class BasicInfoBar;
 class SettingInfoTable;
 class FunctionBtnArea;
 
+struct BasicInfo;
+
 enum InputMode {kHand, kAuto};
 
 class SettingPage : public QWidget {
@@ -15,6 +17,7 @@ class SettingPage : public QWidget {
 public:
     SettingPage(QWidget* parent = nullptr);
     ~SettingPage(){}
+    void InitBasicInfo(BasicInfo info);
 
 signals:
     void SendInputMode(InputMode mode);

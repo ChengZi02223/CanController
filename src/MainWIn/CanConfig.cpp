@@ -2,7 +2,6 @@
 #include "QtWidgets.h"
 #include "CanController.h"
 #include "CO_CMD.h"
-#include "CmdManager.h"
 #include "Utils.h"
 #include "can_cmd.h"
 
@@ -63,9 +62,10 @@ void CanConfigWin::setupUI()
     btnRelease = new QPushButton("Release");
     btnRelease->setObjectName("ReleaseBtn");
     btnRelease->setFixedSize(100, 30);
-    btnChange = new QPushButton("Change");
+    btnChange = new QPushButton("J1939");
     btnChange->setObjectName("ChangeBtn");
     btnChange->setFixedSize(100, 30);
+    btnChange->setToolTip("Current mode: J1939. Click to switch to CANOpen.");
     btnController = new QPushButton("Controller");
     btnController->setObjectName("ControllerBtn");
     btnController->setFixedSize(100, 30);
@@ -151,10 +151,6 @@ void CanConfigWin::setupUI()
     connect(btnSend, &QPushButton::clicked, this, &CanConfigWin::onSend);
 }
 
-void CanConfigWin::SendAndReadSDOInfo() {}
-
-void CanConfigWin::InitSDOInfo() {}
-
 void CanConfigWin::onRefreshDevices()
 {
     cbDevice->clear();
@@ -225,12 +221,34 @@ void CanConfigWin::onRelease()
 
 void CanConfigWin::onChangeMode() {
     if (!canReady) return;
-    CanDriver::GetInstance()->ExecCmd(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD, 200);
+    can_frame frame;
+    bool res = false;
+    if(control_mode_ == kMode_J1939) {
+        // 切换成CANOpen模式
+        res = CanDriver::GetInstance()->ExecCmd(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD, frame, 200);
+    } else {
+        // 切换成J1939模式
+        res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, CHANGE_TO_J1939_CMD, frame, 200);
+    }
+    if(!res) {
+        logMessage("Mode change command failed!", true);
+        return;
+    }
+    auto responseId = frame.can_id;
+    auto response = frame.data;
+    if(control_mode_ == kMode_J1939 && responseId == CHANGE_TO_CANOPEN_RPS_COB_ID && memcmp(response, CHANGE_TO_CANOPEN_CMD_RPS.data(), 8) == 0) {
+        control_mode_ = kMode_PCAN;
+        btnChange->setText("CANOpen");
+        btnChange->setToolTip("Current mode: CANOpen. Click to switch to J1939.");
+    } else if (control_mode_ == kMode_PCAN && responseId == SDO_COB_ID && memcmp(response, CHANGE_TO_J1939_CMD_RPS.data(), 8) == 0) {
+        control_mode_ = kMode_J1939;
+        btnChange->setText("J1939");
+        btnChange->setToolTip("Current mode: J1939. Click to switch to CANOpen.");
+    }
 }
 
 void CanConfigWin::onOpenController() {
     this->close();
-    InitSDOInfo();
     CanController::GetInstance()->show();
 }
 

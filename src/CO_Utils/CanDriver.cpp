@@ -143,7 +143,7 @@ bool CanDriver::send(const can_frame& frame)
     TPCANMsg msg;
     msg.ID      = frame.can_id & CAN_EFF_MASK; // 清除标志位，只保留29位ID
     if(frame.can_id & CAN_EFF_FLAG) {
-        msg.MSGTYPE = PCAN_MESSAGE_EXTENDED; // 扩展帧！关键修复
+        msg.MSGTYPE = PCAN_MESSAGE_EXTENDED; // 扩展帧！
     } else {
         msg.MSGTYPE = PCAN_MESSAGE_STANDARD;
     }

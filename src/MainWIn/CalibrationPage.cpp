@@ -1,9 +1,9 @@
 #include "CalibrationPage.h"
 
 #include "BasicInfoBar.h"
-#include "CmdManager.h"
 #include "CanDriver.h"
 #include "can_cmd.h"
+#include "Utils.h"
 
 #include <QDebug>
 #include <iostream>
@@ -36,6 +36,8 @@ void CalibrationPage::InitPage() {
 
     InitPageValue();
 }
+
+void CalibrationPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
 
 void CalibrationPage::InitPageValue() {
 // control area
@@ -126,10 +128,14 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
     std::cout << "Control 1 button clicked, checked:" << checked <<std::endl;
     cycle_btn_->setDisabled(!checked);
     if(!checked) {
+        if(cycle_btn_->isChecked()) {
+            cycle_btn_->setChecked(false);
+            OnCycleBtnClicked(false);
+        }
         CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_CMD, 200);
         return;
     }
-
+    
     bool ok = false;
     // 1. 读取输入框文本，转数字 100 → 1000（你业务规则：百分比 ×10）
     int percent = output_cycle_1_edit_->text().toInt(&ok);
@@ -155,8 +161,6 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
     if(!ret){
         qDebug().noquote() << "开阀指令发送失败";
     }
-    
-
 }
 
 // Implementation for control 2 button click
@@ -638,36 +642,37 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     cfg.rightYLabel = "位移";
     m_wavePlot->setupAxis(cfg);
     m_wavePlot->setMaxPointCount(3000);
-    m_wavePlot->setTimeWindow(20.0);
+    // m_wavePlot->setTimeWindow(20.0);
 
     // 添加曲线：正弦波绑定左Y；锯齿波绑定右Y
     idxSine = m_wavePlot->addCurve("正弦波(流量)", QPen(Qt::blue,2), false);
     idxSaw = m_wavePlot->addCurve("锯齿波(位移)", QPen(Qt::red,2), true);
     connect(&data_timer_, &QTimer::timeout, [&](){
         m_time +=0.05;
-        double sineVal = 10 * sin(2*M_PI*0.5*m_time);
-        double sawVal = fmod(m_time*20,40)-20;
+        // double sineVal = 10 * sin(2*M_PI*0.5*m_time);
+        // double sawVal = fmod(m_time*20,40)-20;
 
         // std::cout << "Appending data point at time:" << m_time << "Sine:" << sineVal << "Saw:" << sawVal;
-        // can_frame frame;
-        // bool ret = CanDriver::GetInstance()->receive(frame, 100);
-        // if(!ret) {
-        //     std::cout << "Failed to read CAN frame!!"<<std::endl;
-        //     return;
-        // }
-        // if(frame.can_id != 0x1C0) {
-        //     std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
-        //     return;
-        // }
-        // if(frame.can_dlc != 8) {
-        //     std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
-        //     return;
-        // }
+        can_frame frame;
+        bool ret = CanDriver::GetInstance()->receive(frame, 100);
+        if(!ret) {
+            std::cout << "Failed to read CAN frame!!"<<std::endl;
+            return;
+        }
+        if(frame.can_id != 0x1C0) {
+            std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
+            return;
+        }
+        if(frame.can_dlc != 8) {
+            std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
+            return;
+        }
 
+        uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
         // uint16_t raw = (static_cast<uint16_t>(frame.data[3]) << 8) | frame.data[2];
-        // double sawVal = static_cast<double>(raw) * 170.0 / 1000.0;
+        double sawVal = static_cast<double>(raw) * 170.0 / 1000.0;
         // m_wavePlot->appendData(idxSine, m_time, sineVal);
-        // std::cout << "Appending data point at time:" << m_time << "Saw:" << sawVal;
+        std::cout << "Appending data point at time:" << m_time << "Saw:" << sawVal;
         m_wavePlot->appendData(idxSaw, m_time, sawVal);
     });
 

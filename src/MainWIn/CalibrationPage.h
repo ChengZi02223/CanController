@@ -8,6 +8,7 @@
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
+struct BasicInfo;
 class BasicInfoBar;
 class CalibrationPage : public QWidget {
     Q_OBJECT    
@@ -15,6 +16,7 @@ class CalibrationPage : public QWidget {
 public:
     CalibrationPage(QWidget* parent = nullptr);
     ~CalibrationPage(){}
+    void InitBasicInfo(BasicInfo info);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

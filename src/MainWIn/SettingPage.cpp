@@ -75,6 +75,8 @@ void SettingPage::InitPage() {
     });
 }
 
+void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
+
 SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
     InitTable();
     setEditTriggers(QAbstractItemView::AllEditTriggers);

@@ -15,6 +15,11 @@ class QSpinBox;
 class QCheckBox;
 QT_END_NAMESPACE
 
+enum ControlMode {
+    kMode_PCAN,
+    kMode_J1939
+};
+
 class CanConfigWin : public QMainWindow
 {
     Q_OBJECT
@@ -39,10 +44,11 @@ private:
 
     void setupUI();
     void logMessage(const QString &msg, bool isError = false);
-    void SendAndReadSDOInfo();
-    void InitSDOInfo();
     void updateCanStatus(bool initialized);
     TPCANHandle GetSelectedChannelHandle() const; 
+
+
+    ControlMode control_mode_ = kMode_J1939;  // 默认使用J1939模式
 
     // UI 组件
     QComboBox   *cbDevice;
