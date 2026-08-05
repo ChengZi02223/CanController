@@ -1,11 +1,19 @@
-@REM # 1. 进入项目源码根目录
-@REM cd /d D:\Desktop\yc\PartTimeJobs\Windows\CanController\CanController
+@echo off
+@REM 进入项目源码根目录
+cd /d D:\Desktop\yc\PartTimeJobs\Windows\CanController
 
-@REM # 2. 删除旧Debug构建目录（必须清，否则类型不变）
-rmdir /s /q ..\build
+@REM 删除旧构建目录
+if exist .\build (
+    rmdir /s /q .\build
+)
+if exist .\build (
+    echo ERROR: build目录删除失败！请关闭占用该目录的程序/资源管理器！
+    pause
+    exit /b 1
+)
 
-@REM # 3. 重新cmake，指定Release构建类型
-cmake -B ..\build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+@REM cmake Release
+cmake -B .\build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 
-@REM # 4. 编译Release程序
-cmake --build ..\build
+@REM 编译
+cmake --build .\build

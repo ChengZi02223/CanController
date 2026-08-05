@@ -3,6 +3,7 @@
 
 #include "QtWidgets.h"
 #include <map>
+#include "QWavePlot.h"
 
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
@@ -33,9 +34,9 @@ private:
     QWidget* CreateWaveformArea();
 
 private slots:
-    void OnControl1BtnClicked();
+    void OnControl1BtnClicked(bool checked);
     void OnControl2BtnClicked();
-    void OnCycleBtnClicked();
+    void OnCycleBtnClicked(bool checked);
 
     void OnPIDStepBtnClicked();
     void OnPIDRampBtnClicked();
@@ -56,6 +57,8 @@ private:
     QLineEdit* cycle_count_edit_ = nullptr;
     QLineEdit* neutral_time_edit_ = nullptr;
     QLineEdit* work_time_edit_ = nullptr;
+    QPushButton* cycle_btn_ = nullptr;
+
     QGroupBox* pid_group_ = nullptr;
     QLineEdit* p_edit_ = nullptr;
     QLineEdit* i_edit_ = nullptr;
@@ -75,6 +78,15 @@ private:
     std::vector<QPushButton*> calib_btns_;
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
+
+    QTimer data_timer_;
+    QWavePlotWidget* m_wavePlot = nullptr;
+    int idxSine;
+    int idxSaw;
+    double m_time = 0.0;
+    // WavePlotTool* m_waveTool{nullptr};
+    // QCPGraph* m_graphSine{nullptr};    // 正弦波 绑定左Y（流量）
+    // QCPGraph* m_graphSaw{nullptr};     // 锯齿波 绑定右Y（位移）
 };
 
 

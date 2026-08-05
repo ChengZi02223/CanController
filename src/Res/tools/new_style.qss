@@ -36,6 +36,11 @@ QPushButton:pressed {
     border-color: #222222;
 }
 
+QPushButton:checked {
+    background-color: #2d7a2d;
+    border-color: #1a5c1a;
+}
+
 QPushButton:disabled {
     background-color: #3a3a3a;
     color: #8a8a8a;
@@ -59,6 +64,10 @@ QPushButton:disabled {
     background-color: #404040;
     border-color: #2a2a2a;
 }
+#RefreshBtn:checked {
+    background-color: #3a7a7a;
+    border-color: #2a5a5a;
+}
 #RefreshBtn:disabled {
     background-color: #4a4a4a;
     color: #777777;
@@ -77,6 +86,10 @@ QPushButton:disabled {
 #InitBtn:pressed {
     background-color: #1e8449;
     border-color: #196f3d;
+}
+#InitBtn:checked {
+    background-color: #1a8a4a;
+    border-color: #0f6a35;
 }
 #InitBtn:disabled {
     background-color: #3d6b4a;
@@ -98,6 +111,10 @@ QPushButton:disabled {
     background-color: #b03a2e;
     border-color: #922b21;
 }
+#ReleaseBtn:checked {
+    background-color: #a03030;
+    border-color: #802020;
+}
 #ReleaseBtn:disabled {
     background-color: #6b3d3a;
     color: #b0908a;
@@ -117,6 +134,10 @@ QPushButton:disabled {
 #ChangeBtn:pressed {
     background-color: #b9770e;
     border-color: #9a670d;
+}
+#ChangeBtn:checked {
+    background-color: #b07010;
+    border-color: #905010;
 }
 #ChangeBtn:disabled {
     background-color: #6a5530;
@@ -138,6 +159,10 @@ QPushButton:disabled {
     background-color: #1f618d;
     border-color: #1a5276;
 }
+#ControllerBtn:checked {
+    background-color: #2060a0;
+    border-color: #184880;
+}
 #ControllerBtn:disabled {
     background-color: #3a5a7a;
     color: #90b0d0;
@@ -157,6 +182,10 @@ QPushButton:disabled {
 #SendBtn:pressed {
     background-color: #6c3483;
     border-color: #512e5f;
+}
+#SendBtn:checked {
+    background-color: #704090;
+    border-color: #503070;
 }
 #SendBtn:disabled {
     background-color: #5a4a6a;
@@ -212,6 +241,10 @@ QPushButton#StartBtn:hover {
 QPushButton#StartBtn:pressed {
     background-color: #15803d;
 }
+QPushButton#StartBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #15803d, stop:1 #0f6a30);
+}
 
 /* ---------- 确认按钮（琥珀橙） ---------- */
 QPushButton#EnterBtn {
@@ -234,6 +267,10 @@ QPushButton#EnterBtn:hover {
 QPushButton#EnterBtn:pressed {
     background-color: #b45309;
 }
+QPushButton#EnterBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #b45309, stop:1 #9a4008);
+}
 
 /* ---------- 功能按钮（蓝色） ---------- */
 QPushButton#FuncBtn {
@@ -255,6 +292,10 @@ QPushButton#FuncBtn:hover {
 QPushButton#FuncBtn:pressed {
     background-color: #1d4ed8;
 }
+QPushButton#FuncBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #1d4ed8, stop:1 #1a3fb0);
+}
 
 /* ---------- 控制按钮（紫色） ---------- */
 QPushButton#ControlBtn {
@@ -275,6 +316,10 @@ QPushButton#ControlBtn:hover {
 }
 QPushButton#ControlBtn:pressed {
     background-color: #6d28d9;
+}
+QPushButton#ControlBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                      stop:0 #6d28d9, stop:1 #5a1fb0);
 }
 
 /* ---------- 循环/标定按钮（橙色） ---------- */
@@ -301,6 +346,11 @@ QPushButton#CycleBtn:pressed,
 QPushButton#CalibBtn:pressed {
     background-color: #c2410c;
 }
+QPushButton#CycleBtn:checked,
+QPushButton#CalibBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #c2410c, stop:1 #a0350a);
+}
 
 /* ---------- 响应按钮（粉紫） ---------- */
 QPushButton#ResponceBtn {
@@ -321,6 +371,10 @@ QPushButton#ResponceBtn:hover {
 }
 QPushButton#ResponceBtn:pressed {
     background-color: #86198f;
+}
+QPushButton#ResponceBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                      stop:0 #86198f, stop:1 #6d107a);
 }
 
 /* ---------- 状态按钮（玫瑰红） ---------- */
@@ -343,6 +397,10 @@ QPushButton#StateBtn:hover {
 QPushButton#StateBtn:pressed {
     background-color: #be123c;
 }
+QPushButton#StateBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #be123c, stop:1 #9a0a30);
+}
 
 /* ---------- 波形按钮（天蓝） ---------- */
 QPushButton#WaveBtn {
@@ -363,6 +421,10 @@ QPushButton#WaveBtn:hover {
 }
 QPushButton#WaveBtn:pressed {
     background-color: #0e7490;
+}
+QPushButton#WaveBtn:checked {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                      stop:0 #0e7490, stop:1 #0a5a70);
 }
 
 /* ---------- 参数配置表格（白底+蓝色表头） ---------- */

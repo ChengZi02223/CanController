@@ -52,21 +52,14 @@ private:
     QPushButton *btnRelease;
     QPushButton *btnChange;
     QPushButton *btnController;
-    QTextEdit   *teLog;          // 用于显示状态信息
+    QTextEdit   *teLog;
 
     // Test 页面组件
     QLineEdit   *leSendId;
     QComboBox   *cbSendDlc;
-    QLineEdit   *leSendData0;
-    QLineEdit   *leSendData1;
-    QLineEdit   *leSendData2;
-    QLineEdit   *leSendData3;
-    QLineEdit   *leSendData4;
-    QLineEdit   *leSendData5;
-    QLineEdit   *leSendData6;
-    QLineEdit   *leSendData7;
+    QLineEdit   *leSendData;      // 合并后的数据输入框
     QPushButton *btnSend;
-    QTableWidget *twReceive;     // 显示接收的帧
+    QTableWidget *twReceive;
 
     QTimer      *receiveTimer;
     bool        canReady;

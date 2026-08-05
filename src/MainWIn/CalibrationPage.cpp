@@ -5,6 +5,9 @@
 #include "CanDriver.h"
 #include "can_cmd.h"
 
+#include <QDebug>
+#include <iostream>
+
 
 CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
@@ -81,14 +84,17 @@ QWidget* CalibrationPage::CreateControlArea() {
     control_1_btn->setFixedHeight(30);
     control_1_btn->setMinimumWidth(150);
     control_1_btn->setObjectName("ControlBtn");
+    control_1_btn->setCheckable(true);
     auto control_2_btn = new QPushButton("2 侧开环控制");
     control_2_btn->setFixedHeight(30);
     control_2_btn->setMinimumWidth(150);
     control_2_btn->setObjectName("ControlBtn");
-    auto cycle_btn = new QPushButton("开环循环动作");
-    cycle_btn->setObjectName("CycleBtn");
-    cycle_btn->setMinimumWidth(300);
-    cycle_btn->setFixedHeight(30);
+    cycle_btn_ = new QPushButton("开环循环动作");
+    cycle_btn_->setObjectName("CycleBtn");
+    cycle_btn_->setMinimumWidth(300);
+    cycle_btn_->setFixedHeight(30);
+    cycle_btn_->setCheckable(true);
+    cycle_btn_->setDisabled(true);
 
     auto grid_layout = new QGridLayout();
 
@@ -104,24 +110,31 @@ QWidget* CalibrationPage::CreateControlArea() {
     grid_layout->addWidget(work_time_edit_, 1, 4, Qt::AlignCenter);
     grid_layout->addWidget(control_1_btn, 2, 0, Qt::AlignCenter);
     grid_layout->addWidget(control_2_btn, 2, 1, Qt::AlignCenter);
-    grid_layout->addWidget(cycle_btn, 2, 2, 1, 3, Qt::AlignCenter);    
+    grid_layout->addWidget(cycle_btn_, 2, 2, 1, 3, Qt::AlignCenter);    
 
     main_layout->addLayout(grid_layout);
 
     connect(control_1_btn, &QPushButton::clicked, this, &CalibrationPage::OnControl1BtnClicked);
     connect(control_2_btn, &QPushButton::clicked, this, &CalibrationPage::OnControl2BtnClicked);
-    connect(cycle_btn, &QPushButton::clicked, this, &CalibrationPage::OnCycleBtnClicked);
+    connect(cycle_btn_, &QPushButton::clicked, this, &CalibrationPage::OnCycleBtnClicked);
 
     return control_group_;
 }
 
 // Implementation for control 1 button click
-void CalibrationPage::OnControl1BtnClicked() {
+void CalibrationPage::OnControl1BtnClicked(bool checked) {
+    std::cout << "Control 1 button clicked, checked:" << checked <<std::endl;
+    cycle_btn_->setDisabled(!checked);
+    if(!checked) {
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_CMD, 200);
+        return;
+    }
+
     bool ok = false;
     // 1. 读取输入框文本，转数字 100 → 1000（你业务规则：百分比 ×10）
     int percent = output_cycle_1_edit_->text().toInt(&ok);
     if(!ok) {
-        qDebug() << "输入数值非法";
+        std::cout << "输入数值非法"<<std::endl;
         return;
     }
     uint16_t value = static_cast<uint16_t>(percent * 10); // 100 → 1000
@@ -136,12 +149,14 @@ void CalibrationPage::OnControl1BtnClicked() {
     // 此时 cmd = {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
 
     // for (auto byte : cmd) {
-    //     qDebug() << "byte:" << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper();
+    //     std::cout << "byte:" << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper();
     // }
     bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
     if(!ret){
         qDebug().noquote() << "开阀指令发送失败";
     }
+    
+
 }
 
 // Implementation for control 2 button click
@@ -150,8 +165,16 @@ void CalibrationPage::OnControl2BtnClicked() {
 }
 
 // Implementation for cycle button click
-void CalibrationPage::OnCycleBtnClicked() {
+void CalibrationPage::OnCycleBtnClicked(bool checked) {
+    std::cout << "cycle clicked, checked:" << checked<<std::endl;
+    if(!checked) {
+        CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
+        data_timer_.stop();
+        return;
+    }
 
+    CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
+    data_timer_.start(100);
 }
 
 // Implementation for creating PID setting area
@@ -229,7 +252,7 @@ void CalibrationPage::OnPIDRampBtnClicked() {
 }
 
 void CalibrationPage::OnPIDMotionBtnClicked() {
-    qDebug()<<"OnPIDMotionBtnClicked";
+    std::cout<<"OnPIDMotionBtnClicked"<<std::endl;
 }
 
 void CalibrationPage::OnPIDSaveBtnClicked() {
@@ -566,19 +589,90 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     sub_layout->addWidget(bottom_agix_combo);
     sub_layout->addStretch();
 
-    // auto waveform_display = new QWidget(); // Placeholder for actual waveform display widget
-    QPerfCurve *waveform_display = new QPerfCurve();
+    #ifdef ENABLE_WAVEFORM_DISPLAY
+        std::cout << "Creating waveform display widget...";
+        // auto waveform_display = new QWidget(); // Placeholder for actual waveform display widget
+        QPerfCurve *waveform_display = new QPerfCurve();
+        // 初始化曲线
+        QVector<double> time = {0};
+        QVector<double> displacement = {0};
+        QVector<double> flow = {0};
 
-    QVector<double> time = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    QVector<double> displacement = {0, 10, 30, 60, 100, 150, 210, 280, 360, 450, 550};
-    QVector<double> flow = {0, 20, 45, 70, 100, 130, 160, 180, 190, 195, 200};
+        waveform_display->setTimeData(time);
+        waveform_display->addCurve("Displacement", displacement, AxisType::Left);
+        waveform_display->addCurve("Flow", flow, AxisType::Right);
 
-    waveform_display->setTimeData(time);
-    waveform_display->addCurve("Displacement", displacement, AxisType::Left);
-    waveform_display->addCurve("Flow", flow, AxisType::Right);
+        // 设置最大数据点数（保留最近100个点）
+        waveform_display->setMaxDataPoints(100);
+        
+        // 启用自动刷新（每50ms刷新一次）
+        waveform_display->setAutoRefreshInterval(50);
+        waveform_display->setAutoRefreshEnabled(true);
+
+        waveform_display->resize(800, 500);
+        waveform_display->show();       
+        // 模拟动态数据生成
+        // QTimer dataTimer;
+        double t = 0;
+        QObject::connect(&data_timer_, &QTimer::timeout, [&]() {
+            t += 0.1;
+            double disp = 10 * sin(t) + 5 * sin(0.5 * t);
+            double flow = 8 * cos(t * 0.7) + 3 * sin(t * 1.2);
+            
+            QMap<QString, double> dataPoint;
+            dataPoint["Displacement"] = disp;
+            dataPoint["Flow"] = flow;
+            std::cout << "Appending data point at time:" << t << "Displacement:" << disp << "Flow:" << flow;
+            
+            waveform_display->appendDataPoint(t, dataPoint);
+        });
+        // data_timer_.start(100);
+#endif
+
+    // MainWindow构造
+    m_wavePlot = new QWavePlotWidget(this);
+
+    QWavePlotWidget::AxisConfig cfg;
+    cfg.xLabel = "时间(s)";
+    cfg.leftYLabel = "流量";
+    cfg.rightYLabel = "位移";
+    m_wavePlot->setupAxis(cfg);
+    m_wavePlot->setMaxPointCount(3000);
+    m_wavePlot->setTimeWindow(20.0);
+
+    // 添加曲线：正弦波绑定左Y；锯齿波绑定右Y
+    idxSine = m_wavePlot->addCurve("正弦波(流量)", QPen(Qt::blue,2), false);
+    idxSaw = m_wavePlot->addCurve("锯齿波(位移)", QPen(Qt::red,2), true);
+    connect(&data_timer_, &QTimer::timeout, [&](){
+        m_time +=0.05;
+        double sineVal = 10 * sin(2*M_PI*0.5*m_time);
+        double sawVal = fmod(m_time*20,40)-20;
+
+        // std::cout << "Appending data point at time:" << m_time << "Sine:" << sineVal << "Saw:" << sawVal;
+        // can_frame frame;
+        // bool ret = CanDriver::GetInstance()->receive(frame, 100);
+        // if(!ret) {
+        //     std::cout << "Failed to read CAN frame!!"<<std::endl;
+        //     return;
+        // }
+        // if(frame.can_id != 0x1C0) {
+        //     std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
+        //     return;
+        // }
+        // if(frame.can_dlc != 8) {
+        //     std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
+        //     return;
+        // }
+
+        // uint16_t raw = (static_cast<uint16_t>(frame.data[3]) << 8) | frame.data[2];
+        // double sawVal = static_cast<double>(raw) * 170.0 / 1000.0;
+        // m_wavePlot->appendData(idxSine, m_time, sineVal);
+        // std::cout << "Appending data point at time:" << m_time << "Saw:" << sawVal;
+        m_wavePlot->appendData(idxSaw, m_time, sawVal);
+    });
 
     main_layout->addLayout(sub_layout);
-    main_layout->addWidget(waveform_display);
+    main_layout->addWidget(m_wavePlot);   
 
 
     return waveform_group_;

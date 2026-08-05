@@ -16,6 +16,9 @@
 #include <QCheckBox>
 #include <QPushButton>
 #include <QLabel>
+#include <QTimer>
+#include <QMutex>
+#include <QMutexLocker>
 
 enum class AxisType { Left, Right };
 
@@ -50,6 +53,15 @@ public:
     void setCurveAxis(const QString &name, AxisType axis);
     void clearCurves();
 
+    // ===== 动态数据追加 API =====
+    void appendDataPoint(double time, const QMap<QString, double> &dataPoints);
+    void appendDataPoints(const QVector<double> &time, const QMap<QString, QVector<double>> &dataPoints);
+    void setMaxDataPoints(int maxPoints);
+    int getDataPointCount() const { return m_timeData.size(); }
+    void clearAllData();
+    void setAutoRefreshInterval(int intervalMs);
+    void setAutoRefreshEnabled(bool enabled);
+
     // ----- 供 PlotCanvas 使用的数据访问 -----
     QVector<double> getTimeData() const { return m_timeData; }
     QMap<QString, QVector<double>> getCurvesData() const { return m_curvesData; }
@@ -57,14 +69,21 @@ public:
     QMap<QString, QColor> getCurvesColor() const { return m_curvesColor; }
     QMap<QString, AxisType> getCurvesAxis() const { return m_curvesAxis; }
 
+signals:
+    void dataAppended(int newPointCount);
+    void maxDataPointsReached();
+
 private slots:
     void onCurveVisibilityChanged(const QString &name, bool visible);
     void onCurveAxisSwitched(const QString &name);
     void onCurveContextMenu(const QPoint &pos, const QString &name);
+    void onAutoRefresh();
 
 private:
-    void rebuildControlPanel();      // 根据曲线列表重建下方的控制面板
-    void refreshPlot();              // 请求重绘画布
+    void rebuildControlPanel();
+    void refreshPlot();
+    void trimDataIfNeeded();
+    bool validateData() const;
 
     // 数据
     QVector<double> m_timeData;
@@ -72,51 +91,29 @@ private:
     QMap<QString, bool> m_curvesVisible;
     QMap<QString, QColor> m_curvesColor;
     QMap<QString, AxisType> m_curvesAxis;
+    
+    // 动态数据相关
+    int m_maxDataPoints;
+    QTimer *m_autoRefreshTimer;
+    bool m_autoRefreshEnabled;
+    mutable QMutex m_dataMutex;  // 改为 mutable
 
     // UI 组件
     QVBoxLayout *m_mainLayout;
     PlotCanvas *m_plotCanvas;
     QWidget *m_controlPanel;
-    QHBoxLayout *m_controlLayout;    // 水平布局，可换行（使用 QHBoxLayout 并允许换行需要配合 QWidget 的 sizePolicy）
+    QHBoxLayout *m_controlLayout;
 
-    // 曲线控件映射：曲线名 -> 控件集合（复选框 + 轴按钮）
     struct CurveControl {
-        QWidget *container;      // 整个控件组的外框容器
+        QWidget *container;
         QCheckBox *checkBox;
         QPushButton *axisButton;
         QLabel *colorLabel;
     };
     QMap<QString, CurveControl> m_curveControls;
 
-    // 自动颜色分配
     QList<QColor> m_colorPalette;
     int m_nextColorIndex;
 };
-
-// // =========================== 使用示例 ===========================
-// int main(int argc, char *argv[])
-// {
-//     QApplication app(argc, argv);
-
-//     QPerfCurve curveWidget;
-//     curveWidget.setWindowTitle("QPerfCurve - 曲线绘制与选择");
-
-//     // 准备数据（时间从0到10秒）
-//     QVector<double> time = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-//     QVector<double> displacement = {0, 10, 30, 60, 100, 150, 210, 280, 360, 450, 550};
-//     QVector<double> flow = {0, 20, 45, 70, 100, 130, 160, 180, 190, 195, 200};
-
-//     curveWidget.setTimeData(time);
-//     curveWidget.addCurve("Displacement", displacement);  // 自动分配颜色
-//     curveWidget.addCurve("Flow", flow);                  // 自动分配第二种颜色
-
-//     // 可以手动指定颜色
-//     // curveWidget.addCurve("Flow", flow, QColor(0, 150, 0));
-
-//     curveWidget.resize(800, 500);
-//     curveWidget.show();
-
-//     return app.exec();
-// }
 
 #endif // _QPERF_CRUVE_H_
