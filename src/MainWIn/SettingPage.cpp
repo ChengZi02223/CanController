@@ -1,5 +1,6 @@
 #include "SettingPage.h"
 #include "BasicInfoBar.h"
+#include "QFileOperator.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -14,34 +15,7 @@
 #define COLUMN_COUNT 8
 
 static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限", "操作"});
-static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
-
-// const std::vector<std::pair<uint32_t, QString>> info_table_v_head = {
-//     {0x1000,  QStringLiteral("Device Type")},
-//     {0x1001,  QStringLiteral("Error Register")},
-//     {0x100E,  QStringLiteral("Protocol Switch")},
-//     {0x1010,  QStringLiteral("Store Parameters")},
-//     {0x1011,  QStringLiteral("Restore Defaults")},
-//     {0x1017,  QStringLiteral("Producer Heartbeat Time")},
-//     {0x1018,  QStringLiteral("Identity")},
-//     {0x6040,  QStringLiteral("Control Word")},
-//     {0x6041,  QStringLiteral("Status Word")},
-//     {0x6042,  QStringLiteral("Operation Mode")},
-//     {0x6043,  QStringLiteral("Control Mode")},
-//     {0x604E,  QStringLiteral("Fault Code")},
-//     {0x6110,  QStringLiteral("Sensor Value")},
-//     {0x6300,  QStringLiteral("Position Setpoint")},
-//     {0x6301,  QStringLiteral("Position Feedback")},
-//     {0x6310,  QStringLiteral("Final Demand")},
-//     {0x6350,  QStringLiteral("Control Deviation")},
-//     {0x6361,  QStringLiteral("Dither Amplitude")},
-//     {0x6362,  QStringLiteral("Dither Frequency")},
-//     {0x6380,  QStringLiteral("Pressure Setpoint")},
-//     {0x6381,  QStringLiteral("Pressure Actual")},
-//     {0x2001,  QStringLiteral("PWM Frequency")},
-//     {0x2201,  QStringLiteral("Overcurrent Threshold")},
-//     {0x2202,  QStringLiteral("Overtemperature Threshold")}
-// };
+// static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
 
 SettingPage::SettingPage(QWidget* parent)
     : QWidget(parent) {
@@ -65,6 +39,11 @@ void SettingPage::InitPage() {
     main_layout_->addWidget(basic_info_bar_);
     main_layout_->addLayout(sub_layout);
 
+
+    
+    connect(function_btn_area_, &FunctionBtnArea::SendLoadSettings, setting_info_table_, &SettingInfoTable::OnLoadSettings);
+    connect(function_btn_area_, &FunctionBtnArea::SendSaveSettings, setting_info_table_, &SettingInfoTable::OnSaveSettings);
+
     connect(function_btn_area_, &FunctionBtnArea::SendInputMode, setting_info_table_, &SettingInfoTable::OnChangeInputMode);
     connect(function_btn_area_, &FunctionBtnArea::SendClearModifyValue, setting_info_table_, &SettingInfoTable::OnClearModifyValues);
     connect(function_btn_area_, &FunctionBtnArea::SendConfirmValues, setting_info_table_, &SettingInfoTable::OnConfirmAllValues);
@@ -78,7 +57,6 @@ void SettingPage::InitPage() {
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
 
 SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
-    InitTable();
     setEditTriggers(QAbstractItemView::AllEditTriggers);
     connect(this, &QTableWidget::cellChanged, [this](int row, int col){
         if(col != INFO_TABLE_MODIFY_COLUMN) {
@@ -91,52 +69,52 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
         }
     });
     setObjectName("SettingInfoTable");
-}
-
-void SettingInfoTable::InitTable() {
-    setRowCount(ROW_COUNT);
     setColumnCount(COLUMN_COUNT);
     setHorizontalHeaderLabels(info_table_h_head);
     verticalHeader()->setVisible(false);
+}
 
-    for (int i = 0; i < ROW_COUNT; ++i) {
-        //参考名称
-        auto param_item = new QTableWidgetItem(info_table_v_head.at(i));
-        param_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
-        param_item->setTextAlignment(Qt::AlignCenter);
-        setItem(i, INFO_TABLE_PARAM_COLUMN, param_item);
+void SettingInfoTable::InsterRow(ParaItem item) {
+    bool ok;
+    int serialNum = item.serialNum.toInt(&ok);
+    if(!ok || serialNum < 0) return;
+    int row = serialNum - 1;
+    insertRow(row);
 
-        // 对象字典
-        int objDict = 0x2001 + i;
-        auto obj_item = new QTableWidgetItem(QString("0x%1").arg(objDict, 4, 16, QChar('0')).toUpper());
-        obj_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
-        obj_item->setTextAlignment(Qt::AlignCenter);
-        setItem(i, INFO_TABLE_OBJ_COLUMN, obj_item);
-        // 索引
-        int indexVal = 0x01 + i; 
-        auto idx_item = new QTableWidgetItem(QString("0x%1").arg(indexVal, 2, 16, QChar('0')).toUpper());
-        idx_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
-        idx_item->setTextAlignment(Qt::AlignCenter);
-        setItem(i, INFO_TABLE_IDX_COLUMN, idx_item);
+    auto param_item = new QTableWidgetItem(item.objDictName);
+    param_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
+    param_item->setTextAlignment(Qt::AlignCenter);
+    param_item->setToolTip(item.objDictName);
+    setItem(row, INFO_TABLE_PARAM_COLUMN, param_item);
 
-        for(int j = 3; j < COLUMN_COUNT; ++j) {
-            auto value_item = new QTableWidgetItem();
-            value_item->setTextAlignment(Qt::AlignCenter);
-            if(j == INFO_TABLE_MODIFY_COLUMN) {
-                value_item->setFlags(value_item->flags() | Qt::ItemIsEditable);
-            } else {
-                value_item->setFlags(value_item->flags() & ~Qt::ItemIsEditable);
-            } 
-            setItem(i, j, value_item);
-        }
-
-        auto enter_btn = new QPushButton("确认", this);
-        enter_btn->setObjectName("EnterBtn");
-        setCellWidget(i, COLUMN_COUNT - 1, enter_btn);
-        connect(enter_btn, &QPushButton::clicked, this, [this, i](){
-            OnEnterBtnClicked(i);
-        });
-    }
+    // 对象字典
+    auto obj_item = new QTableWidgetItem(item.indexNum);
+    obj_item->setFlags(obj_item->flags() & ~Qt::ItemIsEditable);
+    obj_item->setTextAlignment(Qt::AlignCenter);
+    setItem(row, INFO_TABLE_OBJ_COLUMN, obj_item);
+    // 子索引
+    auto idx_item = new QTableWidgetItem(item.subIndex);
+    idx_item->setFlags(idx_item->flags() & ~Qt::ItemIsEditable);
+    idx_item->setTextAlignment(Qt::AlignCenter);
+    setItem(row, INFO_TABLE_IDX_COLUMN, idx_item);
+    // 保存值
+    auto save_item = new QTableWidgetItem();
+    save_item->setFlags(save_item->flags() & ~Qt::ItemIsEditable);
+    save_item->setTextAlignment(Qt::AlignCenter);
+    setItem(row, INFO_TABLE_SAVE_COLUMN, save_item);    
+    // 参数值
+    auto p_item = new QTableWidgetItem(item.paramValue);
+    p_item->setFlags(p_item->flags() | Qt::ItemIsEditable);
+    p_item->setTextAlignment(Qt::AlignCenter);
+    setItem(row, INFO_TABLE_MODIFY_COLUMN, p_item);
+    // 确定标定按钮
+    auto enter_btn = new QPushButton("确认", this);
+    enter_btn->setObjectName("EnterBtn");
+    setCellWidget(row, COLUMN_COUNT - 1, enter_btn);
+    connect(enter_btn, &QPushButton::clicked, this, [this, row](){
+        OnEnterBtnClicked(row);
+    });
+    
 }
 
 void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
@@ -149,10 +127,35 @@ void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
     }
 }
 
+void SettingInfoTable::OnLoadSettings() {
+    auto file_op = QFileOperator::GetInstance();
+    QList<ParaItem> tableDataList = file_op->getTableItems();
+    if(tableDataList.empty()){
+        return;
+    }
+    for(auto item : tableDataList) {
+        InsterRow(item);
+    }
+
+    for(int i = 0; i < rowCount(); ++i) {
+        for(int j = 5; j < COLUMN_COUNT; ++j) {
+            auto value_item = new QTableWidgetItem();
+            value_item->setTextAlignment(Qt::AlignCenter);
+            value_item->setFlags(value_item->flags() & ~Qt::ItemIsEditable);
+            setItem(i, j, value_item);
+        }
+    }
+}
+
+void SettingInfoTable::OnSaveSettings() {
+    // todo
+    qDebug() << "OnSaveSettings";
+}
+
 void SettingInfoTable::OnChangeInputMode(InputMode mode) {
     bool editable = (mode == kHand);
 
-    for(int i = 0; i < ROW_COUNT; ++i) {
+    for(int i = 0; i < rowCount(); ++i) {
         auto modify_item = item(i, INFO_TABLE_MODIFY_COLUMN);
         if(editable) {
             modify_item->setFlags(modify_item->flags() | Qt::ItemIsEditable);
@@ -163,20 +166,20 @@ void SettingInfoTable::OnChangeInputMode(InputMode mode) {
 }
 
 void SettingInfoTable::OnClearModifyValues() {
-    for(int i = 0; i < ROW_COUNT; ++i) {
+    for(int i = 0; i < rowCount(); ++i) {
         auto modify_item = item(i, INFO_TABLE_MODIFY_COLUMN);
         modify_item->setText("");
     }
 }
 
 void SettingInfoTable::OnConfirmAllValues() {
-    for(int i = 0; i < ROW_COUNT; ++i) {
+    for(int i = 0; i < rowCount(); ++i) {
         OnEnterBtnClicked(i);
     }
 }
 
 void SettingInfoTable::OnEnterBtnClicked(int row) {
-    if(row < 0 || row > 11) {
+    if(row < 0 || row > rowCount()) {
         return;
     }
     auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
@@ -250,12 +253,18 @@ void FunctionBtnArea::ConnectSignles() {
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
     QString file_path = QFileDialog::getOpenFileName(nullptr, "Open File", "", "(*)");
+    auto file_op = QFileOperator::GetInstance();
+    
     qDebug() << "Open File:" << file_path;
+    if(file_op->openFile(file_path)) {
+        emit SendLoadSettings();
+    }
 }
 
 void FunctionBtnArea::OnSaveSettingBtnClicked() {
     QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
     qDebug() << "Save File:" << save_path;
+    emit SendSaveSettings();
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {

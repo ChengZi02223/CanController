@@ -31,6 +31,8 @@ endif()
 # ========================================
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
+set(QXLSX_DIR ${PROJECT_SOURCE_DIR}/third_party/QXlsx)
+add_subdirectory(${QXLSX_DIR} QXlsx)
 
 set(PCAN_DIR  ${PROJECT_SOURCE_DIR}/third_party/PCANBasic)
 set(PCAN_INCLUDE_DIR ${PCAN_DIR}/include)
@@ -60,10 +62,10 @@ file(GLOB QRC_FILE
 add_executable(${PROJECT_NAME} ${SRCS} ${HDRS} ${QRC_FILE})
 
 # ========== 新增：Release隐藏控制台窗口 ==========
-if(WIN32 AND MINGW)
-    set_target_properties(CanController PROPERTIES WIN32_EXECUTABLE TRUE)
-    target_link_options(CanController PRIVATE -mwindows)
-endif()
+# if(WIN32 AND MINGW)
+#     set_target_properties(CanController PROPERTIES WIN32_EXECUTABLE TRUE)
+#     target_link_options(CanController PRIVATE -mwindows)
+# endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}
@@ -74,12 +76,23 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src/Manager
     ${PROJECT_SOURCE_DIR}/src/CAN_CMD
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Widgets PCANBasic::PCANBasic)
+target_link_libraries(${PROJECT_NAME} PRIVATE 
+    Qt5::Widgets 
+    PCANBasic::PCANBasic
+    QXlsx::QXlsx
+)
 
 # 复制PCAN dll
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "D:/Desktop/yc/PartTimeJobs/Windows/PCAN-Basic/x64/PCANBasic.dll"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+)
+
+# 复制QXlsx运行库（MinGW编译会生成QXlsx.dll）
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:QXlsx>"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
 )
 

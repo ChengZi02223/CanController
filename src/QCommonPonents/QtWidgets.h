@@ -35,5 +35,6 @@
 #include "QInfoEdit.h"
 #include "QRangeSlider.h"
 #include "QPerfCurve.h"
+#include "QFileOperator.h"
 
 #endif // QT_WIDGETS_H

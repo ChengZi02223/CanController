@@ -236,11 +236,11 @@ void CanConfigWin::onChangeMode() {
     }
     auto responseId = frame.can_id;
     auto response = frame.data;
-    if(control_mode_ == kMode_J1939 && responseId == CHANGE_TO_CANOPEN_RPS_COB_ID && memcmp(response, CHANGE_TO_CANOPEN_CMD_RPS.data(), 8) == 0) {
+    if(control_mode_ == kMode_J1939) {
         control_mode_ = kMode_PCAN;
         btnChange->setText("CANOpen");
         btnChange->setToolTip("Current mode: CANOpen. Click to switch to J1939.");
-    } else if (control_mode_ == kMode_PCAN && responseId == SDO_COB_ID && memcmp(response, CHANGE_TO_J1939_CMD_RPS.data(), 8) == 0) {
+    } else if (control_mode_ == kMode_PCAN) {
         control_mode_ = kMode_J1939;
         btnChange->setText("J1939");
         btnChange->setToolTip("Current mode: J1939. Click to switch to CANOpen.");

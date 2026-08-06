@@ -6,11 +6,37 @@
 #include <QString>
 #include <QChar>
 
+// 表格行对应结构体，匹配Excel/CSV表头
+struct ParaItem {
+    // 11列表头一一对应
+    QString serialNum;      // 序号
+    QString saeParamId;     // SAE1939参数ID
+    QString objDictName;    // 对象字典名称
+    QString indexNum;       // 索引号
+    QString subIndex;       // 子索引
+    QString dataType;       // 数据类型
+    QString paramValue;     // 参数值
+    QString rwDesc;         // 读写说明
+    QString funcDesc;       // 功能说明
+    QString objType;        // 参数对象类型
+    QString remark;         // 备注
+
+    // 构造初始化空值
+    ParaItem() = default;
+    // 从一行QStringList填充结构体
+    bool fromRow(const QStringList& row);
+};
+
 class QFileOperator
 {
 public:
-    QFileOperator();
-    ~QFileOperator();
+    static QFileOperator* GetInstance() {
+        static QFileOperator *instance = nullptr;
+        if(instance == nullptr) {
+            instance = new QFileOperator();
+        }
+        return instance;
+    }
 
     // 根据文件扩展名自动调用对应的打开/保存方法
     bool openFile(const QString &filePath);
@@ -24,6 +50,11 @@ public:
     bool openExcel(const QString &filePath);
     bool saveExcel(const QString &filePath);
 
+    // 获取全部表格数据转为结构体数组
+    QList<ParaItem> getTableItems() const;
+    // 用结构体数组覆盖原有表格数据
+    void setTableItems(const QList<ParaItem>& itemList);
+
     // 数据访问
     QList<QStringList> getData() const;
     void setData(const QList<QStringList> &data);
@@ -33,6 +64,10 @@ public:
     void clearData();
     int rowCount() const;
     int columnCount() const;
+
+private:
+    QFileOperator(){};
+    ~QFileOperator(){};
 
 private:
     QList<QStringList> m_data;  // 存储表格数据，每行为QStringList

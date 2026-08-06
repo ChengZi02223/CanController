@@ -43,6 +43,8 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 public slots:
+    void OnLoadSettings();
+    void OnSaveSettings();
     void OnChangeInputMode(InputMode mode);
     void OnClearModifyValues();
     void OnConfirmAllValues();
@@ -52,7 +54,7 @@ private slots:
     void OnModifyValueChanged(int col, int row);
 
 private:
-    void InitTable();
+    void InsterRow(ParaItem item);
 };
 
 class FunctionBtnArea : public QGroupBox {
@@ -67,6 +69,8 @@ private:
     void ConnectSignles();
 
 signals:
+    void SendLoadSettings();
+    void SendSaveSettings();
     void SendInputMode(InputMode mode);
     void SendClearModifyValue();
     void SendConfirmValues();

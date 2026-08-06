@@ -5,14 +5,7 @@
 #include <QDebug>
 #include <QFileInfo>
 
-// ==================== 构造/析构 ====================
-QFileOperator::QFileOperator()
-{
-}
-
-QFileOperator::~QFileOperator()
-{
-}
+#define EXCEL_DATA_START_ROW 2
 
 // ==================== 自动打开/保存 ====================
 bool QFileOperator::openFile(const QString &filePath)
@@ -171,7 +164,7 @@ QString QFileOperator::escapeCSVField(const QString &field, QChar delimiter)
 // 2. 在项目中包含 QXlsx 头文件并链接库
 // 3. 取消下面的 #define USE_QXLSX 注释
 
-// #define USE_QXLSX
+#define USE_QXLSX
 #ifdef USE_QXLSX
 #include "xlsxdocument.h"
 #endif
@@ -186,12 +179,12 @@ bool QFileOperator::openExcel(const QString &filePath)
     }
 
     m_data.clear();
-    int row = 1;
+    int row = EXCEL_DATA_START_ROW;
     while (true) {
         QStringList rowData;
         int col = 1;
         while (true) {
-            QXlsx::Cell *cell = doc.cellAt(row, col);
+           auto cell = doc.cellAt(row, col);
             if (!cell) break;
             QVariant value = cell->value();
             rowData.append(value.toString());
@@ -293,4 +286,77 @@ int QFileOperator::columnCount() const
             maxCol = row.size();
     }
     return maxCol;
+}
+
+// ==================== 结构体 ParaItem 实现 ====================
+bool ParaItem::fromRow(const QStringList &row)
+{
+    // 不足11列自动补空字符串，防止越界
+    serialNum    = row.value(0, "");
+    saeParamId   = row.value(1, "");
+    objDictName  = row.value(2, "");
+    indexNum     = row.value(3, "");
+    subIndex     = row.value(4, "");
+    dataType     = row.value(5, "");
+    paramValue   = row.value(6, "");
+    rwDesc       = row.value(7, "");
+    funcDesc     = row.value(8, "");
+    objType      = row.value(9, "");
+    remark       = row.value(10, "");
+    return true;
+}
+
+// ==================== 新增：结构体数组转换接口 ====================
+QList<ParaItem> QFileOperator::getTableItems() const
+{
+    QList<ParaItem> itemList;
+    const QList<QStringList>& allRows = m_data;
+
+    // 跳过表头行(第0行)，从第1行开始读取真实数据
+    for (int i = 1; i < allRows.size(); ++i)
+    {
+        const QStringList& oneRow = allRows[i];
+        ParaItem item;
+        item.fromRow(oneRow);
+        itemList.append(item);
+    }
+    return itemList;
+}
+
+void QFileOperator::setTableItems(const QList<ParaItem> &itemList)
+{
+    m_data.clear();
+    // 先写入固定表头行
+    QStringList header = {
+        "序号",
+        "SAE1939参数ID",
+        "对象字典名称",
+        "索引号",
+        "子索引",
+        "数据类型",
+        "参数值",
+        "读写说明",
+        "功能说明",
+        "参数对象类型",
+        "备注"
+    };
+    m_data.append(header);
+
+    // 遍历结构体，转成字符串行存入m_data
+    for (const ParaItem& item : itemList)
+    {
+        QStringList row;
+        row << item.serialNum
+            << item.saeParamId
+            << item.objDictName
+            << item.indexNum
+            << item.subIndex
+            << item.dataType
+            << item.paramValue
+            << item.rwDesc
+            << item.funcDesc
+            << item.objType
+            << item.remark;
+        m_data.append(row);
+    }
 }

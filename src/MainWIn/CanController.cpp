@@ -65,7 +65,7 @@ void CanController::InitBasicInfo() {
     }
     // 协议
     frame = {};
-    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PROTOCOL_CMD_RPS, frame, 200);
+    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PROTOCOL_CMD, frame, 200);
     if (!res) {
         std::cout << "Failed to read protocol type!" << std::endl;
         return;
@@ -87,7 +87,7 @@ void CanController::InitBasicInfo() {
     }
     // 厂商
     frame = {};
-    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_MANUFACTURER_ID_CMD_RPS, frame, 200);
+    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_MANUFACTURER_ID_CMD, frame, 200);
     if (!res) {
         std::cout << "Failed to read manufacturer ID!" << std::endl;
         return;
