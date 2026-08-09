@@ -13,6 +13,7 @@
 
 #define ROW_COUNT 12
 #define COLUMN_COUNT 8
+#define ROW_HEIGHT 42
 
 static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限", "操作"});
 // static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
@@ -80,6 +81,7 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     if(!ok || serialNum < 0) return;
     int row = serialNum - 1;
     insertRow(row);
+    setRowHeight(row,ROW_HEIGHT); 
 
     auto param_item = new QTableWidgetItem(item.objDictName);
     param_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
@@ -110,6 +112,7 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     // 确定标定按钮
     auto enter_btn = new QPushButton("确认", this);
     enter_btn->setObjectName("EnterBtn");
+    enter_btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     setCellWidget(row, COLUMN_COUNT - 1, enter_btn);
     connect(enter_btn, &QPushButton::clicked, this, [this, row](){
         OnEnterBtnClicked(row);
@@ -138,6 +141,7 @@ void SettingInfoTable::OnLoadSettings() {
     }
 
     for(int i = 0; i < rowCount(); ++i) {
+        setRowHeight(i,ROW_HEIGHT); 
         for(int j = 5; j < COLUMN_COUNT; ++j) {
             auto value_item = new QTableWidgetItem();
             value_item->setTextAlignment(Qt::AlignCenter);

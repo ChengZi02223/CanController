@@ -50,7 +50,7 @@ file(GLOB HDRS
 file(GLOB SRCS
     ${PROJECT_SOURCE_DIR}/*.cpp
     ${PROJECT_SOURCE_DIR}/src/CO_Utils/*.cpp
-    ${PROJECT_SOURCE_DIR}/src/MainWin/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/Dialog/*.cpp
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents/*.cpp
     ${PROJECT_SOURCE_DIR}/src/Manager/*.cpp
     ${PROJECT_SOURCE_DIR}/src/CAN_CMD/*.cpp
@@ -71,7 +71,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/CO_Utils
-    ${PROJECT_SOURCE_DIR}/src/MainWin
+    ${PROJECT_SOURCE_DIR}/src/Dialog
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents
     ${PROJECT_SOURCE_DIR}/src/Manager
     ${PROJECT_SOURCE_DIR}/src/CAN_CMD

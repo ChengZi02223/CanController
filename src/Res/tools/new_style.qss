@@ -252,8 +252,7 @@ QPushButton#EnterBtn {
                                       stop:0 #f59e0b, stop:1 #d97706);
     color: #ffffff;
     font-weight: 500;
-    border-radius: 12px;
-    padding: 6px 18px;
+    border-radius: 8px;
     border: none;
 }
 QPushButton#EnterBtn:disabled {
@@ -436,7 +435,7 @@ QTableWidget#SettingInfoTable {
     alternate-background-color: #f8fafc;
 }
 QTableWidget#SettingInfoTable::item {
-    padding: 8px 10px;
+    padding: 4px 5px;
     border: none;
     color: #1e293b;
 }

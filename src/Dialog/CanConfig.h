@@ -47,7 +47,6 @@ private:
     void updateCanStatus(bool initialized);
     TPCANHandle GetSelectedChannelHandle() const; 
 
-
     ControlMode control_mode_ = kMode_J1939;  // 默认使用J1939模式
 
     // UI 组件
