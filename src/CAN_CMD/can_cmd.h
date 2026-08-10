@@ -37,9 +37,25 @@ extern const std::vector<uint8_t> SDO_READ_STATUS_WORD_CMD_RPS;     //状态字
 extern const std::vector<uint8_t> SDO_READ_FAULT_WORD_CMD_RPS;      //故障字
 
 // SDO写测试
-extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_VALUE_CMD; //开阀
+extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_1_VALUE_CMD; //开阀1
+extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_2_VALUE_CMD; //开阀2
 extern const std::vector<uint8_t> SDO_WRITE_READ_VALUE_CMD;     //读取数值
-extern const std::vector<uint8_t> SDO_WRITE_CLOSE_CMD;      //关阀
+extern const std::vector<uint8_t> SDO_WRITE_CLOSE_1_CMD;      //关阀1
+extern const std::vector<uint8_t> SDO_WRITE_CLOSE_2_CMD;      //关阀2
+
+// PID控制
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_1_P_CMD; //阀1 P 参数控制
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_1_I_CMD; //阀1 I 参数控制
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_1_D_CMD; //阀1 D 参数控制
+
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_P_CMD; //阀2 P 参数控制
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_I_CMD; //阀2 I 参数控制
+extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_D_CMD; //阀2 D 参数控制
+
+// 阶跃模式
+extern const std::vector<uint8_t> SDO_STEP_MODE_CMD;
+// 斜坡模式
+extern const std::vector<uint8_t> SDO_RAMP_MODE_CMD;   
 
 /// NMT状态
 #define NMT_COB_ID  0x000

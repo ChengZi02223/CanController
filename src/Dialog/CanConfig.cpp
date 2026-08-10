@@ -16,7 +16,6 @@ CanConfigWin::CanConfigWin(QWidget *parent)
     receiveTimer = new QTimer(this);
     connect(receiveTimer, &QTimer::timeout, this, &CanConfigWin::onReceiveTimer);
     receiveTimer->start(50);
-    onRefreshDevices();
 }
 
 CanConfigWin::~CanConfigWin()
@@ -27,7 +26,7 @@ CanConfigWin::~CanConfigWin()
 void CanConfigWin::setupUI()
 {
     setWindowTitle("CAN Controller - PCAN Style");
-    resize(800, 600);
+    resize(1000, 800);
 
     QTabWidget *tabWidget = new QTabWidget(this);
     setCentralWidget(tabWidget);
@@ -94,6 +93,11 @@ void CanConfigWin::setupUI()
     QGroupBox *sendGroup = new QGroupBox("Send Message");
     QVBoxLayout *sendLayout = new QVBoxLayout(sendGroup);
 
+    QGroupBox *sendOneCmdGroup = new QGroupBox("Send One");
+    sendOneCmdGroup->setCheckable(true);
+    sendOneCmdGroup->setChecked(true);
+    QVBoxLayout *sendOneLayout = new QVBoxLayout(sendOneCmdGroup);
+
     QHBoxLayout *idLayout = new QHBoxLayout;
     idLayout->addWidget(new QLabel("ID (Hex):"));
     leSendId = new QLineEdit("000");
@@ -104,7 +108,7 @@ void CanConfigWin::setupUI()
     cbSendDlc->setCurrentIndex(8);
     idLayout->addWidget(cbSendDlc);
     idLayout->addStretch();
-    sendLayout->addLayout(idLayout);
+    sendOneLayout->addLayout(idLayout);
 
     // 合并后的数据输入框
     QHBoxLayout *dataLayout = new QHBoxLayout;
@@ -113,13 +117,43 @@ void CanConfigWin::setupUI()
     leSendData->setPlaceholderText("Enter hex bytes, e.g., 01 02 03 04 05 06 07 08");
     leSendData->setFixedHeight(30);
     dataLayout->addWidget(leSendData, 1);  // 1表示拉伸
-    sendLayout->addLayout(dataLayout);
+    sendOneLayout->addLayout(dataLayout);
 
     // 添加提示标签
     QLabel *hintLabel = new QLabel("Tip: Enter hexadecimal bytes separated by spaces");
     hintLabel->setStyleSheet("color: gray; font-size: 9pt;");
-    sendLayout->addWidget(hintLabel);
+    sendOneLayout->addWidget(hintLabel);
 
+    QGroupBox *sendMoreCmdGroup = new QGroupBox("Send More");
+    sendMoreCmdGroup->setCheckable(true);
+    sendMoreCmdGroup->setChecked(false);
+    QHBoxLayout *sendMoreLayout = new QHBoxLayout(sendMoreCmdGroup);
+
+    moreCmdTable_ = new QTableWidget(sendMoreCmdGroup);
+    moreCmdTable_->setColumnCount(3);
+    moreCmdTable_->setHorizontalHeaderLabels({"ID", "DLC", "Data"});
+    moreCmdTable_->verticalHeader()->setVisible(false);
+    moreCmdTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    moreCmdTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    moreCmdTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    moreCmdTable_->setColumnWidth(0, 150);
+    moreCmdTable_->setColumnWidth(1, 50);
+    moreCmdTable_->setMinimumSize(270, 100);
+    moreCmdTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    QVBoxLayout *more_btn_layout = new QVBoxLayout();
+    QPushButton *add_cmd_btn = new QPushButton("Add");
+    add_cmd_btn->setMinimumWidth(30);
+    QPushButton *delete_cmd_btn = new QPushButton("Delete");
+    delete_cmd_btn->setMinimumWidth(30);
+    more_btn_layout->addWidget(add_cmd_btn);
+    more_btn_layout->addWidget(delete_cmd_btn);
+
+    sendMoreLayout->addWidget(moreCmdTable_);
+    sendMoreLayout->addLayout(more_btn_layout);
+
+    sendLayout->addWidget(sendOneCmdGroup);
+    sendLayout->addWidget(sendMoreCmdGroup);
     btnSend = new QPushButton("Send");
     btnSend->setFixedSize(100, 30);
     btnSend->setObjectName("SendBtn");
@@ -149,6 +183,32 @@ void CanConfigWin::setupUI()
     connect(btnChange, &QPushButton::clicked, this, &CanConfigWin::onChangeMode);
     connect(btnController, &QPushButton::clicked, this, &CanConfigWin::onOpenController);
     connect(btnSend, &QPushButton::clicked, this, &CanConfigWin::onSend);
+    connect(add_cmd_btn, &QPushButton::clicked, this, &CanConfigWin::onAddCmd);
+    connect(delete_cmd_btn, &QPushButton::clicked, this, &CanConfigWin::onDeleteCmd);
+
+    connect(sendOneCmdGroup, &QGroupBox::toggled, this, [=](bool checked){
+        if(checked){
+            sendMoreCmdGroup->setChecked(false);
+        }else{
+            // 禁止取消，如果另一个也没选，强制勾回来
+            if(!sendMoreCmdGroup->isChecked()){
+                sendOneCmdGroup->setChecked(true);
+            }
+        }
+        on_set_one_ = true;
+    });
+
+    connect(sendMoreCmdGroup, &QGroupBox::toggled, this, [=](bool checked){
+        if(checked){
+            sendOneCmdGroup->setChecked(false);
+        }else{
+            if(!sendOneCmdGroup->isChecked()){
+                sendMoreCmdGroup->setChecked(true);
+            }
+        }
+        on_set_one_ = false;
+    });
+
 }
 
 void CanConfigWin::onRefreshDevices()
@@ -158,7 +218,7 @@ void CanConfigWin::onRefreshDevices()
 
     channelList = CanDriver::GetInstance()->scanAllChannels();
     if (channelList.empty()) {
-        QMessageBox::information(this, "提示", "未检测到PCAN设备，请检查USB/驱动");
+        QMessageBox::information(this, "提示", "未检测到PCAN设备, 请检查USB/驱动");
         return;
     }
     for (auto& info : channelList){
@@ -252,6 +312,22 @@ void CanConfigWin::onOpenController() {
     CanController::GetInstance()->show();
 }
 
+void CanConfigWin::onAddCmd() {
+    int row = moreCmdTable_->rowCount(); // 在末尾新增行号
+    moreCmdTable_->insertRow(row);
+    moreCmdTable_->setItem(row, 0, new QTableWidgetItem(""));
+    moreCmdTable_->setItem(row, 1, new QTableWidgetItem(""));
+    moreCmdTable_->setItem(row, 2, new QTableWidgetItem(""));
+}
+
+void CanConfigWin::onDeleteCmd(){
+    int curRow = moreCmdTable_->currentRow();
+    if(curRow < 0) {
+        return;
+    }
+    moreCmdTable_->removeRow(curRow);
+}
+
 void CanConfigWin::onSend()
 {
     if (!canReady) {
@@ -259,36 +335,58 @@ void CanConfigWin::onSend()
         return;
     }
     
+    if (on_set_one_) {
+        bool ok = false;
+        auto id = leSendId->text().toUInt(&ok, 16);
+        if (!ok) {
+            logMessage("Invalid ID (hex)", true);
+            return;
+        }
+        SendData(id, cbSendDlc->currentText().toUInt(), leSendData->text().trimmed());
+    } else {
+        if(moreCmdTable_->rowCount() == 0) {
+            logMessage("Message table is Empty", true);
+            return;
+        }
+        for(int i = 0; i < moreCmdTable_->rowCount(); ++i) {
+            bool ok = false;
+            auto id = moreCmdTable_->item(i, 0)->text().toUInt(&ok, 16);
+            if (!ok) {
+                logMessage("Invalid ID (hex)", true);
+                return;
+            }
+            auto dlc = moreCmdTable_->item(i, 1)->text().toUInt();
+            auto data = moreCmdTable_->item(i, 2)->text().trimmed();
+            SendData(id, dlc, data);
+        }
+    }
+
+}
+
+void CanConfigWin::SendData(uint32_t id, uint8_t dlc, QString data) {
     can_frame frame;
-    bool ok;
     
     // 解析ID
-    frame.can_id = leSendId->text().toUInt(&ok, 16);
-    qDebug() << "Send Id input: " << leSendId->text() << " parsed:" << frame.can_id;
-    if (!ok) {
-        logMessage("Invalid ID (hex)", true);
-        return;
-    }
+    frame.can_id = id;
     if(frame.can_id > 0x7FF){
         frame.can_id |= CAN_EFF_FLAG;
     }
 
     // 获取DLC
-    frame.can_dlc = cbSendDlc->currentText().toUInt();
+    frame.can_dlc = dlc;
     if (frame.can_dlc > 8) {
         logMessage("DLC cannot exceed 8", true);
         return;
     }
 
     // 解析数据 - 从合并的输入框中读取
-    QString dataText = leSendData->text().trimmed();
-    if (dataText.isEmpty()) {
+    if (data.isEmpty()) {
         logMessage("Data input is empty!", true);
         return;
     }
 
     // 按空格分隔并解析十六进制
-    QStringList hexList = dataText.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+    QStringList hexList = data.split(QRegExp("\\s+"), QString::SkipEmptyParts);
     
     if (hexList.size() != frame.can_dlc) {
         logMessage(QString("Data count (%1) does not match DLC (%2)").arg(hexList.size()).arg(frame.can_dlc), true);

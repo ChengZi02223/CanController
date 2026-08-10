@@ -54,6 +54,7 @@ file(GLOB SRCS
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents/*.cpp
     ${PROJECT_SOURCE_DIR}/src/Manager/*.cpp
     ${PROJECT_SOURCE_DIR}/src/CAN_CMD/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/TaskMgr/*.cpp
 )
 file(GLOB QRC_FILE
     ${PROJECT_SOURCE_DIR}/src/Res/tools/tool.qrc
@@ -75,6 +76,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src/QCommonPonents
     ${PROJECT_SOURCE_DIR}/src/Manager
     ${PROJECT_SOURCE_DIR}/src/CAN_CMD
+    ${PROJECT_SOURCE_DIR}/src/TaskMgr
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     Qt5::Widgets 

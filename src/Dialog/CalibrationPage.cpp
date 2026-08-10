@@ -2,6 +2,7 @@
 
 #include "BasicInfoBar.h"
 #include "CanDriver.h"
+#include "TaskMgr.h"
 #include "can_cmd.h"
 #include "Utils.h"
 
@@ -68,8 +69,8 @@ QWidget* CalibrationPage::CreateControlArea() {
     auto output_cycle_1_label = new QLabel("1 侧输出占空比(%)");
     auto output_cycle_2_label = new QLabel("2 侧输出占空比(%)");
     auto cycle_count_label = new QLabel("循环次数");
-    auto neutral_time_label = new QLabel("中位停留时间(s)");
-    auto work_time_label = new QLabel("工作位停留时间(s)");
+    auto neutral_time_label = new QLabel("中位停留时间(ms)");
+    auto work_time_label = new QLabel("工作位停留时间(ms)");
 
     output_cycle_1_edit_ = new QLineEdit("50");
     output_cycle_1_edit_->setAlignment(Qt::AlignCenter);
@@ -82,15 +83,15 @@ QWidget* CalibrationPage::CreateControlArea() {
     work_time_edit_ = new QLineEdit("2000");
     work_time_edit_->setAlignment(Qt::AlignCenter);
 
-    auto control_1_btn = new QPushButton("1 侧开环控制");
-    control_1_btn->setFixedHeight(30);
-    control_1_btn->setMinimumWidth(150);
-    control_1_btn->setObjectName("ControlBtn");
-    control_1_btn->setCheckable(true);
-    auto control_2_btn = new QPushButton("2 侧开环控制");
-    control_2_btn->setFixedHeight(30);
-    control_2_btn->setMinimumWidth(150);
-    control_2_btn->setObjectName("ControlBtn");
+    control_1_btn_ = new QPushButton("1 侧开环控制");
+    control_1_btn_->setFixedHeight(30);
+    control_1_btn_->setMinimumWidth(150);
+    control_1_btn_->setObjectName("ControlBtn");
+    control_1_btn_->setCheckable(true);
+    control_2_btn_ = new QPushButton("2 侧开环控制");
+    control_2_btn_->setFixedHeight(30);
+    control_2_btn_->setMinimumWidth(150);
+    control_2_btn_->setObjectName("ControlBtn");
     cycle_btn_ = new QPushButton("开环循环动作");
     cycle_btn_->setObjectName("CycleBtn");
     cycle_btn_->setMinimumWidth(300);
@@ -110,14 +111,14 @@ QWidget* CalibrationPage::CreateControlArea() {
     grid_layout->addWidget(cycle_count_edit_, 1, 2, Qt::AlignCenter);
     grid_layout->addWidget(neutral_time_edit_, 1, 3, Qt::AlignCenter);
     grid_layout->addWidget(work_time_edit_, 1, 4, Qt::AlignCenter);
-    grid_layout->addWidget(control_1_btn, 2, 0, Qt::AlignCenter);
-    grid_layout->addWidget(control_2_btn, 2, 1, Qt::AlignCenter);
+    grid_layout->addWidget(control_1_btn_, 2, 0, Qt::AlignCenter);
+    grid_layout->addWidget(control_2_btn_, 2, 1, Qt::AlignCenter);
     grid_layout->addWidget(cycle_btn_, 2, 2, 1, 3, Qt::AlignCenter);    
 
     main_layout->addLayout(grid_layout);
 
-    connect(control_1_btn, &QPushButton::clicked, this, &CalibrationPage::OnControl1BtnClicked);
-    connect(control_2_btn, &QPushButton::clicked, this, &CalibrationPage::OnControl2BtnClicked);
+    connect(control_1_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControl1BtnClicked);
+    connect(control_2_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControl2BtnClicked);
     connect(cycle_btn_, &QPushButton::clicked, this, &CalibrationPage::OnCycleBtnClicked);
 
     return control_group_;
@@ -126,13 +127,13 @@ QWidget* CalibrationPage::CreateControlArea() {
 // Implementation for control 1 button click
 void CalibrationPage::OnControl1BtnClicked(bool checked) {
     std::cout << "Control 1 button clicked, checked:" << checked <<std::endl;
-    cycle_btn_->setDisabled(!checked);
     if(!checked) {
         if(cycle_btn_->isChecked()) {
             cycle_btn_->setChecked(false);
             OnCycleBtnClicked(false);
         }
-        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_CMD, 200);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+        cycle_btn_->setDisabled(!checked);
         return;
     }
     
@@ -143,14 +144,7 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
         std::cout << "输入数值非法"<<std::endl;
         return;
     }
-    uint16_t value = static_cast<uint16_t>(percent * 10); // 100 → 1000
-
-    // 2. 复制模板生成待发送指令
-    std::vector<uint8_t> cmd(SDO_WRITE_OPEN_VALUE_CMD.begin(), SDO_WRITE_OPEN_VALUE_CMD.end());
-
-    // 3. 【小端模式】填充第5、6字节（下标4、5）
-    cmd[4] = static_cast<uint8_t>(value & 0xFF);        // 低字节 0xE8
-    cmd[5] = static_cast<uint8_t>((value >> 8) & 0xFF); // 高字节 0x03
+    auto cmd = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, percent);
 
     // 此时 cmd = {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
 
@@ -159,25 +153,73 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
     // }
     bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
     if(!ret){
-        qDebug().noquote() << "开阀指令发送失败";
+        qDebug().noquote() << "开阀2指令发送失败";
+        return;
     }
+    cycle_btn_->setDisabled(!checked);
 }
 
 // Implementation for control 2 button click
-void CalibrationPage::OnControl2BtnClicked() {
+void CalibrationPage::OnControl2BtnClicked(bool checked) {
+    std::cout << "Control 2 button clicked, checked:" << checked <<std::endl;
+    if(!checked) {
+        if(cycle_btn_->isChecked()) {
+            cycle_btn_->setChecked(false);
+            OnCycleBtnClicked(false);
+        }
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
+        cycle_btn_->setDisabled(!checked);
+        return;
+    }
     
+    bool ok = false;
+    // 1. 读取输入框文本，转数字 100 → 1000（你业务规则：百分比 ×10）
+    int percent = output_cycle_2_edit_->text().toInt(&ok);
+    if(!ok) {
+        std::cout << "输入数值非法"<<std::endl;
+        return;
+    }
+    // 此时 cmd = {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
+    auto cmd = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, percent);
+
+    // for (auto byte : cmd) {
+    //     std::cout << "byte:" << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper();
+    // }
+    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
+    if(!ret){
+        qDebug().noquote() << "开阀2指令发送失败";
+        return;
+    }
+    cycle_btn_->setDisabled(!checked);
 }
 
 // Implementation for cycle button click
 void CalibrationPage::OnCycleBtnClicked(bool checked) {
-    std::cout << "cycle clicked, checked:" << checked<<std::endl;
-    if(!checked) {
+    std::cout << "cycle clicked, checked:" << checked << std::endl;
+    if (!checked) {
+        TaskMgr::GetInstance()->StopOpenLoopCycle();
         CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
         data_timer_.stop();
         return;
     }
 
-    CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
+    OpenLoopInfo loop_info;
+    if(control_1_btn_->isChecked() && control_2_btn_->isChecked()) {
+        loop_info.control_side = 3;
+    } else if (control_1_btn_->isChecked() && !control_2_btn_->isChecked()) {
+        loop_info.control_side = 1;
+    } else if (!control_1_btn_->isChecked() && control_2_btn_->isChecked()) {
+        loop_info.control_side = 2;
+    } else {
+        loop_info.control_side = 0;
+    }
+    loop_info.duty_cycle_1 = output_cycle_1_edit_->text().toInt();
+    loop_info.duty_cycle_2 = output_cycle_2_edit_->text().toInt();
+    loop_info.loop_count = cycle_count_edit_->text().toInt();
+    loop_info.mid_stay_time = neutral_time_edit_->text().toInt();
+    loop_info.work_stay_time = work_time_edit_->text().toInt();
+
+    TaskMgr::GetInstance()->StartOpenLoopCycle(loop_info);
     data_timer_.start(100);
 }
 
@@ -192,13 +234,18 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     auto i_label = new QLabel("I 积分参数");
     auto d_label = new QLabel("D 微分参数");
     auto target_label = new QLabel("目标值");
-    auto ramp_label = new QLabel("斜坡时间");
+    auto ramp_label = new QLabel("斜坡时间(ms)");
 
-    p_edit_ = new QLineEdit();
-    i_edit_ = new QLineEdit();
-    d_edit_ = new QLineEdit();
-    target_edit_ = new QLineEdit();
-    ramp_edit_ = new QLineEdit();
+    p_edit_ = new QLineEdit("1.0");
+    p_edit_->setAlignment(Qt::AlignCenter);
+    i_edit_ = new QLineEdit("0.1");
+    i_edit_->setAlignment(Qt::AlignCenter);
+    d_edit_ = new QLineEdit("0.01");
+    d_edit_->setAlignment(Qt::AlignCenter);
+    target_edit_ = new QLineEdit("100");
+    target_edit_->setAlignment(Qt::AlignCenter);
+    ramp_edit_ = new QLineEdit("5000");
+    ramp_edit_->setAlignment(Qt::AlignCenter);
 
     auto grid_layout = new QGridLayout();
 
@@ -214,9 +261,9 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     grid_layout->addWidget(ramp_edit_, 1, 4, Qt::AlignCenter);
 
     auto button_layout = new QHBoxLayout();
-    auto side_combo = new QComboBox();
-    side_combo->setFixedHeight(30);
-    side_combo->addItems({"1侧","2侧"});
+    side_combo_ = new QComboBox();
+    side_combo_->setFixedHeight(30);
+    side_combo_->addItems({"1侧","2侧"});
     auto step_btn = new QPushButton("闭环阶跃响应");
     step_btn->setObjectName("ResponceBtn");
     step_btn->setFixedHeight(30);
@@ -230,7 +277,7 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     save_btn->setObjectName("CycleBtn");
     save_btn->setFixedHeight(30);
 
-    button_layout->addWidget(side_combo);
+    button_layout->addWidget(side_combo_);
     button_layout->addWidget(step_btn);
     button_layout->addWidget(ramp_btn);
     button_layout->addWidget(motion_btn);
@@ -247,8 +294,38 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     return pid_group_;
 }
 
+bool CalibrationPage::IsOnSideControl1() {
+    return side_combo_->currentIndex() == 0;
+}
+
 void CalibrationPage::OnPIDStepBtnClicked() {
-    
+    // auto driver = CanDriver::GetInstance();
+    double p_v = p_edit_->text().toDouble();
+    double i_v = i_edit_->text().toDouble();
+    double d_v = d_edit_->text().toDouble();
+    if(IsOnSideControl1()) {
+        auto cmd = SetPIDCMDValue(SDO_WRITE_PID_1_P_CMD, p_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "1 P");
+        cmd = SetPIDCMDValue(SDO_WRITE_PID_1_I_CMD, i_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "1 I");
+        cmd = SetPIDCMDValue(SDO_WRITE_PID_1_D_CMD, d_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "1 D");
+    } else {
+        auto cmd = SetPIDCMDValue(SDO_WRITE_PID_2_P_CMD, p_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "2 P");
+        cmd = SetPIDCMDValue(SDO_WRITE_PID_2_I_CMD, i_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "2 I");
+        cmd = SetPIDCMDValue(SDO_WRITE_PID_2_D_CMD, d_v);
+        // driver->ExecCmd(SDO_COB_ID, cmd, 200);
+        PrintCmd(cmd, "2 D");
+    }
+    // driver->ExecCmd(SDO_COB_ID, SDO_STEP_MODE_CMD, 200);
+
 }
 
 void CalibrationPage::OnPIDRampBtnClicked() {
@@ -505,9 +582,9 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     auto cycle_count_label = new QLabel("循环次数");
     auto target_value_label = new QLabel("目标值");
-    auto up_time_label = new QLabel("上升时间(s)");
-    auto down_time_label = new QLabel("下降时间(s)");
-    auto stop_time_label = new QLabel("中位滞留时间(s)");
+    auto up_time_label = new QLabel("上升时间(ms)");
+    auto down_time_label = new QLabel("下降时间(ms)");
+    auto stop_time_label = new QLabel("中位滞留时间(ms)");
 
     auto cycle_count_edit = new QLineEdit();
     auto target_value_edit = new QLineEdit();

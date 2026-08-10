@@ -35,9 +35,11 @@ private:
 
     QWidget* CreateWaveformArea();
 
+    bool IsOnSideControl1();
+
 private slots:
     void OnControl1BtnClicked(bool checked);
-    void OnControl2BtnClicked();
+    void OnControl2BtnClicked(bool checked);
     void OnCycleBtnClicked(bool checked);
 
     void OnPIDStepBtnClicked();
@@ -59,6 +61,9 @@ private:
     QLineEdit* cycle_count_edit_ = nullptr;
     QLineEdit* neutral_time_edit_ = nullptr;
     QLineEdit* work_time_edit_ = nullptr;
+
+    QPushButton* control_1_btn_ = nullptr;
+    QPushButton* control_2_btn_ = nullptr;
     QPushButton* cycle_btn_ = nullptr;
 
     QGroupBox* pid_group_ = nullptr;
@@ -70,6 +75,7 @@ private:
     QGroupBox* displacement_group_ = nullptr;
     QGroupBox* signal_group_ = nullptr;
     QGroupBox* waveform_group_ = nullptr;
+    QComboBox* side_combo_ = nullptr;
 
     QTableWidget* displace_table_ = nullptr;
     QRangeSlider* range_slider_ = nullptr;

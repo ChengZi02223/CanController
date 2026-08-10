@@ -13,6 +13,10 @@ QWidget {
     color: #1e293b;
 }
 
+QLabel {
+    background-color: transparent;
+}
+
 /* ========== 通用按钮基础样式（更明亮） ========== */
 QPushButton {
     font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -543,8 +547,8 @@ QGroupBox#DisplacGroup {
     background-color: #fffbeb;
     border: 1px solid #fcd34d;
     border-radius: 10px;
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 4px;
+    padding-top: 4px;
 }
 QGroupBox#DisplacGroup::title {
     subcontrol-origin: margin;
