@@ -4,6 +4,9 @@
 #include "QtWidgets.h"
 #include <map>
 #include "QWavePlot.h"
+#include <thread>
+#include <atomic>
+#include <iostream>
 
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
@@ -37,6 +40,15 @@ private:
 
     bool IsOnSideControl1();
 
+    // 开环
+    bool StartOpenLoop();
+    void StopOpenLoop();
+    void ExecuteOpenLoopCycle();
+    int ReadCurrentStay(int side);
+
+    // PID
+    void SetPIDParam();
+
 private slots:
     void OnControl1BtnClicked(bool checked);
     void OnControl2BtnClicked(bool checked);
@@ -52,7 +64,15 @@ private slots:
     void OnSineWaveBtnClicked();
     void OnSawtoothWaveBtnClicked();
 
+    // 位移曲线绘制
+    void OnDrawStayFa1();
+    void OnDrawStayFa2();
+
 private:
+
+    std::vector<uint8_t> cur_fa_val_1_cmd_; //当前开阀1 cmd
+    std::vector<uint8_t> cur_fa_val_2_cmd_;    
+
     QHBoxLayout* main_layout_ = nullptr;
     BasicInfoBar* basic_info_bar_ = nullptr;
     QGroupBox* control_group_ = nullptr;
@@ -61,6 +81,10 @@ private:
     QLineEdit* cycle_count_edit_ = nullptr;
     QLineEdit* neutral_time_edit_ = nullptr;
     QLineEdit* work_time_edit_ = nullptr;
+    // 开环循环动作线程
+    std::atomic<bool> is_open_running_{false};
+    std::thread open_loop_thread_;
+    bool is_on_work_stay_time_ = false;
 
     QPushButton* control_1_btn_ = nullptr;
     QPushButton* control_2_btn_ = nullptr;
@@ -87,10 +111,15 @@ private:
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
 
-    QTimer data_timer_;
+    QTimer stay_time_1_;
+    QTimer stay_time_2_;
+    QTimer flow_time_1_;
+    QTimer flow_time_2_;
     QWavePlotWidget* m_wavePlot = nullptr;
-    int idxSine;
-    int idxSaw;
+    int idxSine_1;
+    int idxSine_2;
+    int idxSaw_1;
+    int idxSaw_2;
     double m_time = 0.0;
     // WavePlotTool* m_waveTool{nullptr};
     // QCPGraph* m_graphSine{nullptr};    // 正弦波 绑定左Y（流量）

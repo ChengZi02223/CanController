@@ -1,4 +1,4 @@
-// #include "CanController.h"
+#include "CanController.h"
 #include "CanConfig.h"
 
 #include <QApplication>
@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
     a.setStyleSheet(qss);
 
     // CanController *w  = new CanController();
-    CanConfigWin::GetInstance()->show();
+    CanController::GetInstance()->show();
+    // CanConfigWin::GetInstance()->show();
     return a.exec();
 } 

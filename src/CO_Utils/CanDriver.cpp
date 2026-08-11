@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 #include "can_cmd.h"
+#include "Utils.h"
 
 CanDriver::CanDriver()
     : handle_(nullptr), isInitialized_(false)
@@ -112,6 +113,9 @@ void CanDriver::close()
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms)
 {
+    // PrintCmd(cmd);
+    // return true;
+
     can_frame frame{};
     frame.can_id = cobId;
     frame.can_dlc = static_cast<uint8_t>(cmd.size()); // 不要硬写8！使用实际长度

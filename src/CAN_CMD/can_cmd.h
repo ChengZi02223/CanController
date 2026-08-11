@@ -36,12 +36,24 @@ extern const std::vector<uint8_t> SDO_READ_MANUFACTURER_ID_CMD_RPS; //厂商ID
 extern const std::vector<uint8_t> SDO_READ_STATUS_WORD_CMD_RPS;     //状态字
 extern const std::vector<uint8_t> SDO_READ_FAULT_WORD_CMD_RPS;      //故障字
 
+// 开环模式
+extern const std::vector<uint8_t> SDO_OPEN_LOOP_MODE_CMD;
+// 闭环模式
+extern const std::vector<uint8_t> SDO_CLOSE_LOOP_MODE_CMD;
+
 // SDO写测试
 extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_1_VALUE_CMD; //开阀1
 extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_2_VALUE_CMD; //开阀2
 extern const std::vector<uint8_t> SDO_WRITE_READ_VALUE_CMD;     //读取数值
 extern const std::vector<uint8_t> SDO_WRITE_CLOSE_1_CMD;      //关阀1
 extern const std::vector<uint8_t> SDO_WRITE_CLOSE_2_CMD;      //关阀2
+
+extern const std::vector<uint8_t> SDO_READ_STAY_1_CMD;      //  读取阀1当前位置
+extern const std::vector<uint8_t> SDO_READ_STAY_2_CMD;      //  读取阀2当前位置
+
+#define CUR_STAY_ID 0x5C0
+extern const std::vector<uint8_t> SDO_CUR_STAY_1_CMD_HEAD;      //  下位机回复 阀1当前位置
+extern const std::vector<uint8_t> SDO_CUR_STAY_2_CMD_HEAD;      //  下位机回复 阀2当前位置
 
 // PID控制
 extern const std::array<uint8_t, 8> SDO_WRITE_PID_1_P_CMD; //阀1 P 参数控制

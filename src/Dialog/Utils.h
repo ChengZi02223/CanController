@@ -34,7 +34,6 @@ static std::vector<uint8_t> SetTargetCMDValue(const std::array<uint8_t, 8> comma
 
 static std::vector<uint8_t> SetPIDCMDValue(const std::array<uint8_t, 8> command, double val) {
     uint16_t value = static_cast<uint16_t>(val * 1000); 
-    std::cout << "PID value: " << value << std::endl;
 
     // 2. 复制模板生成待发送指令
     std::vector<uint8_t> cmd(command.begin(), command.end());
@@ -53,5 +52,12 @@ static void PrintCmd(const std::vector<uint8_t> &cmd, std::string prefix = "") {
         std::cout << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper().toStdString() << " ";
     }
     std::cout << std::endl;
+}
+
+static bool CheckAnswerHead(const uint8_t data[8], const std::vector<uint8_t> &head) {
+    if(head.size() !=4U) return false;
+    return std::equal(head.begin(),
+                      head.end(),
+                      data);
 }
 #endif // _UTILS_H
