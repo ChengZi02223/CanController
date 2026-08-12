@@ -11,8 +11,15 @@
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
+struct DrawStayInfo {
+    int side; // 1 | 2 侧
+    double time; // 时间
+    double value; 
+};
+Q_DECLARE_METATYPE(DrawStayInfo)
 struct BasicInfo;
 class BasicInfoBar;
+class QWavePlotWithLegendWidget;
 class CalibrationPage : public QWidget {
     Q_OBJECT    
 
@@ -41,6 +48,12 @@ private:
     bool IsOnSideControl1();
 
     // 开环
+    void StartControl1Loop();
+    void StartControl2Loop();
+    void StopControl1Loop();
+    void StopControl2Loop();
+    void DrawStay(const DrawStayInfo &info);
+
     bool StartOpenLoop();
     void StopOpenLoop();
     void ExecuteOpenLoopCycle();
@@ -49,13 +62,17 @@ private:
     // PID
     void SetPIDParam();
 
+signals:
+    void SendDrawStayFaInfo(const DrawStayInfo &info);
+    void SendOpenLoopFinished();
+
 private slots:
     void OnControl1BtnClicked(bool checked);
     void OnControl2BtnClicked(bool checked);
     void OnCycleBtnClicked(bool checked);
 
-    void OnPIDStepBtnClicked();
-    void OnPIDRampBtnClicked();
+    void OnPIDStepBtnClicked(bool checked);
+    void OnPIDRampBtnClicked(bool checked);
     void OnPIDMotionBtnClicked();
     void OnPIDSaveBtnClicked();
 
@@ -82,6 +99,11 @@ private:
     QLineEdit* neutral_time_edit_ = nullptr;
     QLineEdit* work_time_edit_ = nullptr;
     // 开环循环动作线程
+    bool stay_1_running_ = false;
+    QThread *stay_thread_1_ = nullptr;
+    bool stay_2_running_ = false;
+    QThread *stay_thread_2_ = nullptr;
+
     std::atomic<bool> is_open_running_{false};
     std::thread open_loop_thread_;
     bool is_on_work_stay_time_ = false;
@@ -101,6 +123,9 @@ private:
     QGroupBox* waveform_group_ = nullptr;
     QComboBox* side_combo_ = nullptr;
 
+    QPushButton *step_btn_ = nullptr;
+    QPushButton *ramp_btn_ = nullptr;
+
     QTableWidget* displace_table_ = nullptr;
     QRangeSlider* range_slider_ = nullptr;
     QLabel* info_label_ = nullptr;
@@ -115,11 +140,12 @@ private:
     QTimer stay_time_2_;
     QTimer flow_time_1_;
     QTimer flow_time_2_;
-    QWavePlotWidget* m_wavePlot = nullptr;
+    QWavePlotWithLegendWidget* m_wavePlot = nullptr;
     int idxSine_1;
     int idxSine_2;
     int idxSaw_1;
     int idxSaw_2;
+    std::mutex m_time_mtx_;
     double m_time = 0.0;
     // WavePlotTool* m_waveTool{nullptr};
     // QCPGraph* m_graphSine{nullptr};    // 正弦波 绑定左Y（流量）

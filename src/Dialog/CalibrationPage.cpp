@@ -5,15 +5,23 @@
 #include "TaskMgr.h"
 #include "can_cmd.h"
 #include "Utils.h"
+#include "QWavePlotWithLegendWidget.h"
 
 #include <QDebug>
 #include <iostream>
 #include <QThread>
+#include <mutex>
 
 CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
 
     InitPage();
+    qRegisterMetaType<DrawStayInfo>("DrawStayInfo");
+
+    connect(this, &CalibrationPage::SendOpenLoopFinished, this, [this](){
+        cycle_btn_->setChecked(false);
+        OnCycleBtnClicked(false);
+    });
 }
 
 void CalibrationPage::InitPage() {
@@ -72,9 +80,9 @@ QWidget* CalibrationPage::CreateControlArea() {
     auto neutral_time_label = new QLabel("中位停留时间(ms)");
     auto work_time_label = new QLabel("工作位停留时间(ms)");
 
-    output_cycle_1_edit_ = new QLineEdit("50");
+    output_cycle_1_edit_ = new QLineEdit("10");
     output_cycle_1_edit_->setAlignment(Qt::AlignCenter);
-    output_cycle_2_edit_ = new QLineEdit("50");
+    output_cycle_2_edit_ = new QLineEdit("10");
     output_cycle_2_edit_->setAlignment(Qt::AlignCenter);
     cycle_count_edit_ = new QLineEdit("10");
     cycle_count_edit_->setAlignment(Qt::AlignCenter);
@@ -128,14 +136,16 @@ QWidget* CalibrationPage::CreateControlArea() {
 // Implementation for control 1 button click
 void CalibrationPage::OnControl1BtnClicked(bool checked) {
     std::cout << "Control 1 button clicked, checked:" << checked <<std::endl;
+    if(checked && control_2_btn_->isChecked()){
+        control_2_btn_->setChecked(false);
+        OnControl2BtnClicked(false);
+    }
     if(!checked) {
         // {0x00, 0x40}
         CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
         // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
         CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
-        if(stay_time_1_.isActive()) {
-            stay_time_1_.stop();
-        }
+        StopControl1Loop();
         return;
     }
     
@@ -156,20 +166,22 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
     }
     // {0x01, 0x40}
     CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
-    stay_time_1_.start(500);
+    StartControl1Loop();
 }
 
 // Implementation for control 2 button click
 void CalibrationPage::OnControl2BtnClicked(bool checked) {
     std::cout << "Control 2 button clicked, checked:" << checked <<std::endl;
+    if(checked && control_1_btn_->isChecked()){
+        control_1_btn_->setChecked(false);
+        OnControl1BtnClicked(false);
+    }
     if(!checked) {
         // {0x00, 0x40}
         CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
         // {0x2B, 0x03, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
         CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
-        if(stay_time_2_.isActive()) {
-            stay_time_2_.stop();
-        }
+        StopControl2Loop();
         return;
     }
     
@@ -190,7 +202,7 @@ void CalibrationPage::OnControl2BtnClicked(bool checked) {
     }
     // {0x01, 0x40}
     CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
-    stay_time_2_.start(500);
+    StartControl2Loop();
 }
 
 // Implementation for cycle button click
@@ -202,7 +214,6 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
         // CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
         return;
     }
-
 
     StartOpenLoop();
 }
@@ -231,12 +242,8 @@ void CalibrationPage::StopOpenLoop() {
     if(open_loop_thread_.joinable()) {
         open_loop_thread_.join();
     }
-    if(stay_time_1_.isActive()) {
-        stay_time_1_.stop();
-    }
-    if(stay_time_2_.isActive()) {
-        stay_time_2_.stop();
-    }
+    StopControl1Loop();
+    StopControl2Loop();
 }
 
 void CalibrationPage::ExecuteOpenLoopCycle() {
@@ -251,7 +258,10 @@ void CalibrationPage::ExecuteOpenLoopCycle() {
 
     // 循环次数
     int loop_count = 0;
-    bool one_loop_off_ = false;
+    bool one_loop_off_1_ = false;
+    bool one_loop_off_2_ = false;
+    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
     while(is_open_running_.load()) {
         if(loop_count == cycle_count) {
             break;
@@ -259,53 +269,81 @@ void CalibrationPage::ExecuteOpenLoopCycle() {
         is_on_work_stay_time_ = false;
         // 1侧开环控制
         int saw_value = ReadCurrentStay(1);
+        // qDebug() << "stay saw1: "<< saw_value;
         if(saw_value == 0) {
             //如果是中位，设置目标值， 停够中位停留时间后，启动阀1、2，读取数据
             std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
             cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, percent_1);
-            if(!stay_time_1_.isActive()) {
+            qDebug() << "1 中位停留： " << neutral_stay_time / 1000 << "s";
+            if(!stay_1_running_) {
                 // {0x01, 0x40}
                 CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
-                stay_time_1_.start(500);
+                StartControl1Loop();
                 continue;
+            }
+            if(one_loop_off_1_) {
+                one_loop_off_1_ = false;
             }
         } else if (saw_value == target_value_1) {
             is_on_work_stay_time_ = true;
             std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
             cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, 0);
-            one_loop_off_ = true;
+            one_loop_off_1_ = true;
+            qDebug() << "1 工作位停留： " << work_stay_time / 1000 << "s";
             continue;
         } else {
             continue;
         }
         // 2侧开环控制
+loop_2: 
         saw_value = ReadCurrentStay(2);
+        // qDebug()<< "stay saw2: "<< saw_value;
         if(saw_value == 0) {
             //如果是中位，设置目标值， 停够中位停留时间后，启动阀1、2，读取数据
             std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
             cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, percent_2);
-            if(!stay_time_2_.isActive()) {
-                // {0x01, 0x40}
-                stay_time_2_.start(500);
-                continue;
+            qDebug() << "2 中位停留： " << neutral_stay_time / 1000 << "s";
+            if(!stay_2_running_) {
+                StartControl2Loop();
+                goto loop_2;
+            }
+            if(one_loop_off_2_) {
+                one_loop_off_2_ = false;
             }
         } else if (saw_value == target_value_1) {
             is_on_work_stay_time_ = true;
             std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
             cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, 0);
-            continue;
+            one_loop_off_2_ = true;
+            qDebug() << "2 工作位停留： " << work_stay_time / 1000 << "s";
+            goto loop_2;
         } else {
-            continue;
+            goto loop_2;
         }
         loop_count++;
+        qDebug() << "-------一个循环结束-------";
     }
+    qDebug() << "loop count: "<< loop_count;
+    is_on_work_stay_time_ = false;
+    emit SendOpenLoopFinished();
 }
 
+static int x_ = 0;
+static int y_ = 0;
 int CalibrationPage::ReadCurrentStay(int side) {
     if(side != 1 && side != 2) {
         return -1;
     }
-
+#ifdef ON_TEST_MODE
+    if (side == 1) {
+        int value_x = x_ % 200;
+        x_++;
+        return value_x <= 100 ? value_x : 200 - value_x;    
+    }
+    int value_y = y_ % 200;
+    y_++;
+    return value_y <= 100 ? value_y : 200 - value_y; 
+#else
     can_frame ret_frame;
     bool ret = false;
     if(side == 1) {  
@@ -338,6 +376,7 @@ int CalibrationPage::ReadCurrentStay(int side) {
     }
     uint16_t saw = ExtractFromDataList(ret_frame.data, 5, 4);
     return static_cast<int>(saw);
+#endif
 }
 
 // Implementation for creating PID setting area
@@ -361,7 +400,7 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     d_edit_->setAlignment(Qt::AlignCenter);
     target_edit_ = new QLineEdit("100");
     target_edit_->setAlignment(Qt::AlignCenter);
-    ramp_edit_ = new QLineEdit("5000");
+    ramp_edit_ = new QLineEdit("500");
     ramp_edit_->setAlignment(Qt::AlignCenter);
 
     auto grid_layout = new QGridLayout();
@@ -381,12 +420,14 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     side_combo_ = new QComboBox();
     side_combo_->setFixedHeight(30);
     side_combo_->addItems({"1侧","2侧"});
-    auto step_btn = new QPushButton("闭环阶跃响应");
-    step_btn->setObjectName("ResponceBtn");
-    step_btn->setFixedHeight(30);
-    auto ramp_btn = new QPushButton("闭环斜坡响应");
-    ramp_btn->setObjectName("ResponceBtn");
-    ramp_btn->setFixedHeight(30);
+    step_btn_ = new QPushButton("闭环阶跃响应");
+    step_btn_->setObjectName("ResponceBtn");
+    step_btn_->setFixedHeight(30);
+    step_btn_->setCheckable(true);
+    ramp_btn_ = new QPushButton("闭环斜坡响应");
+    ramp_btn_->setObjectName("ResponceBtn");
+    ramp_btn_->setFixedHeight(30);
+    ramp_btn_->setCheckable(true);
     auto motion_btn = new QPushButton("往复动作");
     motion_btn->setObjectName("CycleBtn");
     motion_btn->setFixedHeight(30);
@@ -395,16 +436,16 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     save_btn->setFixedHeight(30);
 
     button_layout->addWidget(side_combo_);
-    button_layout->addWidget(step_btn);
-    button_layout->addWidget(ramp_btn);
+    button_layout->addWidget(step_btn_);
+    button_layout->addWidget(ramp_btn_);
     button_layout->addWidget(motion_btn);
     button_layout->addWidget(save_btn);
 
     main_layout->addLayout(grid_layout);
     main_layout->addLayout(button_layout);
 
-    connect(step_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDStepBtnClicked);
-    connect(ramp_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDRampBtnClicked);
+    connect(step_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDStepBtnClicked);
+    connect(ramp_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDRampBtnClicked);
     connect(motion_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDMotionBtnClicked);
     connect(save_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDSaveBtnClicked);
 
@@ -437,19 +478,126 @@ void CalibrationPage::SetPIDParam() {
     }
 }
 
-void CalibrationPage::OnPIDStepBtnClicked() {
+void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     auto driver = CanDriver::GetInstance();
-    driver->ExecCmd(SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD, 200);
-    SetPIDParam();
-    driver->ExecCmd(SDO_COB_ID, SDO_STEP_MODE_CMD, 200);
+    std::cout << "Step button clicked, checked:" << checked <<std::endl;
+    if(checked && ramp_btn_->isChecked()){
+        ramp_btn_->setChecked(false);
+        OnPIDRampBtnClicked(false);
 
+        driver->ExecCmd(SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD, 200);
+        SetPIDParam();
+        // 阶跃模式
+        driver->ExecCmd(SDO_COB_ID, SDO_STEP_MODE_CMD, 200);       
+    }
+    if(!checked) {
+        // {0x00, 0x40}
+        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
+        // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
+        if(IsOnSideControl1()) {
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+            StopControl1Loop();
+        } else {
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
+            StopControl2Loop();
+        }
+        return;
+    }
+    
+    bool ok = false;
+    // 阀1目标流量=40L/min (500=50%×80L) ===
+    int target_value = target_edit_->text().toInt(&ok);
+    if(!ok) {
+        std::cout << "输入数值非法"<<std::endl;
+        return;
+    }
+
+    std::vector<uint8_t> cmd;
+    if(IsOnSideControl1()) {
+        cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, target_value);
+        cmd = cur_fa_val_1_cmd_;
+    } else {
+        cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, target_value);
+        cmd = cur_fa_val_2_cmd_;
+    }
+    
+    // {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
+    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
+    if(!ret){
+        qDebug().noquote() << "开阀指令发送失败";
+        return;
+    }
+    // {0x01, 0x40}
+    CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
+    if(IsOnSideControl1()) {
+        StartControl1Loop();
+    } else {
+        StartControl2Loop();
+    }
+    
 }
 
-void CalibrationPage::OnPIDRampBtnClicked() {
+void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
     auto driver = CanDriver::GetInstance();
-    driver->ExecCmd(SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD, 200);
-    SetPIDParam();
-    driver->ExecCmd(SDO_COB_ID, SDO_RAMP_MODE_CMD, 200);
+
+    std::cout << "Step button clicked, checked:" << checked <<std::endl;
+    if(checked && step_btn_->isChecked()){
+        step_btn_->setChecked(false);
+        OnPIDStepBtnClicked(false);
+
+        driver->ExecCmd(SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD, 200);
+        SetPIDParam();
+        // 阶跃模式
+        driver->ExecCmd(SDO_COB_ID, SDO_RAMP_MODE_CMD, 200);
+        // 伸出激活=500ms
+        driver->ExecCmd(SDO_COB_ID, SDO_RAMP_MODE_CMD, 200);
+        // 缩回激活=200ms
+        driver->ExecCmd(SDO_COB_ID, SDO_RAMP_MODE_CMD, 200);
+    }
+
+    if(!checked) {
+        // {0x00, 0x40}
+        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
+        // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
+        if(IsOnSideControl1()) {
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+            StopControl1Loop();
+        } else {
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
+            StopControl2Loop();
+        }
+        return;
+    }
+    
+    bool ok = false;
+    int ramp_time = ramp_edit_->text().toInt(&ok);
+    if(!ok) {
+        std::cout << "输入数值非法"<<std::endl;
+        return;
+    }
+
+    std::vector<uint8_t> cmd;
+    if(IsOnSideControl1()) {
+        cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, ramp_time);
+        cmd = cur_fa_val_1_cmd_;
+    } else {
+        cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, ramp_time);
+        cmd = cur_fa_val_2_cmd_;
+    }
+    
+    // {0x2B,0x00,0x63,0x00,0xE8,0x03,0x00,0x00}
+    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, cmd, 200);
+    if(!ret){
+        qDebug().noquote() << "开阀指令发送失败";
+        return;
+    }
+    // {0x01, 0x40}
+    CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
+    if(IsOnSideControl1()) {
+        StartControl1Loop();
+    } else {
+        StartControl2Loop();
+    }
 }
 
 void CalibrationPage::OnPIDMotionBtnClicked() {
@@ -831,28 +979,80 @@ QWidget* CalibrationPage::CreateWaveformArea() {
 #endif
 
     // MainWindow构造
-    m_wavePlot = new QWavePlotWidget(this);
+    m_wavePlot = new QWavePlotWithLegendWidget(this);
 
     QWavePlotWidget::AxisConfig cfg;
     cfg.xLabel = "时间(s)";
     cfg.leftYLabel = "流量";
     cfg.rightYLabel = "位移";
     m_wavePlot->setupAxis(cfg);
-    m_wavePlot->setMaxPointCount(3000);
-    // m_wavePlot->setTimeWindow(20.0);
 
     // 添加曲线：正弦波绑定左Y；锯齿波绑定右Y
-    idxSine_1 = m_wavePlot->addCurve("正弦波(流量)", QPen(Qt::blue,2), false);
-    idxSine_2 = m_wavePlot->addCurve("正弦波(流量)", QPen(Qt::blue,2), false);
+    idxSine_1 = m_wavePlot->addCurve("正弦波1(流量)", QPen(Qt::blue,2), false);
+    idxSine_2 = m_wavePlot->addCurve("正弦波2(流量)", QPen(Qt::black,2), false);
     idxSaw_1 = m_wavePlot->addCurve("锯齿波 1侧(位移)", QPen(Qt::red,2), true);
     idxSaw_2 = m_wavePlot->addCurve("锯齿波 2侧(位移)", QPen(Qt::green,2), true);
     main_layout->addLayout(sub_layout);
     main_layout->addWidget(m_wavePlot);
 
-    connect(&stay_time_1_, &QTimer::timeout, this, &CalibrationPage::OnDrawStayFa1);
-    connect(&stay_time_2_, &QTimer::timeout, this, &CalibrationPage::OnDrawStayFa2);
-
+    connect(this, &CalibrationPage::SendDrawStayFaInfo, this, CalibrationPage::DrawStay);
     return waveform_group_;
+}
+
+void CalibrationPage::StartControl1Loop() {
+    if(stay_thread_1_ != nullptr){
+        return; //已经启动，防止重复创建
+    }
+
+    stay_1_running_ = true;
+    stay_thread_1_ = QThread::create([this](){
+        // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
+        while(stay_1_running_) {
+            OnDrawStayFa1(); //执行你的业务函数
+            QThread::msleep(500);
+        }
+    });
+    stay_thread_1_->start();
+}
+
+void CalibrationPage::StartControl2Loop() {
+    if(stay_thread_2_ != nullptr){
+        return; //已经启动，防止重复创建
+    }
+
+    stay_2_running_ = true;
+    stay_thread_2_ = QThread::create([this](){
+        // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
+        while(stay_2_running_) {
+            OnDrawStayFa2(); //执行你的业务函数
+            QThread::msleep(500);
+        }
+    });
+    stay_thread_2_->start();
+}
+
+void CalibrationPage::StopControl1Loop() {
+    if(stay_thread_1_ == nullptr) {
+        return;
+    }
+
+    stay_1_running_ = false; //退出循环条件
+    stay_thread_1_->quit();
+    stay_thread_1_->wait(); //阻塞等待线程安全结束
+    delete stay_thread_1_;
+    stay_thread_1_ = nullptr;
+}
+
+void CalibrationPage::StopControl2Loop() {
+    if(stay_thread_2_ == nullptr) {
+        return;
+    }
+
+    stay_2_running_ = false; //退出循环条件
+    stay_thread_2_->quit();
+    stay_thread_2_->wait(); //阻塞等待线程安全结束
+    delete stay_thread_2_;
+    stay_thread_2_ = nullptr;
 }
 
 // double sineVal_1 = 10 * sin(2*M_PI*0.5*m_time);
@@ -866,25 +1066,32 @@ void CalibrationPage::OnDrawStayFa1() {
     if(is_on_work_stay_time_) {
         return;
     }
+    std::lock_guard<std::mutex> lk(m_time_mtx_);
+    DrawStayInfo info;
+    info.side = 1;
+    info.time = m_time;
+#ifdef ON_TEST_MODE
+    info.value = fmod(m_time*10,10);
+#else
+    can_frame frame;
+    bool ret = CanDriver::GetInstance()->receive(frame, 100);
+    if(!ret) {
+        std::cout << "Failed to read CAN frame!!"<<std::endl;
+        return;
+    }
+    if(frame.can_id != 0x1C0) {
+        std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
+        return;
+    }
+    if(frame.can_dlc != 8) {
+        std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
+        return;
+    }
+    uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
+    info.value = static_cast<double>(raw) * 170.0 / 1000.0;
+#endif
     m_time +=0.05;
-    // can_frame frame;
-    // bool ret = CanDriver::GetInstance()->receive(frame, 100);
-    // if(!ret) {
-    //     std::cout << "Failed to read CAN frame!!"<<std::endl;
-    //     return;
-    // }
-    // if(frame.can_id != 0x1C0) {
-    //     std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
-    //     return;
-    // }
-    // if(frame.can_dlc != 8) {
-    //     std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
-    //     return;
-    // }
-    double sawVal_1 = fmod(m_time*200,1000);
-    // uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
-    // double sawVal_1 = static_cast<double>(raw) * 170.0 / 1000.0;
-    m_wavePlot->appendData(idxSaw_1, m_time, sawVal_1);
+    SendDrawStayFaInfo(info);
 }
 
 void CalibrationPage::OnDrawStayFa2() {
@@ -893,23 +1100,43 @@ void CalibrationPage::OnDrawStayFa2() {
     if(is_on_work_stay_time_) {
         return;
     }
+    std::lock_guard<std::mutex> lk(m_time_mtx_);
+    DrawStayInfo info;
+    info.side = 2;
+    info.time = m_time;    
+#ifdef ON_TEST_MODE
+    info.value = fmod(m_time*10,10);
+#else
+    can_frame frame;
+    bool ret = CanDriver::GetInstance()->receive(frame, 100);
+    if(!ret) {
+        std::cout << "Failed to read CAN frame!!"<<std::endl;
+        return;
+    }
+    if(frame.can_id != 0x2C0) {
+        std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
+        return;
+    }
+    if(frame.can_dlc != 8) {
+        std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
+        return;
+    }
+    uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
+    info.value = static_cast<double>(raw) * 170.0 / 1000.0;
+#endif
     m_time +=0.05;
-    // can_frame frame;
-    // bool ret = CanDriver::GetInstance()->receive(frame, 100);
-    // if(!ret) {
-    //     std::cout << "Failed to read CAN frame!!"<<std::endl;
-    //     return;
-    // }
-    // if(frame.can_id != 0x2C0) {
-    //     std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
-    //     return;
-    // }
-    // if(frame.can_dlc != 8) {
-    //     std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
-    //     return;
-    // }
-    double sawVal_2 = fmod(m_time*10,0);
-    // uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
-    // double sawVal_2 = static_cast<double>(raw) * 170.0 / 1000.0;
-    m_wavePlot->appendData(idxSaw_2, m_time, sawVal_2);
+    SendDrawStayFaInfo(info);
+}
+
+void CalibrationPage::DrawStay(const DrawStayInfo &info) {
+    int control_side = info.side;
+    if(control_side != 1 && control_side != 2) {
+        return;
+    }
+    qDebug() << "DrawStay("<<control_side << "): "<< info.time << " - "<< info.value;
+    if(control_side == 1) {
+        m_wavePlot->appendData(idxSaw_1, info.time, info.value);
+    } else {
+        m_wavePlot->appendData(idxSaw_2, info.time, info.value);
+    }
 }

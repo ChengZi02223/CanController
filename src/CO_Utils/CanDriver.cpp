@@ -113,9 +113,11 @@ void CanDriver::close()
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms)
 {
-    // PrintCmd(cmd);
-    // return true;
-
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+#ifdef ON_TEST_MODE
+    PrintCmd(cmd);
+    return true;
+#else
     can_frame frame{};
     frame.can_id = cobId;
     frame.can_dlc = static_cast<uint8_t>(cmd.size()); // 不要硬写8！使用实际长度
@@ -132,9 +134,11 @@ bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, ca
     }
     receive(response, timeout_ms);
     return true;
+#endif
 }
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     can_frame dummy{};
     return ExecCmd(cobId, cmd, dummy, timeout_ms);
 }
@@ -142,6 +146,7 @@ bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, i
 // ====================== 原有发送函数不变 ======================
 bool CanDriver::send(const can_frame& frame)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     if (!isInitialized_ || !handle_) return false;
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;
@@ -164,6 +169,7 @@ bool CanDriver::send(const can_frame& frame)
 // ====================== 原有接收函数优化：增加错误文本 ======================
 bool CanDriver::receive(can_frame& frame, int timeout_ms)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     if (!isInitialized_ || !handle_) return false;
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;

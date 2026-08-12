@@ -9,6 +9,13 @@ QWavePlotWidget::QWavePlotWidget(QWidget *parent)
     setAutoFillBackground(true);
 }
 
+QVector<WaveDataPoint> QWavePlotWidget::getCurvePoints(int idx) const
+{
+    if (idx < 0 || idx >= m_curves.size())
+        return {};
+    return m_curves[idx].points;
+}
+
 void QWavePlotWidget::setupAxis(const QWavePlotWidget::AxisConfig &cfg)
 {
     m_axisCfg = cfg;
@@ -21,21 +28,37 @@ int QWavePlotWidget::addCurve(const QString &name, const QPen &pen, bool useRigh
     c.name = name;
     c.pen = pen;
     c.useRightY = useRightY;
+    c.visible = true;
     m_curves.append(c);
     update();
     return m_curves.size()-1;
 }
 
+QString QWavePlotWidget::curveName(int idx) const
+{
+    if(idx <0 || idx >= m_curves.size()) return "";
+    return m_curves[idx].name;
+}
+
+QPen QWavePlotWidget::curvePen(int idx) const
+{
+    if(idx <0 || idx >= m_curves.size()) return QPen(Qt::black);
+    return m_curves[idx].pen;
+}
+
 void QWavePlotWidget::appendData(int curveIndex, double time, double value)
 {
     if(curveIndex <0 || curveIndex >= m_curves.size()) return;
-
     auto& curve = m_curves[curveIndex];
+    bool wasEmpty = curve.points.isEmpty();
     curve.points.push_back(WaveDataPoint(time, value));
-
     while(curve.points.size() > m_maxPoints)
     {
         curve.points.removeFirst();
+    }
+    if (wasEmpty && !curve.points.isEmpty())
+    {
+        emit sigCurveFirstData(curveIndex);
     }
     update();
 }
@@ -78,7 +101,29 @@ void QWavePlotWidget::setAutoY(bool enable)
     m_autoY = enable;
 }
 
-// t范围固定 [0 , tMaxView]，0映射到绘图区最左侧
+void QWavePlotWidget::setCurveVisible(int curveIndex, bool visible)
+{
+    if(curveIndex >=0 && curveIndex < m_curves.size())
+    {
+        m_curves[curveIndex].visible = visible;
+        update();
+    }
+}
+
+bool QWavePlotWidget::isCurveVisible(int curveIndex) const
+{
+    if(curveIndex <0 || curveIndex >= m_curves.size())
+        return false;
+    return m_curves[curveIndex].visible;
+}
+
+void QWavePlotWidget::setAllCurveVisible(bool visible)
+{
+    for(auto& crv : m_curves)
+        crv.visible = visible;
+    update();
+}
+
 double QWavePlotWidget::timeToX(double t, double tMaxView, double plotWidth)
 {
     if(tMaxView <= 1e-9) return m_marginLeft;
@@ -113,7 +158,6 @@ void QWavePlotWidget::calcDataRange(double &tLatest, double &leftMin, double &le
     tLatest = 0.0;
     leftMin = 1e20; leftMax = -1e20;
     rightMin =1e20; rightMax =-1e20;
-
     for(auto& crv : m_curves)
     {
         for(auto& p : crv.points)
@@ -151,11 +195,9 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     double leftMin, leftMax, rightMin, rightMax;
     calcDataRange(tLatest, leftMin, leftMax, rightMin, rightMax);
 
-    // X显示范围：固定起点0；终点取最新时间，但是不超过窗口
     double tViewMax = tLatest;
-    // if(tViewMax > m_timeWindow) {
-    //     tViewMax = m_timeWindow;
-    // }
+    if(tViewMax > m_timeWindow)
+        tViewMax = m_timeWindow;
 
     if(m_autoY)
     {
@@ -173,7 +215,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
 
     painter.drawRect(m_marginLeft, m_marginTop, plotW, plotH);
 
-    // ========= X轴刻度：0在最左侧，向右增大 =========
+    // X轴
     painter.setPen(QPen(Qt::black,1));
     auto xTicks = genTicks(0.0, tViewMax, 6);
     for(double tick : xTicks)
@@ -182,9 +224,9 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.drawLine(QPointF(x, m_marginTop+plotH), QPointF(x, m_marginTop+plotH+6));
         painter.drawText(QRectF(x-25, m_marginTop+plotH+8,50,20), Qt::AlignHCenter, QString::number(tick, 'f',1));
     }
-    painter.drawText(QRect(m_marginLeft, h - m_marginBottom, plotW,30), Qt::AlignHCenter, m_axisCfg.xLabel);
+    painter.drawText(QRect(m_marginLeft, h - m_marginBottom + 5, plotW,30), Qt::AlignHCenter, m_axisCfg.xLabel);
 
-    // ========= 左Y轴 =========
+    // 左Y
     auto leftYTicks = genTicks(m_leftYMin, m_leftYMax, 6);
     for(double tick : leftYTicks)
     {
@@ -194,7 +236,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     }
     painter.drawText(QRect(2, m_marginTop, m_marginLeft-10, plotH), Qt::AlignVCenter|Qt::AlignRight, m_axisCfg.leftYLabel);
 
-    // ========= 右Y轴 =========
+    // 右Y
     auto rightYTicks = genTicks(m_rightYMin, m_rightYMax,6);
     for(double tick : rightYTicks)
     {
@@ -204,7 +246,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     }
     painter.drawText(QRect(w-m_marginRight+8, m_marginTop, m_marginRight-10, plotH), Qt::AlignVCenter, m_axisCfg.rightYLabel);
 
-    // 网格
+    //网格
     painter.setPen(QPen(QColor(210,210,210),1,Qt::DotLine));
     for(double tick : xTicks)
     {
@@ -217,34 +259,26 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.drawLine(QPointF(m_marginLeft,y), QPointF(m_marginLeft+plotW, y));
     }
 
-    // ========= 绘制曲线 =========
+    //绘制曲线，跳过不可见
     for(auto& crv : m_curves)
     {
-        if(crv.points.size() <2) continue;
+        if(!crv.visible || crv.points.size() <2) continue;
         painter.setPen(crv.pen);
-
         QPointF prevPt;
         bool first = true;
         for(auto& dp : crv.points)
         {
-            // 只绘制0 ~ tViewMax范围内的数据
             if(dp.t < 0 || dp.t > tViewMax) continue;
-
             double x = timeToX(dp.t, tViewMax, plotW);
             double y;
             if(crv.useRightY)
-            {
                 y = valueToY(dp.val, m_rightYMin, m_rightYMax, plotH);
-            }
             else
-            {
                 y = valueToY(dp.val, m_leftYMin, m_leftYMax, plotH);
-            }
+
             QPointF curr(x,y);
             if(!first)
-            {
                 painter.drawLine(prevPt, curr);
-            }
             prevPt = curr;
             first = false;
         }

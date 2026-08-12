@@ -53,7 +53,12 @@ const std::array<uint8_t, 8> SDO_WRITE_PID_2_D_CMD = {0x23, 0x90, 0x62, 0x03, 0x
 const std::vector<uint8_t> SDO_STEP_MODE_CMD = {0x2F, 0x05, 0x63, 0x01, 0x00, 0x00, 0x00, 0x00};
 // 斜坡模式 2F 05 63 01 01 00 00 00
 const std::vector<uint8_t> SDO_RAMP_MODE_CMD = {0x2F, 0x05, 0x63, 0x01, 0x01, 0x00, 0x00, 0x00};  
+// 配置斜坡
+// 伸出激活=500ms 2B 06 63 01 F4 01 00 00
+const std::vector<uint8_t> SDO_SET_RAMP_EXTEND_TIME_CMD = {0x2B, 0x06, 0x63, 0x01, 0xF4, 0x01, 0x00, 0x00}; 
+// 缩回去激活=200ms 2B 06 63 04 C8 00 00 00
+const std::vector<uint8_t> SDO_SET_RAMP_RETRACT_TIME_CMD = {0x2B, 0x06, 0x63, 0x01, 0xC8, 0x00, 0x00, 0x00}; 
 
 /// NMT状态
 const std::vector<uint8_t> NMT_READ_VALUE_CMD = {0x01, 0x40};     //接收0x1c0和0x2c0的Byte2-3代表位移（形成位移曲线）
-const std::vector<uint8_t> NMT_CLOSE_READ_CMD = {0x00, 0x40};     //停止接收位移（关阀的时候使用）
+const std::vector<uint8_t> NMT_CLOSE_READ_CMD = {0x02, 0x40};     //停止接收位移（关阀的时候使用）

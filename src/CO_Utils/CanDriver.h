@@ -5,6 +5,7 @@
 #include <vector>
 #include <windows.h>
 #include <PCANBasic.h>
+#include <mutex>
 
 // 自定义 CAN 帧结构 (兼容 Linux can_frame 格式)
 struct can_frame {
@@ -56,6 +57,7 @@ private:
     CanDriver();
     ~CanDriver();
 
+    std::recursive_mutex m_io_mtx_;
     void* handle_;
     bool isInitialized_;
 };

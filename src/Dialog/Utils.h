@@ -6,6 +6,8 @@
 #include <QDebug>
 #include <iostream>
 
+// #define ON_TEST_MODE
+
 // 提取响应中指定字节数据
 inline uint16_t ExtractFromVectorData(const std::vector<uint8_t>& data, int byte1, int byte2) {
     // 小端序：前字节为低字节，后字节为高字节
