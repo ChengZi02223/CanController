@@ -7,7 +7,6 @@
 #include <iostream>
 
 // #define ON_TEST_MODE
-
 // 提取响应中指定字节数据
 inline uint16_t ExtractFromVectorData(const std::vector<uint8_t>& data, int byte1, int byte2) {
     // 小端序：前字节为低字节，后字节为高字节
@@ -48,12 +47,18 @@ static std::vector<uint8_t> SetPIDCMDValue(const std::array<uint8_t, 8> command,
 }
 
 
-static void PrintCmd(const std::vector<uint8_t> &cmd, std::string prefix = "") {
-    std::cout << prefix << " cmd: ";
-    for (auto byte : cmd) {
-        std::cout << QString("0x%1").arg(byte, 2, 16, QChar('0')).toUpper().toStdString() << " ";
+static void PrintCmd(const uint32_t cobId, const std::vector<uint8_t> &cmd, QString prefix = "cmd") {
+    // std::cout << prefix << "(" << QString("0x%1").arg(cobId, 2, 16, QChar('0')).toUpper().toStdString() << "): ";
+    // for (auto byte : cmd) {
+    //     std::cout << QString("%1").arg(byte, 2, 16, QChar('0')).toUpper().toStdString() << " ";
+    // }
+    // std::cout << std::endl;
+    QString hexPayload;
+    for (auto byte : cmd)
+    {
+        hexPayload += QString("%1 ").arg(byte,2,16,QLatin1Char('0')).toUpper();
     }
-    std::cout << std::endl;
+    qDebug().noquote() << prefix << "(0x" <<QString("%1):").arg(cobId,4,16,QLatin1Char('0')).toUpper() << hexPayload;
 }
 
 static bool CheckAnswerHead(const uint8_t data[8], const std::vector<uint8_t> &head) {

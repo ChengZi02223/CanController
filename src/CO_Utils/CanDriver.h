@@ -24,6 +24,12 @@ struct CanChannelInfo
     bool isFDSupport;          // 是否支持CAN FD
 };
 
+struct CanCmdItem
+{
+    uint32_t cobId;
+    std::vector<uint8_t> cmd;
+};
+
 class CanDriver {
 public:
     static CanDriver* GetInstance() {
@@ -44,6 +50,7 @@ public:
 
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms = -1);
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
+    bool ExecCmds(const std::vector<CanCmdItem>& cmdList);
     // 经典CAN收发（原有逻辑保留）
     bool send(const can_frame& frame);
     bool receive(can_frame& frame, int timeout_ms = -1);

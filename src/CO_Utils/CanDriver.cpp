@@ -114,8 +114,8 @@ void CanDriver::close()
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms)
 {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
-    PrintCmd(cmd);
     return true;
 #else
     can_frame frame{};
@@ -141,6 +141,44 @@ bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, i
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     can_frame dummy{};
     return ExecCmd(cobId, cmd, dummy, timeout_ms);
+}
+
+bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
+{
+    // 整个批量发送全程持有互斥锁，保证多条报文连续输出，不被其他ExecCmd抢占
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+
+    for (const auto& item : cmdList)
+    {
+        const uint32_t cobId = item.cobId;
+        const std::vector<uint8_t>& cmd = item.cmd;
+
+        // 打印指令，复用原有打印逻辑
+        PrintCmd(cobId, cmd, "ExecCmds: ");
+#ifndef ON_TEST_MODE
+        can_frame frame{};
+        frame.can_id = cobId;
+        // DLC取实际长度，CAN最大8字节
+        const size_t copyLen = std::min(cmd.size(), sizeof(frame.data));
+        frame.can_dlc = static_cast<uint8_t>(copyLen);
+        std::memcpy(frame.data, cmd.data(), copyLen);
+
+        // 扩展帧标志：大于0x7FF开启EFF
+        if (frame.can_id > 0x7FF)
+        {
+            frame.can_id |= CAN_EFF_FLAG;
+        }
+
+        // 发送失败直接返回false，不再继续发送剩下的报文
+        if (!send(frame))
+        {
+            return false;
+        }
+#endif
+    }
+
+    // 全部报文发送完成
+    return true;
 }
 
 // ====================== 原有发送函数不变 ======================

@@ -436,7 +436,7 @@ void CanConfigWin::onReceiveTimer()
         }
         twReceive->setItem(row, 3, new QTableWidgetItem(dataStr.trimmed()));
         twReceive->setItem(row, 4, new QTableWidgetItem("STD"));
-        twReceive->scrollToBottom();
+        // twReceive->scrollToBottom();
         if (twReceive->rowCount() > 1000) {
             twReceive->removeRow(0);
         }

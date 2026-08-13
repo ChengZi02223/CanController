@@ -11,6 +11,8 @@
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
+enum LoopMode { kOpenLoop, kClosedLoop };
+
 struct DrawStayInfo {
     int side; // 1 | 2 侧
     double time; // 时间
@@ -46,6 +48,8 @@ private:
     QWidget* CreateWaveformArea();
 
     bool IsOnSideControl1();
+
+    void ChangeLoopMode(LoopMode mode);
 
     // 开环
     void StartControl1Loop();
@@ -98,6 +102,8 @@ private:
     QLineEdit* cycle_count_edit_ = nullptr;
     QLineEdit* neutral_time_edit_ = nullptr;
     QLineEdit* work_time_edit_ = nullptr;
+
+    LoopMode cur_loop_mode_ = kOpenLoop; // 当前模式： 开环 | 闭环
     // 开环循环动作线程
     bool stay_1_running_ = false;
     QThread *stay_thread_1_ = nullptr;
@@ -136,10 +142,6 @@ private:
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
 
-    QTimer stay_time_1_;
-    QTimer stay_time_2_;
-    QTimer flow_time_1_;
-    QTimer flow_time_2_;
     QWavePlotWithLegendWidget* m_wavePlot = nullptr;
     int idxSine_1;
     int idxSine_2;
