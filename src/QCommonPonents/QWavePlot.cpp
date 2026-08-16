@@ -1,9 +1,10 @@
 #include "QWavePlot.h"
 #include <algorithm>
 #include <QFont>
+#include <QWheelEvent>
 
 QWavePlotWidget::QWavePlotWidget(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent), m_viewTimeOffset(0.0), m_followLatest(true)
 {
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
@@ -80,6 +81,10 @@ void QWavePlotWidget::clearAll()
         c.points.clear();
     }
     update();
+// 清空数据同时重置滚动偏移、恢复自动跟随
+    m_viewTimeOffset = 0.0;
+    m_followLatest = true;
+    update();
 }
 
 void QWavePlotWidget::setLeftYRange(double min, double max)
@@ -124,11 +129,21 @@ void QWavePlotWidget::setAllCurveVisible(bool visible)
     update();
 }
 
-double QWavePlotWidget::timeToX(double t, double tMaxView, double plotWidth)
+// double QWavePlotWidget::timeToX(double t, double tMaxView, double plotWidth)
+// {
+//     if(tMaxView <= 1e-9) return m_marginLeft;
+//     return m_marginLeft + (t / tMaxView) * plotWidth;
+// }
+
+double QWavePlotWidget::timeToX(double t, double tViewMin, double tViewMax, double plotWidth)
 {
-    if(tMaxView <= 1e-9) return m_marginLeft;
-    return m_marginLeft + (t / tMaxView) * plotWidth;
+    double viewSpan = tViewMax - tViewMin;
+    if (viewSpan <= 1e-9)
+        return m_marginLeft;
+    double rel = (t - tViewMin) / viewSpan;
+    return m_marginLeft + rel * plotWidth;
 }
+
 
 double QWavePlotWidget::valueToY(double val, double yMin, double yMax, int plotHeight)
 {
@@ -185,7 +200,6 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     QFont font = painter.font();
     font.setPointSize(9);
     painter.setFont(font);
-
     int w = width();
     int h = height();
     int plotW = w - m_marginLeft - m_marginRight;
@@ -195,9 +209,10 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     double leftMin, leftMax, rightMin, rightMax;
     calcDataRange(tLatest, leftMin, leftMax, rightMin, rightMax);
 
-    double tViewMax = tLatest;
-    if(tViewMax > m_timeWindow)
-        tViewMax = m_timeWindow;
+    // ======== 新增：计算当前可视10秒窗口 ========
+    double viewMin, viewMax;
+    getViewTimeRange(tLatest, viewMin, viewMax);
+    // ===========================================
 
     if(m_autoY)
     {
@@ -213,20 +228,21 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         }
     }
 
+    // 绘制外框
     painter.drawRect(m_marginLeft, m_marginTop, plotW, plotH);
 
-    // X轴
+    // ========= X轴（使用viewMin ~ viewMax） =========
     painter.setPen(QPen(Qt::black,1));
-    auto xTicks = genTicks(0.0, tViewMax, 6);
+    auto xTicks = genTicks(viewMin, viewMax, 6);
     for(double tick : xTicks)
     {
-        double x = timeToX(tick, tViewMax, plotW);
+        double x = timeToX(tick, viewMin, viewMax, plotW);
         painter.drawLine(QPointF(x, m_marginTop+plotH), QPointF(x, m_marginTop+plotH+6));
         painter.drawText(QRectF(x-25, m_marginTop+plotH+8,50,20), Qt::AlignHCenter, QString::number(tick, 'f',1));
     }
     painter.drawText(QRect(m_marginLeft, h - m_marginBottom + 5, plotW,30), Qt::AlignHCenter, m_axisCfg.xLabel);
 
-    // 左Y
+    // 左Y轴
     auto leftYTicks = genTicks(m_leftYMin, m_leftYMax, 6);
     for(double tick : leftYTicks)
     {
@@ -236,7 +252,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     }
     painter.drawText(QRect(2, m_marginTop, m_marginLeft-10, plotH), Qt::AlignVCenter|Qt::AlignRight, m_axisCfg.leftYLabel);
 
-    // 右Y
+    // 右Y轴
     auto rightYTicks = genTicks(m_rightYMin, m_rightYMax,6);
     for(double tick : rightYTicks)
     {
@@ -246,11 +262,11 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     }
     painter.drawText(QRect(w-m_marginRight+8, m_marginTop, m_marginRight-10, plotH), Qt::AlignVCenter, m_axisCfg.rightYLabel);
 
-    //网格
+    // 网格线
     painter.setPen(QPen(QColor(210,210,210),1,Qt::DotLine));
     for(double tick : xTicks)
     {
-        double x = timeToX(tick, tViewMax, plotW);
+        double x = timeToX(tick, viewMin, viewMax, plotW);
         painter.drawLine(QPointF(x,m_marginTop), QPointF(x, m_marginTop+plotH));
     }
     for(double tick : leftYTicks)
@@ -259,7 +275,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.drawLine(QPointF(m_marginLeft,y), QPointF(m_marginLeft+plotW, y));
     }
 
-    //绘制曲线，跳过不可见
+    // 绘制曲线（只渲染 [viewMin, viewMax] 区间内的点）
     for(auto& crv : m_curves)
     {
         if(!crv.visible || crv.points.size() <2) continue;
@@ -268,14 +284,16 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         bool first = true;
         for(auto& dp : crv.points)
         {
-            if(dp.t < 0 || dp.t > tViewMax) continue;
-            double x = timeToX(dp.t, tViewMax, plotW);
+            // 过滤不在当前可视窗口的点
+            if(dp.t < viewMin || dp.t > viewMax)
+                continue;
+
+            double x = timeToX(dp.t, viewMin, viewMax, plotW);
             double y;
             if(crv.useRightY)
                 y = valueToY(dp.val, m_rightYMin, m_rightYMax, plotH);
             else
                 y = valueToY(dp.val, m_leftYMin, m_leftYMax, plotH);
-
             QPointF curr(x,y);
             if(!first)
                 painter.drawLine(prevPt, curr);
@@ -283,4 +301,67 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
             first = false;
         }
     }
+}
+
+
+void QWavePlotWidget::resetViewFollowLatest()
+{
+    m_viewTimeOffset = 0.0;
+    m_followLatest = true;
+    update();
+}
+
+
+void QWavePlotWidget::getViewTimeRange(double tLatest, double &viewMin, double &viewMax)
+{
+    if (m_followLatest)
+    {
+        // 自动跟随：窗口永远是最新10秒
+        viewMax = tLatest;
+        viewMin = tLatest - m_timeWindow;
+    }
+    else
+    {
+        // 手动滚动偏移：窗口整体左移 m_viewTimeOffset 秒
+        viewMax = tLatest - m_viewTimeOffset;
+        viewMin = viewMax - m_timeWindow;
+    }
+    // 边界保护：最小时间不能小于0
+    if (viewMin < 0.0)
+    {
+        viewMin = 0.0;
+        viewMax = viewMin + m_timeWindow;
+    }
+}
+
+void QWavePlotWidget::wheelEvent(QWheelEvent *event)
+{
+    // delta>0 滚轮向上(往左翻历史)；delta<0 滚轮向下(往右回最新)
+    int delta = event->angleDelta().y();
+    if (delta == 0)
+    {
+        QWidget::wheelEvent(event);
+        return;
+    }
+    // 只要滚动，关闭自动跟随
+    m_followLatest = false;
+
+    if (delta > 0)
+    {
+        // 上滚：向左查看更早数据，偏移增加
+        m_viewTimeOffset += m_scrollStepSec;
+    }
+    else
+    {
+        // 下滚：向右靠近最新，偏移减少
+        m_viewTimeOffset -= m_scrollStepSec;
+        // 偏移不能小于0，小于0说明已经回到最新区间
+        if (m_viewTimeOffset <= 0.0)
+        {
+            m_viewTimeOffset = 0.0;
+            m_followLatest = true; // 回到末尾恢复自动跟随
+        }
+    }
+    update();
+    event->accept();
 }

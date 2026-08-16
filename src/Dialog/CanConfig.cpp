@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
+#include <QScrollBar>
 
 CanConfigWin::CanConfigWin(QWidget *parent)
     : QMainWindow(parent), canReady(false)
@@ -15,7 +16,7 @@ CanConfigWin::CanConfigWin(QWidget *parent)
     setupUI();
     receiveTimer = new QTimer(this);
     connect(receiveTimer, &QTimer::timeout, this, &CanConfigWin::onReceiveTimer);
-    receiveTimer->start(50);
+    // receiveTimer->start(50);
 }
 
 CanConfigWin::~CanConfigWin()
@@ -158,7 +159,11 @@ void CanConfigWin::setupUI()
     btnSend->setFixedSize(100, 30);
     btnSend->setObjectName("SendBtn");
     btnSend->setFixedWidth(150);
+#ifdef ON_TEST_MODE
+    btnSend->setEnabled(true);
+#else
     btnSend->setEnabled(false);
+#endif
     sendLayout->addWidget(btnSend, 1, Qt::AlignRight);
     sendLayout->addStretch();
 
@@ -169,6 +174,19 @@ void CanConfigWin::setupUI()
     twReceive->setHorizontalHeaderLabels({"Time", "ID (Hex)", "DLC", "Data", "Type"});
     twReceive->horizontalHeader()->setStretchLastSection(true);
     recvLayout->addWidget(twReceive);
+
+    auto stop_btn = new QPushButton("Stop");
+    stop_btn->setFixedSize(130, 30);
+    stop_btn->setCheckable(true);
+    auto save_btn = new QPushButton("Save");
+    save_btn->setFixedSize(130, 30);
+    save_btn->setEnabled(false);
+
+    QHBoxLayout *btn_layout = new QHBoxLayout();
+    btn_layout->addStretch();
+    btn_layout->addWidget(stop_btn, 0, Qt::AlignRight);
+    btn_layout->addWidget(save_btn, 0, Qt::AlignRight);
+    recvLayout->addLayout(btn_layout);
 
     testMainLayout->addWidget(sendGroup, 1);
     testMainLayout->addWidget(recvGroup, 2);
@@ -185,6 +203,18 @@ void CanConfigWin::setupUI()
     connect(btnSend, &QPushButton::clicked, this, &CanConfigWin::onSend);
     connect(add_cmd_btn, &QPushButton::clicked, this, &CanConfigWin::onAddCmd);
     connect(delete_cmd_btn, &QPushButton::clicked, this, &CanConfigWin::onDeleteCmd);
+    connect(save_btn, &QPushButton::clicked, this, &CanConfigWin::onExportTxt);
+    connect(stop_btn, &QPushButton::clicked, this, [this, save_btn](bool checked) {
+        on_test_ = checked;
+        save_btn->setEnabled(checked);
+#ifdef ON_TEST_MODE
+        if(!on_test_) {
+            receiveTimer->start(50);
+        } else {
+            receiveTimer->stop();
+        }
+#endif
+    });
 
     connect(sendOneCmdGroup, &QGroupBox::toggled, this, [=](bool checked){
         if(checked){
@@ -421,9 +451,21 @@ void CanConfigWin::SendData(uint32_t id, uint8_t dlc, QString data) {
 
 void CanConfigWin::onReceiveTimer()
 {
+#ifdef ON_TEST_MODE
+    can_frame frame = {
+        0x123,          // can_id
+        8,              // can_dlc，实际使用4个字节
+        {0x11,0x22,0x33,0x44,0x09,0x92,0x00,0x00}  // data[8]，必须写满8个或者用{}
+    };
+#else
     if (!canReady) return;
     can_frame frame;
+#endif
+    QScrollBar* vBar = twReceive->verticalScrollBar();
+    bool needAutoScroll = (vBar->value() >= vBar->maximum() - 2);
+#ifndef ON_TEST_MODE
     while (CanDriver::GetInstance()->receive(frame, 0)) {
+#endif
         int row = twReceive->rowCount();
         twReceive->insertRow(row);
         QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
@@ -436,11 +478,10 @@ void CanConfigWin::onReceiveTimer()
         }
         twReceive->setItem(row, 3, new QTableWidgetItem(dataStr.trimmed()));
         twReceive->setItem(row, 4, new QTableWidgetItem("STD"));
-        // twReceive->scrollToBottom();
-        if (twReceive->rowCount() > 1000) {
-            twReceive->removeRow(0);
-        }
+#ifndef ON_TEST_MODE
     }
+#endif
+    if(needAutoScroll) twReceive->scrollToBottom();
 }
 
 void CanConfigWin::logMessage(const QString &msg, bool isError)
@@ -463,4 +504,52 @@ TPCANHandle CanConfigWin::GetSelectedChannelHandle() const {
         }
     }
     return PCAN_NONEBUS;
+}
+
+void CanConfigWin::onExportTxt()
+{
+    // 弹出保存文件对话框，选择保存位置
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        tr("保存CAN接收记录"),
+        QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + "_can_log.txt",
+        tr("Text Files (*.txt);;All Files (*)")
+    );
+
+    if(filePath.isEmpty()){
+        // 用户点取消，直接返回
+        return;
+    }
+
+    QFile file(filePath);
+    // 文本模式，换行使用本地格式
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, tr("错误"), tr("文件打开失败：%1").arg(file.errorString()));
+        return;
+    }
+
+    QTextStream out(&file);
+    // 写入表头，用\t制表符分隔，方便后续Excel直接打开
+    out << "Time\tID(Hex)\tDLC\tData\tType\n";
+
+    int rowCount = twReceive->rowCount();
+    //遍历表格全部行
+    for(int row = 0; row < rowCount; row++)
+    {
+        QString timeVal  = twReceive->item(row,0) ? twReceive->item(row,0)->text() : "";
+        QString idVal    = twReceive->item(row,1) ? twReceive->item(row,1)->text() : "";
+        QString dlcVal   = twReceive->item(row,2) ? twReceive->item(row,2)->text() : "";
+        QString dataVal  = twReceive->item(row,3) ? twReceive->item(row,3)->text() : "";
+        QString typeVal  = twReceive->item(row,4) ? twReceive->item(row,4)->text() : "";
+
+        out << timeVal << "\t"
+            << idVal   << "\t"
+            << dlcVal  << "\t"
+            << dataVal << "\t"
+            << typeVal << "\n";
+    }
+
+    file.close();
+    QMessageBox::information(this, tr("完成"), tr("共导出 %1 条记录").arg(rowCount));
 }

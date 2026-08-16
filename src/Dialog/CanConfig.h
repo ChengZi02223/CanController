@@ -40,6 +40,8 @@ private slots:
     void onReceiveTimer();
     void onChangeMode();
 
+    void onExportTxt();
+
 private:
     explicit CanConfigWin(QWidget *parent = nullptr);
     ~CanConfigWin();
@@ -74,6 +76,7 @@ private:
     QTimer      *receiveTimer;
     bool        canReady;
     std::vector<CanChannelInfo> channelList;
+    bool on_test_ = false;
 };
 
 #endif //_CAN_CONFIG_WIN_H_

@@ -7,6 +7,7 @@
 #include <thread>
 #include <atomic>
 #include <iostream>
+#include <QDateTime>
 
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
@@ -149,6 +150,7 @@ private:
     int idxSaw_2;
     std::mutex m_time_mtx_;
     double m_time = 0.0;
+    QDateTime m_time_;
     // WavePlotTool* m_waveTool{nullptr};
     // QCPGraph* m_graphSine{nullptr};    // 正弦波 绑定左Y（流量）
     // QCPGraph* m_graphSaw{nullptr};     // 锯齿波 绑定右Y（位移）

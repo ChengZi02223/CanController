@@ -5,6 +5,7 @@
 #include <vector>
 #include "can_cmd.h"
 #include "Utils.h"
+#include <QDateTime>
 
 CanDriver::CanDriver()
     : handle_(nullptr), isInitialized_(false)
@@ -208,25 +209,46 @@ bool CanDriver::send(const can_frame& frame)
 bool CanDriver::receive(can_frame& frame, int timeout_ms)
 {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-    if (!isInitialized_ || !handle_) return false;
+
+    if (!isInitialized_ || !handle_)
+    {
+        return false;
+    }
+
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;
     TPCANTimestamp ts;
-    TPCANStatus status = CAN_Read(pcanHandle, &msg, &ts);
-    if (status == PCAN_ERROR_QRCVEMPTY) {
-        if (timeout_ms > 0) Sleep(timeout_ms);
-        return false;
-    } else if (status != PCAN_ERROR_OK) {
-        char errText[256] = {0};
-        CAN_GetErrorText(status, 0x09, errText);
-        std::cerr << "接收异常:" << errText << " 错误码:0x" << std::hex << status << std::endl;
-        return false;
-    }
-    frame.can_id  = msg.ID;
-    frame.can_dlc = msg.LEN;
-    std::memcpy(frame.data, msg.DATA, 8);
-    return true;
+
+    qint64 start = QDateTime::currentMSecsSinceEpoch();
+    do
+    {
+        TPCANStatus status = CAN_Read(pcanHandle, &msg, &ts);
+        if (status == PCAN_ERROR_OK)
+        {
+            // 读到有效报文，填充输出frame
+            frame.can_id = msg.ID;
+            frame.can_dlc = msg.LEN;
+            // 按真实DLC拷贝，剩余字节清零，避免栈垃圾
+            memset(frame.data, 0, sizeof(frame.data));
+            std::memcpy(frame.data, msg.DATA, msg.LEN);
+            return true;
+        }
+        else if (status != PCAN_ERROR_QRCVEMPTY)
+        {
+            // 不是队列为空，是真实硬件错误
+            char errText[256] = {0};
+            CAN_GetErrorText(status, 0x09, errText);
+            std::cerr << "接收异常:" << errText << " 错误码:0x" << std::hex << status << std::endl;
+            return false;
+        }
+        // status == PCAN_ERROR_QRCVEMPTY，队列空，小sleep让出CPU
+        Sleep(2);
+    } while ((QDateTime::currentMSecsSinceEpoch() - start) < timeout_ms);
+
+    // 超时
+    return false;
 }
+
 
 // ====================== 可选：CAN FD 初始化/收发（适配新款FD硬件） ======================
 bool CanDriver::initFD(TPCANHandle channelHandle, const char* fdBitrateStr)

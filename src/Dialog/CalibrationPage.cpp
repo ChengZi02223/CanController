@@ -163,7 +163,7 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
         StopControl1Loop();
         return;
     } else {
-        ChangeLoopMode(kOpenLoop);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD, 200);
     }
     
     bool ok = false;
@@ -196,7 +196,8 @@ void CalibrationPage::OnControl2BtnClicked(bool checked) {
         StopControl2Loop();
         return;
     } else {
-        ChangeLoopMode(kOpenLoop);
+        // ChangeLoopMode(kOpenLoop);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD, 200);
     }
     
     bool ok = false;
@@ -222,7 +223,8 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
         CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
         return;
     } else {
-        ChangeLoopMode(kOpenLoop);
+        // ChangeLoopMode(kOpenLoop);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD, 200);
     }
 
     StartOpenLoop();
@@ -512,6 +514,7 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     auto motion_btn = new QPushButton("往复动作");
     motion_btn->setObjectName("CycleBtn");
     motion_btn->setFixedHeight(30);
+    motion_btn->setCheckable(true);
     auto save_btn = new QPushButton("保存PID参数");
     save_btn->setObjectName("CycleBtn");
     save_btn->setFixedHeight(30);
@@ -579,9 +582,12 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
         }
         return;
     } else {
-        ChangeLoopMode(kClosedLoop);
-        // 阶跃模式
-        driver->ExecCmd(SDO_COB_ID, SDO_STEP_MODE_CMD, 200);
+        // ChangeLoopMode(kClosedLoop);
+        std::vector<CanCmdItem> cmds = {
+            {SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD},      // 闭环模式
+            {SDO_COB_ID, SDO_STEP_MODE_CMD}            // 阶跃模式
+        };
+        driver->ExecCmds(cmds);
         SetPIDParam();
     }
     
@@ -634,8 +640,9 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
         }
         return;
     } else {
-        ChangeLoopMode(kClosedLoop);// 闭环模式
+        // ChangeLoopMode(kClosedLoop);// 闭环模式
         std::vector<CanCmdItem> cmds = {
+            {SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD},      // 闭环模式
             {SDO_COB_ID, SDO_RAMP_MODE_CMD},            // 阶跃模式
             {SDO_COB_ID, SDO_SET_RAMP_EXTEND_TIME_CMD}, // 伸出激活=500ms
             {SDO_COB_ID, SDO_SET_RAMP_RETRACT_TIME_CMD} // 缩回激活=200ms
@@ -670,7 +677,7 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
 }
 
 void CalibrationPage::OnPIDMotionBtnClicked() {
-    std::cout<<"OnPIDMotionBtnClicked"<<std::endl;
+    // todo
 }
 
 void CalibrationPage::OnPIDSaveBtnClicked() {
@@ -1071,7 +1078,8 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     connect(this, &CalibrationPage::SendDrawStayFaInfo, this, CalibrationPage::DrawStay);
     connect(clear_btn, &QPushButton::clicked, [this] (){
         m_wavePlot->clearAll();
-        m_time = 0;
+        m_time_ = QDateTime::currentDateTime();
+        m_time = 0.0;
     });
     return waveform_group_;
 }
@@ -1082,11 +1090,12 @@ void CalibrationPage::StartControl1Loop() {
     }
 
     stay_1_running_ = true;
+    if(!stay_2_running_) m_time_ = QDateTime::currentDateTime();
     stay_thread_1_ = QThread::create([this](){
         // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
         while(stay_1_running_) {
             OnDrawStayFa1(); //执行你的业务函数
-            QThread::msleep(500);
+            QThread::msleep(200);
         }
     });
     stay_thread_1_->start();
@@ -1099,11 +1108,12 @@ void CalibrationPage::StartControl2Loop() {
     }
 
     stay_2_running_ = true;
+    if(!stay_1_running_) m_time_ = QDateTime::currentDateTime();
     stay_thread_2_ = QThread::create([this](){
         // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
         while(stay_2_running_) {
             OnDrawStayFa2(); //执行你的业务函数
-            QThread::msleep(500);
+            QThread::msleep(200);
         }
     });
     stay_thread_2_->start();
@@ -1149,25 +1159,60 @@ void CalibrationPage::OnDrawStayFa1() {
 #ifdef ON_TEST_MODE
     info.value = fmod(m_time*10,10);
 #else
-    can_frame frame;
-    bool ret = CanDriver::GetInstance()->receive(frame, 100);
-    if(!ret) {
-        std::cout << "Failed to read CAN frame!!"<<std::endl;
+    can_frame frame{};
+    bool ret = false;
+    qint64 startMs = QDateTime::currentMSecsSinceEpoch();
+    const qint64 timeoutMs = 100;
+
+    while(true)
+    {
+        // 剩余时间
+        qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - startMs;
+        if(elapsed >= timeoutMs)
+        {
+            std::cout << "receive 100ms timeout, no 0x1C0 frame" << std::endl;
+            return;
+        }
+        // 剩余时间作为阻塞超时，不要固定写死100
+        ret = CanDriver::GetInstance()->receive(frame, static_cast<int>(timeoutMs - elapsed));
+        if(!ret)
+        {
+            std::cout << "CAN receive fail" << std::endl;
+            return;
+        }
+        // 找到目标ID才跳出循环
+        if(frame.can_id == 0x1C0)
+        {
+            break;
+        }
+        // 其他ID，继续循环接收下一条，不return
+        std::cout << "discard frame id:" << frame.can_id << std::endl;
+    }
+
+    // 到这里：一定是can_id ==0x1C0
+    if(frame.can_dlc != 8)
+    {
+        std::cout << "CAN frame data length too short:" << frame.can_dlc << std::endl;
         return;
     }
-    if(frame.can_id != 0x1C0) {
-        std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
-        return;
-    }
-    if(frame.can_dlc != 8) {
-        std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
-        return;
-    }
-    uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
-    info.value = static_cast<double>(raw) * 170.0 / 1000.0;
+
+    uint16_t raw = ExtractFromDataList(frame.data,3,2);
+
+    // ✅增加数值合理性校验，过滤乱码
+    // const uint16_t rawMin = 0;
+    // const uint16_t rawMax = 1000; // 根据实际物理范围设置
+    // if(raw < rawMin || raw > rawMax)
+    // {
+    //     std::cout << "raw value out of range! raw=" << raw << std::endl;
+    //     return;
+    // }
+    info.value = static_cast<double>(raw) *170.0 / 1000.0;
 #endif
-    m_time +=0.05;
+    auto now = QDateTime::currentDateTime();
+    int diss = m_time_.msecsTo(now);
+    m_time += static_cast<double>(diss) / 1000.0;
     SendDrawStayFaInfo(info);
+    m_time_ = QDateTime::currentDateTime();
 }
 
 void CalibrationPage::OnDrawStayFa2() {
@@ -1180,25 +1225,58 @@ void CalibrationPage::OnDrawStayFa2() {
 #ifdef ON_TEST_MODE
     info.value = fmod(m_time*10,10);
 #else
-    can_frame frame;
-    bool ret = CanDriver::GetInstance()->receive(frame, 100);
-    if(!ret) {
-        std::cout << "Failed to read CAN frame!!"<<std::endl;
+    can_frame frame{};
+    bool ret = false;
+    qint64 startMs = QDateTime::currentMSecsSinceEpoch();
+    const qint64 timeoutMs = 100;
+
+    while(true)
+    {
+        // 剩余时间
+        qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - startMs;
+        if(elapsed >= timeoutMs)
+        {
+            std::cout << "receive 100ms timeout, no 0x1C0 frame" << std::endl;
+            return;
+        }
+        // 剩余时间作为阻塞超时，不要固定写死100
+        ret = CanDriver::GetInstance()->receive(frame, static_cast<int>(timeoutMs - elapsed));
+        if(!ret)
+        {
+            std::cout << "CAN receive fail" << std::endl;
+            return;
+        }
+        // 找到目标ID才跳出循环
+        if(frame.can_id == 0x2C0)
+        {
+            break;
+        }
+        // 其他ID，继续循环接收下一条，不return
+        std::cout << "discard frame id:" << frame.can_id << std::endl;
+    }
+
+    // 到这里：一定是can_id ==0x1C0
+    if(frame.can_dlc != 8)
+    {
+        std::cout << "CAN frame data length too short:" << frame.can_dlc << std::endl;
         return;
     }
-    if(frame.can_id != 0x2C0) {
-        std::cout << "Unexpected CAN ID:" << frame.can_id<<std::endl;
-        return;
-    }
-    if(frame.can_dlc != 8) {
-        std::cout << "CAN frame data length too short:" << frame.can_dlc<<std::endl;
-        return;
-    }
-    uint16_t raw = ExtractFromDataList(frame.data, 3, 2);
-    info.value = static_cast<double>(raw) * 170.0 / 1000.0;
+
+    uint16_t raw = ExtractFromDataList(frame.data,3,2);
+
+    // ✅增加数值合理性校验，过滤乱码
+    // const uint16_t rawMin = 0;
+    // const uint16_t rawMax = 1000; // 根据实际物理范围设置
+    // if(raw < rawMin || raw > rawMax)
+    // {
+    //     std::cout << "raw value out of range! raw=" << raw << std::endl;
+    //     return;
+    // }
+    info.value = static_cast<double>(raw) *170.0 / 1000.0;
 #endif
-    m_time +=0.05;
+    m_time += static_cast<double>(m_time_.msecsTo(QDateTime::currentDateTime())) / 1000.0;
     SendDrawStayFaInfo(info);
+    m_time_ = QDateTime::currentDateTime();
 }
 
 void CalibrationPage::DrawStay(const DrawStayInfo &info) {
