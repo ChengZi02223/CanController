@@ -70,9 +70,11 @@ extern const std::vector<uint8_t> SDO_STEP_MODE_CMD;
 extern const std::vector<uint8_t> SDO_RAMP_MODE_CMD;
 // 配置斜坡
 // 伸出激活=500ms
-extern const std::vector<uint8_t> SDO_SET_RAMP_EXTEND_TIME_CMD;
-// 缩回去激活=200ms
-extern const std::vector<uint8_t> SDO_SET_RAMP_RETRACT_TIME_CMD;
+extern const std::vector<uint8_t> SDO_RAMP_EXTEND_TIME_CMD;
+extern const std::array<uint8_t, 8> SDO_SET_RAMP_EXTEND_TIME_CMD; //伸出激活： 斜坡时间
+// 缩回激活=200ms
+extern const std::vector<uint8_t> SDO_RAMP_RETRACT_TIME_CMD;
+extern const std::array<uint8_t, 8> SDO_SET_RAMP_RETRACT_TIME_CMD; //缩回激活： 斜坡时间
 
 /// NMT状态
 #define NMT_COB_ID  0x000

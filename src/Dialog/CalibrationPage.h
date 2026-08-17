@@ -59,9 +59,9 @@ private:
     void StopControl2Loop();
     void DrawStay(const DrawStayInfo &info);
 
-    bool StartOpenLoop();
-    void StopOpenLoop();
-    void ExecuteOpenLoopCycle();
+    bool StartLoopCycle();
+    void StopLoopCycle();
+    void ExecuteLoopCycle();
     int ReadCurrentStay(int side);
 
     // PID
@@ -74,11 +74,14 @@ signals:
 private slots:
     void OnControl1BtnClicked(bool checked);
     void OnControl2BtnClicked(bool checked);
+    void OnControlCur1BtnClicked(bool checked);
+    void OnControlCur2BtnClicked(bool checked);
     void OnCycleBtnClicked(bool checked);
 
+    void OnPIDSideBtnClicked();
     void OnPIDStepBtnClicked(bool checked);
     void OnPIDRampBtnClicked(bool checked);
-    void OnPIDMotionBtnClicked();
+    void OnPIDMotionBtnClicked(bool checked);
     void OnPIDSaveBtnClicked();
 
     void OnSaveCalibValueBtnCLicked();
@@ -117,6 +120,8 @@ private:
 
     QPushButton* control_1_btn_ = nullptr;
     QPushButton* control_2_btn_ = nullptr;
+    QPushButton* control_cur_1_btn_ = nullptr;
+    QPushButton* control_cur_2_btn_ = nullptr;
     QPushButton* cycle_btn_ = nullptr;
 
     QGroupBox* pid_group_ = nullptr;
@@ -128,10 +133,15 @@ private:
     QGroupBox* displacement_group_ = nullptr;
     QGroupBox* signal_group_ = nullptr;
     QGroupBox* waveform_group_ = nullptr;
-    QComboBox* side_combo_ = nullptr;
-
+    // QComboBox* side_combo_ = nullptr;
+    bool on_side_1_ = true;
+    QPushButton *side_btn_ = nullptr;
     QPushButton *step_btn_ = nullptr;
     QPushButton *ramp_btn_ = nullptr;
+    QPushButton *motion_btn_ = nullptr;
+    QPushButton *save_pid_btn_ = nullptr;
+
+    QLineEdit* target_flow_edit_ = nullptr;
 
     QTableWidget* displace_table_ = nullptr;
     QRangeSlider* range_slider_ = nullptr;

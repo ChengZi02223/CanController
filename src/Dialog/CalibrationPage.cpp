@@ -12,6 +12,20 @@
 #include <QThread>
 #include <mutex>
 
+#define kFaMaxFlow 80 // L/Min
+#ifdef ON_TEST_MODE
+    #define kCloseCycleWaitTime 2  //s
+#else
+    #define kCloseCycleWaitTime 15 //s
+#endif
+static const std::vector<double> flow_table = {1.0, 0.9, 0.5, 0.1, 0, 0, 0, 0.1, 0.5, 0.9, 1.0};
+
+inline int32_t GetTargetFlow(int i) {
+    if(i >= 0 || i < flow_table.size()) {
+        return flow_table[i] * kFaMaxFlow;
+    }
+} 
+
 CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
 
@@ -19,8 +33,14 @@ CalibrationPage::CalibrationPage(QWidget* parent)
     qRegisterMetaType<DrawStayInfo>("DrawStayInfo");
 
     connect(this, &CalibrationPage::SendOpenLoopFinished, this, [this](){
-        cycle_btn_->setChecked(false);
-        OnCycleBtnClicked(false);
+        if(cur_loop_mode_ == kOpenLoop) {
+            cycle_btn_->setChecked(false);
+            OnCycleBtnClicked(false);            
+        } else {
+            motion_btn_->setChecked(false);
+            OnPIDMotionBtnClicked(false);
+        }
+
     });
 }
 
@@ -61,21 +81,49 @@ void CalibrationPage::resizeEvent(QResizeEvent* event)  {
     displacement_group_->setFixedWidth(left_size);
     signal_group_->setFixedWidth(left_size);
     // waveform_group_->setFixedWidth(left_size);
-    int table_col_width = (left_size - 100) / 3;
+    int table_col_width = (left_size - 100) / 5;
     for(int i = 0; i < displace_table_->columnCount(); i++) {
         displace_table_->setColumnWidth(i, table_col_width);
     }
+
+    // 开环控制区
+
+    auto btn_width = table_col_width - 5;
+    output_cycle_1_edit_->setFixedWidth(btn_width);
+    output_cycle_2_edit_->setFixedWidth(btn_width);
+    cycle_count_edit_->setFixedWidth(btn_width);
+    neutral_time_edit_->setFixedWidth(btn_width);
+    work_time_edit_->setFixedWidth(btn_width);
+
+    control_1_btn_->setFixedWidth(btn_width);
+    control_2_btn_->setFixedWidth(btn_width);
+    control_cur_1_btn_->setFixedWidth(btn_width);
+    control_cur_2_btn_->setFixedWidth(btn_width);
+    cycle_btn_->setFixedWidth(btn_width);
+
+    // PID验证区
+    p_edit_->setFixedWidth(btn_width);
+    i_edit_->setFixedWidth(btn_width);
+    d_edit_->setFixedWidth(btn_width);
+    target_edit_->setFixedWidth(btn_width);
+    ramp_edit_->setFixedWidth(btn_width);
+
+    side_btn_->setFixedWidth(btn_width);
+    step_btn_->setFixedWidth(btn_width);
+    ramp_btn_->setFixedWidth(btn_width);
+    motion_btn_->setFixedWidth(btn_width);
+    save_pid_btn_->setFixedWidth(btn_width);
 }
 
 // Implementation for creating control area
 QWidget* CalibrationPage::CreateControlArea() {
-    control_group_ = new QGroupBox("开环控制指令区", this);
+    control_group_ = new QGroupBox("一/二侧电流开环", this);
     control_group_->setObjectName("ControlGroup");
 
     auto main_layout = new QVBoxLayout(control_group_);
 
-    auto output_cycle_1_label = new QLabel("1 侧输出占空比(%)");
-    auto output_cycle_2_label = new QLabel("2 侧输出占空比(%)");
+    auto output_cycle_1_label = new QLabel("位移输出占空比(%)");
+    auto output_cycle_2_label = new QLabel("电流输出占空比(%)");
     auto cycle_count_label = new QLabel("循环次数");
     auto neutral_time_label = new QLabel("中位停留时间(ms)");
     auto work_time_label = new QLabel("工作位停留时间(ms)");
@@ -93,17 +141,25 @@ QWidget* CalibrationPage::CreateControlArea() {
 
     control_1_btn_ = new QPushButton("1 侧开环控制");
     control_1_btn_->setFixedHeight(30);
-    control_1_btn_->setMinimumWidth(150);
     control_1_btn_->setObjectName("ControlBtn");
     control_1_btn_->setCheckable(true);
     control_2_btn_ = new QPushButton("2 侧开环控制");
     control_2_btn_->setFixedHeight(30);
-    control_2_btn_->setMinimumWidth(150);
     control_2_btn_->setObjectName("ControlBtn");
     control_2_btn_->setCheckable(true);
+
+    control_cur_1_btn_ = new QPushButton("1 侧电流开环控制");
+    control_cur_1_btn_->setFixedHeight(30);
+    control_cur_1_btn_->setObjectName("ControlBtn");
+    control_cur_1_btn_->setCheckable(true);
+    control_cur_2_btn_ = new QPushButton("2 侧电流开环控制");
+    control_cur_2_btn_->setFixedHeight(30);
+    control_cur_2_btn_->setMinimumWidth(150);
+    control_cur_2_btn_->setObjectName("ControlBtn");
+    control_cur_2_btn_->setCheckable(true);
+
     cycle_btn_ = new QPushButton("开环循环动作");
     cycle_btn_->setObjectName("CycleBtn");
-    cycle_btn_->setMinimumWidth(300);
     cycle_btn_->setFixedHeight(30);
     cycle_btn_->setCheckable(true);
     // cycle_btn_->setDisabled(true);
@@ -122,12 +178,16 @@ QWidget* CalibrationPage::CreateControlArea() {
     grid_layout->addWidget(work_time_edit_, 1, 4, Qt::AlignCenter);
     grid_layout->addWidget(control_1_btn_, 2, 0, Qt::AlignCenter);
     grid_layout->addWidget(control_2_btn_, 2, 1, Qt::AlignCenter);
-    grid_layout->addWidget(cycle_btn_, 2, 2, 1, 3, Qt::AlignCenter);    
+    grid_layout->addWidget(control_cur_1_btn_, 2, 2, Qt::AlignCenter);
+    grid_layout->addWidget(control_cur_2_btn_, 2, 3, Qt::AlignCenter);
+    grid_layout->addWidget(cycle_btn_, 2, 4, Qt::AlignCenter);    
 
     main_layout->addLayout(grid_layout);
 
     connect(control_1_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControl1BtnClicked);
     connect(control_2_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControl2BtnClicked);
+    connect(control_cur_1_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControlCur1BtnClicked);
+    connect(control_cur_2_btn_, &QPushButton::clicked, this, &CalibrationPage::OnControlCur2BtnClicked);
     connect(cycle_btn_, &QPushButton::clicked, this, &CalibrationPage::OnCycleBtnClicked);
 
     return control_group_;
@@ -150,16 +210,14 @@ void CalibrationPage::ChangeLoopMode(LoopMode mode) {
 // Implementation for control 1 button click
 void CalibrationPage::OnControl1BtnClicked(bool checked) {
     std::cout << "Control 1 button clicked, checked:" << checked <<std::endl;
+    cur_loop_mode_ = kOpenLoop;
     if(checked && control_2_btn_->isChecked()){
         control_2_btn_->setChecked(false);
         OnControl2BtnClicked(false);
     }
     if(!checked) {
-        std::vector<CanCmdItem> cmds = {
-            {NMT_COB_ID, NMT_CLOSE_READ_CMD},    // {0x02, 0x40}
-            {SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD}  // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
-        };
-        CanDriver::GetInstance()->ExecCmds(cmds);
+        CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 500);
         StopControl1Loop();
         return;
     } else {
@@ -182,17 +240,15 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
 
 // Implementation for control 2 button click
 void CalibrationPage::OnControl2BtnClicked(bool checked) {
+    cur_loop_mode_ = kOpenLoop;
     std::cout << "Control 2 button clicked, checked:" << checked <<std::endl;
     if(checked && control_1_btn_->isChecked()){
         control_1_btn_->setChecked(false);
         OnControl1BtnClicked(false);
     }
     if(!checked) {
-        std::vector<CanCmdItem> cmds = {
-            {NMT_COB_ID, NMT_CLOSE_READ_CMD},    // {0x02, 0x40}
-            {SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD}  // {0x2B, 0x03, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
-        };
-        CanDriver::GetInstance()->ExecCmds(cmds);
+        CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
+        CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 500);
         StopControl2Loop();
         return;
     } else {
@@ -202,7 +258,7 @@ void CalibrationPage::OnControl2BtnClicked(bool checked) {
     
     bool ok = false;
     // 1. 读取输入框文本，转数字 100 → 1000（你业务规则：百分比 ×10）
-    int percent = output_cycle_2_edit_->text().toInt(&ok);
+    int percent = output_cycle_1_edit_->text().toInt(&ok);
     if(!ok) {
         std::cout << "输入数值非法"<<std::endl;
         return;
@@ -215,11 +271,22 @@ void CalibrationPage::OnControl2BtnClicked(bool checked) {
     StartControl2Loop();
 }
 
+// 1侧流量开环控制
+void CalibrationPage::OnControlCur1BtnClicked(bool checked) {
+    cur_loop_mode_ = kOpenLoop;
+}
+
+// 2侧流量开环控制
+void CalibrationPage::OnControlCur2BtnClicked(bool checked) {
+    cur_loop_mode_ = kOpenLoop;
+}
+
 // Implementation for cycle button click
 void CalibrationPage::OnCycleBtnClicked(bool checked) {
+    cur_loop_mode_ = kOpenLoop;
     std::cout << "cycle clicked, checked:" << checked << std::endl;
     if (!checked) {
-        StopOpenLoop();
+        StopLoopCycle();
         CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
         return;
     } else {
@@ -227,10 +294,10 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
         CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD, 200);
     }
 
-    StartOpenLoop();
+    StartLoopCycle();
 }
 
-bool CalibrationPage::StartOpenLoop() {
+bool CalibrationPage::StartLoopCycle() {
     // 已经在运行，禁止重复启动
     if(is_open_running_.load()){
         return false;
@@ -240,13 +307,13 @@ bool CalibrationPage::StartOpenLoop() {
         open_loop_thread_.join();
     }
     open_loop_thread_ = std::thread([this]() {
-        ExecuteOpenLoopCycle();
+        ExecuteLoopCycle();
     });
 
     return true;
 }
 
-void CalibrationPage::StopOpenLoop() {
+void CalibrationPage::StopLoopCycle() {
     // 1.通知线程业务循环退出
     is_open_running_.store(false);
 
@@ -254,105 +321,28 @@ void CalibrationPage::StopOpenLoop() {
     if(open_loop_thread_.joinable()) {
         open_loop_thread_.join();
     }
-    // StopControl1Loop();
     OnControl1BtnClicked(false);
-    // StopControl2Loop();
     OnControl2BtnClicked(false);
 }
 
-#ifdef OLD_OPEN_LOOP
-void CalibrationPage::ExecuteOpenLoopCycle() {
-    int percent_1 = output_cycle_1_edit_->text().toInt();
-    int percent_2 = output_cycle_2_edit_->text().toInt();
-
-    int target_value_1 = percent_1 * 10; // = percent_1 / 100 * 1000;
-    int target_value_2 = percent_2 * 10; // = percent_2 / 100 * 1000;
-    int cycle_count = cycle_count_edit_->text().toInt();
-    int neutral_stay_time = neutral_time_edit_->text().toInt();
-    int work_stay_time = work_time_edit_->text().toInt();
-
-    // 循环次数
-    int loop_count = 0;
-    bool one_loop_off_1_ = false;
-    bool one_loop_off_2_ = false;
-    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
-    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
-    while(is_open_running_.load()) {
-        if(loop_count == cycle_count) {
-            break;
-        }
-        is_on_work_stay_time_ = false;
-        // 1侧开环控制
-        int saw_value = ReadCurrentStay(1);
-        // qDebug() << "stay saw1: "<< saw_value;
-        if(saw_value == 0) {
-            //如果是中位，设置目标值， 停够中位停留时间后，启动阀1、2，读取数据
-            std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
-            cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, percent_1);
-            qDebug() << "1 中位停留： " << neutral_stay_time / 1000 << "s";
-            if(!stay_1_running_) {
-                // {0x01, 0x40}
-                CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, 200);
-                StartControl1Loop();
-                continue;
-            }
-            if(one_loop_off_1_) {
-                one_loop_off_1_ = false;
-            }
-        } else if (saw_value == target_value_1) {
-            is_on_work_stay_time_ = true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
-            cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_1_VALUE_CMD, 0);
-            one_loop_off_1_ = true;
-            qDebug() << "1 工作位停留： " << work_stay_time / 1000 << "s";
-            continue;
-        } else {
-            continue;
-        }
-        // 2侧开环控制
-loop_2: 
-        saw_value = ReadCurrentStay(2);
-        // qDebug()<< "stay saw2: "<< saw_value;
-        if(saw_value == 0) {
-            //如果是中位，设置目标值， 停够中位停留时间后，启动阀1、2，读取数据
-            std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
-            cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, percent_2);
-            qDebug() << "2 中位停留： " << neutral_stay_time / 1000 << "s";
-            if(!stay_2_running_) {
-                StartControl2Loop();
-                goto loop_2;
-            }
-            if(one_loop_off_2_) {
-                one_loop_off_2_ = false;
-            }
-        } else if (saw_value == target_value_1) {
-            is_on_work_stay_time_ = true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
-            cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_WRITE_OPEN_2_VALUE_CMD, 0);
-            one_loop_off_2_ = true;
-            qDebug() << "2 工作位停留： " << work_stay_time / 1000 << "s";
-            goto loop_2;
-        } else {
-            goto loop_2;
-        }
-        loop_count++;
-        qDebug() << "-------一个循环结束-------";
+void CalibrationPage::ExecuteLoopCycle() {
+// TODO: 
+    int percent_1, percent_2, cycle_count, neutral_stay_time, work_stay_time;
+    if(cur_loop_mode_ == kOpenLoop) {
+        percent_1 = output_cycle_1_edit_->text().toInt();
+        percent_2 = output_cycle_2_edit_->text().toInt();
+        cycle_count = cycle_count_edit_->text().toInt();
+        neutral_stay_time = neutral_time_edit_->text().toInt();
+        work_stay_time = work_time_edit_->text().toInt();
+    } else {
+        percent_1 = target_edit_->text().toInt();
+        percent_2 = target_edit_->text().toInt();
+        cycle_count = 1;
+        neutral_stay_time = kCloseCycleWaitTime * 1000;
+        work_stay_time = kCloseCycleWaitTime * 1000;
     }
-    qDebug() << "loop count: "<< loop_count;
-    is_on_work_stay_time_ = false;
-    emit SendOpenLoopFinished();
-}
-#endif
-
-void CalibrationPage::ExecuteOpenLoopCycle() {
-    int percent_1 = output_cycle_1_edit_->text().toInt();
-    int percent_2 = output_cycle_2_edit_->text().toInt();
-
     int target_value_1 = percent_1 * 10; // = percent_1 / 100 * 1000;
     int target_value_2 = percent_2 * 10; // = percent_2 / 100 * 1000;
-    int cycle_count = cycle_count_edit_->text().toInt();
-    int neutral_stay_time = neutral_time_edit_->text().toInt();
-    int work_stay_time = work_time_edit_->text().toInt();
 
     // 循环次数
     int loop_count = 0;
@@ -486,6 +476,25 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     ramp_edit_ = new QLineEdit("500");
     ramp_edit_->setAlignment(Qt::AlignCenter);
 
+    side_btn_ = new QPushButton("1 侧");
+    side_btn_->setObjectName("ResponceBtn");
+    side_btn_->setFixedHeight(30);
+    step_btn_ = new QPushButton("闭环阶跃响应");
+    step_btn_->setObjectName("ResponceBtn");
+    step_btn_->setFixedHeight(30);
+    step_btn_->setCheckable(true);
+    ramp_btn_ = new QPushButton("闭环斜坡响应");
+    ramp_btn_->setObjectName("ResponceBtn");
+    ramp_btn_->setFixedHeight(30);
+    ramp_btn_->setCheckable(true);
+    motion_btn_ = new QPushButton("往复动作");
+    motion_btn_->setObjectName("CycleBtn");
+    motion_btn_->setFixedHeight(30);
+    motion_btn_->setCheckable(true);
+    save_pid_btn_ = new QPushButton("保存PID参数");
+    save_pid_btn_->setObjectName("CycleBtn");
+    save_pid_btn_->setFixedHeight(30);
+
     auto grid_layout = new QGridLayout();
 
     grid_layout->addWidget(p_label, 0, 0, Qt::AlignCenter);
@@ -498,46 +507,31 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     grid_layout->addWidget(d_edit_, 1, 2, Qt::AlignCenter);
     grid_layout->addWidget(target_edit_, 1, 3, Qt::AlignCenter);
     grid_layout->addWidget(ramp_edit_, 1, 4, Qt::AlignCenter);
-
-    auto button_layout = new QHBoxLayout();
-    side_combo_ = new QComboBox();
-    side_combo_->setFixedHeight(30);
-    side_combo_->addItems({"1侧","2侧"});
-    step_btn_ = new QPushButton("闭环阶跃响应");
-    step_btn_->setObjectName("ResponceBtn");
-    step_btn_->setFixedHeight(30);
-    step_btn_->setCheckable(true);
-    ramp_btn_ = new QPushButton("闭环斜坡响应");
-    ramp_btn_->setObjectName("ResponceBtn");
-    ramp_btn_->setFixedHeight(30);
-    ramp_btn_->setCheckable(true);
-    auto motion_btn = new QPushButton("往复动作");
-    motion_btn->setObjectName("CycleBtn");
-    motion_btn->setFixedHeight(30);
-    motion_btn->setCheckable(true);
-    auto save_btn = new QPushButton("保存PID参数");
-    save_btn->setObjectName("CycleBtn");
-    save_btn->setFixedHeight(30);
-
-    button_layout->addWidget(side_combo_);
-    button_layout->addWidget(step_btn_);
-    button_layout->addWidget(ramp_btn_);
-    button_layout->addWidget(motion_btn);
-    button_layout->addWidget(save_btn);
+    grid_layout->addWidget(side_btn_, 2, 0, Qt::AlignCenter);
+    grid_layout->addWidget(step_btn_, 2, 1, Qt::AlignCenter);
+    grid_layout->addWidget(ramp_btn_, 2, 2, Qt::AlignCenter);
+    grid_layout->addWidget(motion_btn_, 2, 3, Qt::AlignCenter);
+    grid_layout->addWidget(save_pid_btn_, 2, 4, Qt::AlignCenter);
 
     main_layout->addLayout(grid_layout);
-    main_layout->addLayout(button_layout);
 
+    connect(side_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDSideBtnClicked);
     connect(step_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDStepBtnClicked);
     connect(ramp_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDRampBtnClicked);
-    connect(motion_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDMotionBtnClicked);
-    connect(save_btn, &QPushButton::clicked, this, &CalibrationPage::OnPIDSaveBtnClicked);
+    connect(motion_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDMotionBtnClicked);
+    connect(save_pid_btn_, &QPushButton::clicked, this, &CalibrationPage::OnPIDSaveBtnClicked);
 
     return pid_group_;
 }
 
 bool CalibrationPage::IsOnSideControl1() {
-    return side_combo_->currentIndex() == 0;
+    return on_side_1_;
+}
+
+void CalibrationPage::OnPIDSideBtnClicked() {
+    on_side_1_ = !on_side_1_;
+    auto txt = on_side_1_ ? QString("1 侧") : QString("2 侧");
+    side_btn_->setText(txt);
 }
 
 void CalibrationPage::SetPIDParam() {
@@ -563,6 +557,7 @@ void CalibrationPage::SetPIDParam() {
 }
 
 void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
+    cur_loop_mode_ = kClosedLoop;
     auto driver = CanDriver::GetInstance();
     std::cout << "Step button clicked, checked:" << checked <<std::endl;
     if(checked && ramp_btn_->isChecked()){
@@ -571,13 +566,13 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     }
     if(!checked) {
         // {0x02, 0x40}
-        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
+        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
         // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
         if(IsOnSideControl1()) {
-            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 500);
             StopControl1Loop();
         } else {
-            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 500);
             StopControl2Loop();
         }
         return;
@@ -619,6 +614,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
 }
 
 void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
+    cur_loop_mode_ = kClosedLoop;
     auto driver = CanDriver::GetInstance();
 
     std::cout << "Step button clicked, checked:" << checked <<std::endl;
@@ -629,13 +625,13 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
 
     if(!checked) {
         // {0x02, 0x40}
-        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 200);
+        driver->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, 500);
         // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
         if(IsOnSideControl1()) {
-            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 200);
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_1_CMD, 500);
             StopControl1Loop();
         } else {
-            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 200);
+            driver->ExecCmd(SDO_COB_ID, SDO_WRITE_CLOSE_2_CMD, 500);
             StopControl2Loop();
         }
         return;
@@ -644,8 +640,8 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
         std::vector<CanCmdItem> cmds = {
             {SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD},      // 闭环模式
             {SDO_COB_ID, SDO_RAMP_MODE_CMD},            // 阶跃模式
-            {SDO_COB_ID, SDO_SET_RAMP_EXTEND_TIME_CMD}, // 伸出激活=500ms
-            {SDO_COB_ID, SDO_SET_RAMP_RETRACT_TIME_CMD} // 缩回激活=200ms
+            {SDO_COB_ID, SDO_RAMP_EXTEND_TIME_CMD}, // 伸出激活=500ms
+            {SDO_COB_ID, SDO_RAMP_RETRACT_TIME_CMD} // 缩回激活=200ms
         };
         driver->ExecCmds(cmds);
         SetPIDParam();
@@ -676,8 +672,34 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
     }
 }
 
-void CalibrationPage::OnPIDMotionBtnClicked() {
-    // todo
+void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
+    cur_loop_mode_ = kClosedLoop;
+    std::cout << "close cycle clicked, checked:" << checked << std::endl;
+    auto driver = CanDriver::GetInstance();
+    if (!checked) {
+        StopLoopCycle();
+        return;
+    } else {
+            std::vector<CanCmdItem> cmds = {
+            {SDO_COB_ID, SDO_CLOSE_LOOP_MODE_CMD},      // 闭环模式
+            {SDO_COB_ID, SDO_RAMP_MODE_CMD}             // 阶跃模式
+        };
+        driver->ExecCmds(cmds);
+    }
+
+    bool ok = false;
+    int ramp_time = ramp_edit_->text().toInt(&ok);
+    if(!ok) {
+        std::cout << "输入数值非法"<<std::endl;
+        return;
+    }
+
+    std::vector<uint8_t> cmd = SetTargetCMDValue(SDO_SET_RAMP_EXTEND_TIME_CMD, ramp_time, 1);
+    driver->ExecCmd(SDO_COB_ID, cmd, 500);
+    cmd = SetTargetCMDValue(SDO_SET_RAMP_RETRACT_TIME_CMD, ramp_time, 1);
+    driver->ExecCmd(SDO_COB_ID, cmd, 500);
+
+    StartLoopCycle();
 }
 
 void CalibrationPage::OnPIDSaveBtnClicked() {
@@ -691,30 +713,37 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
 
     auto main_layout = new QVBoxLayout(displacement_group_);
 
-    displace_table_ = new QTableWidget(11, 3, this);
+    displace_table_ = new QTableWidget(11, 5, this);
     displace_table_->setObjectName("DisplaceTable");
+    // displace_table_->setSelectionBehavior(QAbstractItemView::SelectRows); //SelectRows
+    displace_table_->setSelectionMode(QAbstractItemView::NoSelection);
     // save_item->setForeground(QBrush(Qt::green));
 
-    QStringList h_headers;
+    QStringList h_headers = {"100%", "90%", "50%", "10%", "0%", "中位", "0%", "10%", "50%", "90%", "100%"};
     for (int i = 0; i < 11; ++i) {
-        h_headers << QString("点%1").arg(i + 1);
         // displace_table_->setColumnWidth(i, 90);
+        displace_table_->setRowHeight(i, 40);
 
-        //标定值
-        auto calib_value_item = new QTableWidgetItem(QString::number(i*10));
-        calib_value_item->setTextAlignment(Qt::AlignCenter);
-        displace_table_->setItem(i, 0, calib_value_item);
+        //位移标定值
+        auto calib_stay_item = new QTableWidgetItem(QString::number(i*10));
+        calib_stay_item->setTextAlignment(Qt::AlignCenter);
+        displace_table_->setItem(i, 0, calib_stay_item);
 
-        //控制值
+        //电流标定值
+        auto calib_current_item = new QTableWidgetItem(QString::number(i*10));
+        calib_current_item->setTextAlignment(Qt::AlignCenter);
+        displace_table_->setItem(i, 1, calib_current_item);
+
+        //标定预估值
         auto control_value_item = new QTableWidgetItem(QString::number(i*10));
         control_value_item->setTextAlignment(Qt::AlignCenter);
-        displace_table_->setItem(i, 1, control_value_item);
+        displace_table_->setItem(i, 2, control_value_item);
 
         // 标定 
         auto calib_btn = new QPushButton("结束标定");
         calib_btn->setMinimumWidth(90);
         calib_btn->setObjectName("CalibBtn");
-        displace_table_->setCellWidget(i, 2, calib_btn);
+        displace_table_->setCellWidget(i, 3, calib_btn);
         calib_btns_.push_back(calib_btn);
         connect(calib_btn, &QPushButton::clicked, this, [this, i, calib_btn](){
             select_calib_ = i;
@@ -725,25 +754,39 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                     calib_state_ = kStart;
                     break;
                 case kStart:
-                    calib_btn->setText("确认标定");
-                    calib_state_ = kConfirm;
-                    displace_table_->item(i, 0)->setText(displace_table_->item(i, 1)->text());
-                    break;
-                case kConfirm:
                     calib_btn->setText("结束标定");
                     calib_state_ = kEnd;
                     SetRowCalib(i, false);
-                    UpdateCalibInfo();
-                    return;
+                    break;
                 default:
                     break;
             }
             UpdateCalibInfo();
-            InitCalibValues(i);
+            bool start = (calib_state_ == kStart);
+            for(int c = 0; c < 3; c++) {
+                QTableWidgetItem* item = displace_table_->item(i, c);
+                if(item){
+                    item->setSelected(start);
+                }
+            }
+            if(start) {
+                InitCalibValues(i);
+                target_flow_edit_->setText(QString::number(GetTargetFlow(i)));
+            } else {
+                target_flow_edit_->setText("");
+            }
         });
+
+        auto verify_btn = new QPushButton("验证标定");
+        verify_btn->setMinimumWidth(40);
+        verify_btn->setObjectName("CalibBtn");
+        displace_table_->setCellWidget(i, 4, verify_btn);
+        connect(verify_btn, &QPushButton::clicked, this, [this, i, verify_btn](){
+        });
+
     }
     displace_table_->setVerticalHeaderLabels(h_headers);
-    displace_table_->setHorizontalHeaderLabels({"标定值", "控制值", "标定"});
+    displace_table_->setHorizontalHeaderLabels({"位移标定值", "电流标定值", "标定预估值", "标定", "验证"});
 
     info_label_ = new QLabel("当前标定：");
 
@@ -758,9 +801,10 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     auto real_flow_edit = new QLineEdit();
     real_flow_edit->setAlignment(Qt::AlignCenter);
     auto target_flow_label = new QLabel("目标流量:");
-    auto target_flow_edit = new QLineEdit();
-    target_flow_edit->setAlignment(Qt::AlignCenter);
+    target_flow_edit_ = new QLineEdit();
+    target_flow_edit_->setAlignment(Qt::AlignCenter);
 
+#if 0
     auto state_btn = new QPushButton("标定终止");
     state_btn->setObjectName("StateBtn");
     state_btn->setFixedHeight(30);
@@ -783,6 +827,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                 break;
         }
     });
+#endif
 
     auto save_btn = new QPushButton("保存标定值");
     save_btn->setObjectName("StateBtn");
@@ -799,9 +844,11 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     sub_layout->addWidget(real_flow_edit);
     sub_layout->addStretch();
     sub_layout->addWidget(target_flow_label);
-    sub_layout->addWidget(target_flow_edit);
+    sub_layout->addWidget(target_flow_edit_);
     sub_layout->addStretch();
+#if 0
     sub_layout->addWidget(state_btn, Qt::AlignRight);
+#endif
     sub_layout->addWidget(save_btn, Qt::AlignRight);
 
     main_layout->addWidget(info_label_, 0, Qt::AlignRight);    
@@ -828,18 +875,16 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         //     (*it)->setText(QString::number(value));
         //     real_flow_edit->setText(QString::number(value));
         // }
-        auto selected_calib_item = displace_table_->item(select_calib_, 1);
+        auto selected_calib_item = displace_table_->item(select_calib_, 2);
         selected_calib_item->setText(QString::number(value));
         real_flow_edit->setText(QString::number(value));
         UpdateCalibInfo();
     });
-    // connect(displace_table_, &QTableWidget::cellPressed, [=](int row, int col) {
-    //     if(col != 1) {
-    //         return;
-    //     }
-    //     auto control_value = displace_table_->item(row, col)->text();
-    //     displace_target_edit->setText(control_value);
-    // });
+    connect(displace_table_, &QTableWidget::cellClicked, [this](int row, int col){
+        if(calib_state_ == kStart && row != select_calib_) return;
+        auto control_item = displace_table_->item(row, 2); 
+        range_slider_->setValue(control_item->text().toInt());
+    });
     connect(save_btn, &QPushButton::clicked , this, CalibrationPage::OnSaveCalibValueBtnCLicked);
 
     return displacement_group_;
@@ -848,12 +893,10 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
 void CalibrationPage::UpdateCalibInfo() {
     auto v_head = displace_table_->verticalHeaderItem(select_calib_)->text();
     auto calib_item = displace_table_->item(select_calib_, 0);
-    auto control_item = displace_table_->item(select_calib_, 1);
+    auto control_item = displace_table_->item(select_calib_, 2);
     QString state_str = "";
     if(calib_state_ == kStart) {
         state_str = "开始标定";
-    } else if (calib_state_ == kConfirm) {
-        state_str = "确认标定";
     } else if (calib_state_ == kEnd) {
         state_str = "结束标定";
     }
@@ -868,6 +911,10 @@ void CalibrationPage::OnSaveCalibValueBtnCLicked() {
     calib_state_ = kEnd;
     for(int i = 0; i < displace_table_->rowCount(); i++) {
         SetRowCalib(i, false);
+        for(int c = 0; c < 3; c++) {
+            QTableWidgetItem* item = displace_table_->item(i, c);
+            if(item) item->setSelected(false);
+        }
     }
 }
 
@@ -895,11 +942,15 @@ void CalibrationPage::InitCalibValues(int row) {
         return;
     }
     for(int i = 0; i < displace_table_->rowCount(); i++) {
-        auto control_item = displace_table_->item(i, 1); 
+        auto control_item = displace_table_->item(i, 2); 
         if(i == row) {
             range_slider_->setValue(control_item->text().toInt());
         }
         SetRowCalib(i, i == row);
+        for(int c = 0; c < 3; c++) {
+            QTableWidgetItem* item = displace_table_->item(i, c);
+            if(item) item->setSelected(i == row);
+        }
     }
 }
 
@@ -908,7 +959,7 @@ void CalibrationPage::SetRowCalib(int row, bool calib) {
         return;
     }
     auto calib_item = displace_table_->item(row, 0);
-    auto control_item = displace_table_->item(row, 1);
+    auto control_item = displace_table_->item(row, 2);
     QColor backgd_color = calib ? Qt::blue : Qt::transparent; 
     QColor foregd_color = calib ? Qt::white : Qt::black; 
     calib_item->setBackground(QBrush(backgd_color));
@@ -926,9 +977,9 @@ QWidget* CalibrationPage::CreateSignalResponseArea() {
 
     auto cycle_count_label = new QLabel("循环次数");
     auto target_value_label = new QLabel("目标值");
-    auto up_time_label = new QLabel("上升时间(ms)");
-    auto down_time_label = new QLabel("下降时间(ms)");
-    auto stop_time_label = new QLabel("中位滞留时间(ms)");
+    auto up_time_label = new QLabel("斜坡时间(ms)");
+    auto down_time_label = new QLabel("工作位停留时间(ms)");
+    auto stop_time_label = new QLabel("中位停留时间(ms)");
 
     auto cycle_count_edit = new QLineEdit();
     auto target_value_edit = new QLineEdit();
@@ -1002,10 +1053,13 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     auto sub_layout = new QHBoxLayout();
     auto left_agix_label = new QLabel("左轴:");
     auto left_agix_combo = new QComboBox();
+    left_agix_combo->addItem("流量");
     auto right_agix_label = new QLabel("右轴:");
     auto right_agix_combo = new QComboBox();
+    right_agix_combo->addItem("位移");
     auto bottom_agix_label = new QLabel("底轴:");
     auto bottom_agix_combo = new QComboBox();
+    bottom_agix_combo->addItem("时间(s)");
 
     auto clear_btn = new QPushButton("清除");
 
@@ -1099,7 +1153,6 @@ void CalibrationPage::StartControl1Loop() {
         }
     });
     stay_thread_1_->start();
-    // qDebug() << "--- StartControl1Loop ---";
 }
 
 void CalibrationPage::StartControl2Loop() {
@@ -1117,7 +1170,6 @@ void CalibrationPage::StartControl2Loop() {
         }
     });
     stay_thread_2_->start();
-    // qDebug() << "--- StartControl2Loop ---";
 }
 
 void CalibrationPage::StopControl1Loop() {

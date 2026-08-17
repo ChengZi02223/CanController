@@ -476,7 +476,7 @@ QTableWidget#DisplaceTable {
 QTableWidget#DisplaceTable::item {
     color: #000000;                      /* 纯黑文字（最保险） */
     background-color: #ffffff;           /* 纯白背景 */
-    padding: 6px 8px;
+    padding: 3px 4px;
     border: none;
 }
 
