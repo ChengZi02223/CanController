@@ -25,9 +25,12 @@ public:
     explicit QWavePlotWithLegendWidget(QWidget *parent = nullptr);
 
     // 完全透传绘图控件所有接口
-    void setupAxis(const QWavePlotWidget::AxisConfig& cfg);
-    int addCurve(const QString& name, const QPen& pen, bool useRightY = false);
+    void setupAxis(const AxisConfig& cfg);
+    void updateAxis(AxisName name, QString label, AxisUnit unit);
+    int addCurve(const QString& name, const QPen& pen, bool useRightY, WaveCurveType type, bool visible);
+    int addCurve(WaveCurve curve);
     void appendData(int curveIndex, double time, double value);
+    void appendData(int side, WaveCurveType type, double time, double value);
     void setMaxPointCount(int cnt);
     void setTimeWindow(double sec);
     void clearAll();
@@ -37,6 +40,7 @@ public:
     void setCurveVisible(int curveIndex, bool visible);
     bool isCurveVisible(int curveIndex) const;
     void setAllCurveVisible(bool visible);
+    void showCurveType(bool use_right, WaveCurveType type);
     void tryRefreshLegend();
 
 private:

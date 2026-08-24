@@ -92,20 +92,32 @@ void QWavePlotWithLegendWidget::refreshLegend()
         if (!hasData)
             continue;
 
+        if (!isCurveVisible(i))
+            continue;
         LegendItem newItem = createLegendItem(i);
         m_legendItems.append(newItem);
     }
 }
 
 // ====================== 透传绘图控件接口 ======================
-void QWavePlotWithLegendWidget::setupAxis(const QWavePlotWidget::AxisConfig &cfg)
+void QWavePlotWithLegendWidget::setupAxis(const AxisConfig &cfg)
 {
     m_plot->setupAxis(cfg);
 }
 
-int QWavePlotWithLegendWidget::addCurve(const QString &name, const QPen &pen, bool useRightY)
+void QWavePlotWithLegendWidget::updateAxis(AxisName name, QString label, AxisUnit unit) {
+    m_plot->updateAxis(name, label, unit);
+}
+
+int QWavePlotWithLegendWidget::addCurve(const QString &name, const QPen &pen, bool useRightY, WaveCurveType type, bool visible)
 {
-    int idx = m_plot->addCurve(name, pen, useRightY);
+    int idx = m_plot->addCurve(name, pen, useRightY, type, visible);
+    refreshLegend(); // 新增曲线刷新图例
+    return idx;
+}
+
+int QWavePlotWithLegendWidget::addCurve(WaveCurve curve){
+    int idx = m_plot->addCurve(curve);
     refreshLegend(); // 新增曲线刷新图例
     return idx;
 }
@@ -114,6 +126,10 @@ void QWavePlotWithLegendWidget::appendData(int curveIndex, double time, double v
 {
     m_plot->appendData(curveIndex, time, value);
     // refreshLegend(); // 写入数据后刷新，自动生成图例
+}
+
+void QWavePlotWithLegendWidget::appendData(int side, WaveCurveType type, double time, double value) {
+    m_plot->appendData(side, type, time, value);
 }
 
 void QWavePlotWithLegendWidget::setMaxPointCount(int cnt)
@@ -161,6 +177,11 @@ bool QWavePlotWithLegendWidget::isCurveVisible(int curveIndex) const
 void QWavePlotWithLegendWidget::setAllCurveVisible(bool visible)
 {
     m_plot->setAllCurveVisible(visible);
+    refreshLegend();
+}
+
+void QWavePlotWithLegendWidget::showCurveType(bool use_right, WaveCurveType type) {
+    m_plot->showCurveType(use_right, type);
     refreshLegend();
 }
 

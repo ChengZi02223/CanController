@@ -11,6 +11,7 @@
 #include <iostream>
 #include <QThread>
 #include <mutex>
+#include <map>
 
 #define kFaMaxFlow 80 // L/Min
 #define kSleepTimeOut 300
@@ -1050,6 +1051,60 @@ void CalibrationPage::OnSawtoothWaveBtnClicked() {
     // Implementation for sawtooth wave button click
 }
 
+static const QStringList y_axis_labels = {"阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM输出占空比", "电磁铁实际电流", "电磁铁目标电流"};
+static const QMap<QString, AxisUnit> axis_label_unit_map = {
+    {"阀芯实时位移", AxisUnit::kmm},
+    {"位移闭环控制偏差", AxisUnit::kmm},
+    {"最终需求值", AxisUnit::kmm},
+    {"PWM输出占空比", AxisUnit::kp},
+    {"电磁铁实际电流", AxisUnit::kmA},
+    {"电磁铁目标电流", AxisUnit::kmA}
+};
+
+static const std::vector<WaveCurve> wave_curves = {
+    // ========== 左侧Y轴 useRightY = false ==========
+    WaveCurve{"阀1PWM输出占空比", 1, QPen(Qt::blue,2),  false, true,  WaveCurveType::kPWMRatio,      {}}, // 默认可见
+    WaveCurve{"阀1目标电流",     1, QPen(Qt::blue,2),  false, false, WaveCurveType::kTargetCurrent, {}},
+    WaveCurve{"阀1实际电流",     1, QPen(Qt::blue,2),  false, false, WaveCurveType::kRealCurrent,   {}},
+    WaveCurve{"阀1实时位移",     1, QPen(Qt::blue,2),  false, false, WaveCurveType::kRealDisp,      {}},
+    WaveCurve{"阀1闭环控制偏差", 1, QPen(Qt::blue,2),  false, false, WaveCurveType::kCloseLoopErr,  {}},
+    WaveCurve{"阀1最终需求值",   1, QPen(Qt::blue,2),  false, false, WaveCurveType::kDemandVal,     {}},
+
+    WaveCurve{"阀2PWM输出占空比", 2, QPen(Qt::black,2), false, true,  WaveCurveType::kPWMRatio,      {}}, // 默认可见
+    WaveCurve{"阀2目标电流",     2, QPen(Qt::black,2), false, false, WaveCurveType::kTargetCurrent, {}},
+    WaveCurve{"阀2实际电流",     2, QPen(Qt::black,2), false, false, WaveCurveType::kRealCurrent,   {}},
+    WaveCurve{"阀2实时位移",     2, QPen(Qt::black,2), false, false, WaveCurveType::kRealDisp,      {}},
+    WaveCurve{"阀2闭环控制偏差", 2, QPen(Qt::black,2), false, false, WaveCurveType::kCloseLoopErr,  {}},
+    WaveCurve{"阀2最终需求值",   2, QPen(Qt::black,2), false, false, WaveCurveType::kDemandVal,     {}},
+
+    // ========== 右侧Y轴 useRightY = true ==========
+    WaveCurve{"阀1PWM输出占空比", 1, QPen(Qt::red,2),    true, false, WaveCurveType::kPWMRatio,      {}},
+    WaveCurve{"阀1目标电流",     1, QPen(Qt::red,2),    true, false, WaveCurveType::kTargetCurrent, {}},
+    WaveCurve{"阀1实际电流",     1, QPen(Qt::red,2),    true, false, WaveCurveType::kRealCurrent,   {}},
+    WaveCurve{"阀1实时位移",     1, QPen(Qt::red,2),    true, true,  WaveCurveType::kRealDisp,      {}}, // 默认可见
+    WaveCurve{"阀1闭环控制偏差", 1, QPen(Qt::red,2),    true, false, WaveCurveType::kCloseLoopErr,  {}},
+    WaveCurve{"阀1最终需求值",   1, QPen(Qt::red,2),    true, false, WaveCurveType::kDemandVal,     {}},
+
+    WaveCurve{"阀2PWM输出占空比", 2, QPen(Qt::green,2),  true, false, WaveCurveType::kPWMRatio,      {}},
+    WaveCurve{"阀2目标电流",     2, QPen(Qt::green,2),  true, false, WaveCurveType::kTargetCurrent, {}},
+    WaveCurve{"阀2实际电流",     2, QPen(Qt::green,2),  true, false, WaveCurveType::kRealCurrent,   {}},
+    WaveCurve{"阀2实时位移",     2, QPen(Qt::green,2),  true, true,  WaveCurveType::kRealDisp,      {}}, // 默认可见
+    WaveCurve{"阀2闭环控制偏差", 2, QPen(Qt::green,2),  true, false, WaveCurveType::kCloseLoopErr,  {}},
+    WaveCurve{"阀2最终需求值",   2, QPen(Qt::green,2),  true, false, WaveCurveType::kDemandVal,     {}}
+};
+
+
+inline AxisUnit GetAxisUnit(const QString &label) {
+    if(axis_label_unit_map.contains(label)){
+        return axis_label_unit_map[label];
+    }
+    return AxisUnit::knone;
+}
+
+inline WaveCurveType GetWaveCurveType(const QString &label) {
+    return static_cast<WaveCurveType>(y_axis_labels.indexOf(label));
+}
+
 // Implementation for creating waveform area
 QWidget* CalibrationPage::CreateWaveformArea() {
     waveform_group_ = new QGroupBox("特性曲线显示图", this);
@@ -1059,13 +1114,15 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     auto sub_layout = new QHBoxLayout();
     auto left_agix_label = new QLabel("左轴:");
     auto left_agix_combo = new QComboBox();
-    left_agix_combo->addItem("流量");
+    left_agix_combo->addItems(y_axis_labels);
+    left_agix_combo->setCurrentIndex(3);
     auto right_agix_label = new QLabel("右轴:");
     auto right_agix_combo = new QComboBox();
-    right_agix_combo->addItem("位移");
+    right_agix_combo->addItems(y_axis_labels);
+    right_agix_combo->setCurrentIndex(0);
     auto bottom_agix_label = new QLabel("底轴:");
     auto bottom_agix_combo = new QComboBox();
-    bottom_agix_combo->addItem("时间(s)");
+    bottom_agix_combo->addItems({"时间(s)", "时间(ms)"});
 
     auto clear_btn = new QPushButton("清除");
 
@@ -1121,28 +1178,21 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     // MainWindow构造
     m_wavePlot = new QWavePlotWithLegendWidget(this);
 
-    QWavePlotWidget::AxisConfig cfg;
-    cfg.xLabel = "时间(s)";
-    cfg.leftYLabel = "流量";
-    cfg.rightYLabel = "位移";
+    AxisConfig cfg;
+    cfg.left_y = "PWM输出占空比";
+    cfg.right_y = "阀芯实时位移";
+    cfg.bottom_x = "时间";
+
+    cfg.left_y_unit = AxisUnit::kp;
+    cfg.right_y_unit = AxisUnit::kmm;
+    cfg.bottom_x_unit = AxisUnit::ks;
+
     m_wavePlot->setupAxis(cfg);
 
-    // 添加曲线：正弦波绑定左Y；锯齿波绑定右Y
-    idxSine_pwm_1 = m_wavePlot->addCurve("阀1PWM输出占空比", QPen(Qt::blue,2), false);
-    idxSine_curr_1 = m_wavePlot->addCurve("阀1实际电流", QPen(Qt::blue,2), false);
-    idxSine_target_1 = m_wavePlot->addCurve("阀2目标电流", QPen(Qt::blue,2), false);
+    for(auto curve : wave_curves) {
+        auto index = m_wavePlot->addCurve(curve);
+    }
 
-    idxSine_pwm_2 = m_wavePlot->addCurve("阀2PWM输出占空比", QPen(Qt::black,2), false);
-    idxSine_curr_2 = m_wavePlot->addCurve("阀2实际电流", QPen(Qt::black,2), false);
-    idxSine_target_2 = m_wavePlot->addCurve("阀2目标电流", QPen(Qt::black,2), false);
-
-    idxSaw_stay_1 = m_wavePlot->addCurve("阀1实时位移", QPen(Qt::red,2), true);
-    idxSaw_devia_1 = m_wavePlot->addCurve("阀1闭环控制偏差", QPen(Qt::red,2), true);
-    idxSaw_value_1 = m_wavePlot->addCurve("阀1最终需求值", QPen(Qt::red,2), true);
-
-    idxSaw_stay_2 = m_wavePlot->addCurve("阀2实时位移", QPen(Qt::green,2), true);
-    idxSaw_devia_2 = m_wavePlot->addCurve("阀2闭环控制偏差", QPen(Qt::green,2), true);
-    idxSaw_value_2 = m_wavePlot->addCurve("阀2最终需求值", QPen(Qt::green,2), true);
     main_layout->addLayout(sub_layout);
     main_layout->addWidget(m_wavePlot);
 
@@ -1151,6 +1201,18 @@ QWidget* CalibrationPage::CreateWaveformArea() {
         m_wavePlot->clearAll();
         m_time_ = QDateTime::currentDateTime();
         m_time = 0.0;
+    });
+    connect(left_agix_combo, &QComboBox::currentTextChanged, this, [=](const QString &text){
+        m_wavePlot->updateAxis(AxisName::kLeftY, text, GetAxisUnit(text));
+        m_wavePlot->showCurveType(false, GetWaveCurveType(text));
+    });
+    connect(right_agix_combo, &QComboBox::currentTextChanged, this, [=](const QString &text){
+        m_wavePlot->updateAxis(AxisName::kRightY, text, GetAxisUnit(text));
+        m_wavePlot->showCurveType(true, GetWaveCurveType(text));
+    });
+    connect(bottom_agix_combo, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index){
+        AxisUnit uint = index == 0? AxisUnit::ks : AxisUnit::kms;
+        m_wavePlot->updateAxis(AxisName::kBottomX, QString("时间"), uint);
     });
     return waveform_group_;
 }
@@ -1365,15 +1427,9 @@ void CalibrationPage::DrawStay(const DrawStayInfo &info) {
         return;
     }
     // qDebug() << "DrawStay("<<control_side << "): "<< info.time << " - "<< info.value;
-    if(control_side == 1) {
-        m_wavePlot->appendData(idxSaw_stay_1, info.time, info.pos_mm);
-        m_wavePlot->appendData(idxSaw_devia_1, info.time, info.deviation);
-        m_wavePlot->appendData(idxSaw_value_1, info.time, info.demand_value);
-    } else {
-        m_wavePlot->appendData(idxSaw_stay_2, info.time, info.pos_mm);
-        m_wavePlot->appendData(idxSaw_devia_2, info.time, info.deviation);
-        m_wavePlot->appendData(idxSaw_value_2, info.time, info.demand_value);
-    }
+    m_wavePlot->appendData(control_side, WaveCurveType::kRealDisp, info.time, info.pos_mm);
+    m_wavePlot->appendData(control_side, WaveCurveType::kCloseLoopErr, info.time, info.deviation);
+    m_wavePlot->appendData(control_side, WaveCurveType::kDemandVal, info.time, info.demand_value);
 }
 
 // 电流

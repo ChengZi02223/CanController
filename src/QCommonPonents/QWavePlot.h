@@ -11,29 +11,46 @@ struct WaveDataPoint
     WaveDataPoint() = default;
     WaveDataPoint(double t_, double v_) : t(t_), val(v_) {}
 };
+// {"阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM 输出占空比", "电磁铁实际电流", "电磁铁目标电流"};
+enum class WaveCurveType {kRealDisp = 0, kCloseLoopErr, kDemandVal, kPWMRatio, kRealCurrent, kTargetCurrent};
 struct WaveCurve
 {
     QString name;
+    int side;
     QPen pen;
-    bool useRightY{false};
-    bool visible{true};
+    bool useRightY;
+    bool visible;
+    WaveCurveType type;
     QVector<WaveDataPoint> points;
 };
+
+enum class AxisName {kLeftY, kRightY, kBottomX};
+enum class AxisUnit {knone, kms, ks, kmm, kmA, kp};
+// 阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM输出占空比
+struct AxisConfig
+{
+    QString left_y;
+    QString right_y;
+    QString bottom_x;
+
+    AxisUnit left_y_unit;
+    AxisUnit right_y_unit;
+    AxisUnit bottom_x_unit;
+};
+
 class QWavePlotWidget : public QWidget
 {
     Q_OBJECT
 public:
-    struct AxisConfig
-    {
-        QString xLabel = "时间(s)";
-        QString leftYLabel = "流量";
-        QString rightYLabel = "位移";
-    };
+
     explicit QWavePlotWidget(QWidget *parent = nullptr);
     QVector<WaveDataPoint> getCurvePoints(int idx) const;
     void setupAxis(const AxisConfig& cfg);
-    int addCurve(const QString& name, const QPen& pen, bool useRightY = false);
+    void updateAxis(AxisName name, QString label, AxisUnit unit);
+    int addCurve(const QString& name, const QPen& pen, bool useRightY, WaveCurveType type, bool visible);
+    int addCurve(WaveCurve curve);
     void appendData(int curveIndex, double time, double value);
+    void appendData(int side, WaveCurveType type, double time, double value);
     void setMaxPointCount(int cnt);
     void setTimeWindow(double sec);
     void clearAll();
@@ -44,6 +61,7 @@ public:
     void setCurveVisible(int curveIndex, bool visible);
     bool isCurveVisible(int curveIndex) const;
     void setAllCurveVisible(bool visible);
+    void showCurveType(bool use_right, WaveCurveType type);
     int curveCount() const { return m_curves.size(); }
     QString curveName(int idx) const;
     QPen curvePen(int idx) const;

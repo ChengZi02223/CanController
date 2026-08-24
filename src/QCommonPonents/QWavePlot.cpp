@@ -2,6 +2,25 @@
 #include <algorithm>
 #include <QFont>
 #include <QWheelEvent>
+#include <QDebug>
+
+inline QString GetAxisUnit(AxisUnit unit) {
+    switch (unit)
+    {
+    case AxisUnit::kmA:
+        return QString("(mA)");
+    case AxisUnit::kmm:
+        return QString("(mm)");
+    case AxisUnit::kms:
+        return QString("(ms)");
+    case AxisUnit::ks:
+        return QString("(s)");
+    case AxisUnit::kp:
+        return QString("(%)");
+    default:
+        return QString();
+    }
+}
 
 QWavePlotWidget::QWavePlotWidget(QWidget *parent)
     : QWidget(parent), m_viewTimeOffset(0.0), m_followLatest(true)
@@ -17,20 +36,49 @@ QVector<WaveDataPoint> QWavePlotWidget::getCurvePoints(int idx) const
     return m_curves[idx].points;
 }
 
-void QWavePlotWidget::setupAxis(const QWavePlotWidget::AxisConfig &cfg)
+void QWavePlotWidget::setupAxis(const AxisConfig &cfg)
 {
     m_axisCfg = cfg;
     update();
 }
 
-int QWavePlotWidget::addCurve(const QString &name, const QPen &pen, bool useRightY)
+void QWavePlotWidget::updateAxis(AxisName name, QString label, AxisUnit unit) {
+    switch(name) {
+        case AxisName::kLeftY:
+            m_axisCfg.left_y = label;
+            m_axisCfg.left_y_unit = unit;
+            break;
+        case AxisName::kRightY:
+            m_axisCfg.right_y = label;
+            m_axisCfg.right_y_unit = unit;
+            break;
+        case AxisName::kBottomX:
+            m_axisCfg.bottom_x = label;
+            m_axisCfg.bottom_x_unit = unit;
+            break;  
+        default:
+            break;     
+    }
+    update();
+}
+
+
+// 废弃
+int QWavePlotWidget::addCurve(const QString &name, const QPen &pen, bool useRightY, WaveCurveType type, bool visible)
 {
     WaveCurve c;
     c.name = name;
     c.pen = pen;
     c.useRightY = useRightY;
-    c.visible = true;
+    c.visible = visible;
+    c.type = type;
     m_curves.append(c);
+    update();
+    return m_curves.size()-1;
+}
+
+int QWavePlotWidget::addCurve(WaveCurve curve) {
+    m_curves.append(curve);
     update();
     return m_curves.size()-1;
 }
@@ -60,6 +108,19 @@ void QWavePlotWidget::appendData(int curveIndex, double time, double value)
     if (wasEmpty && !curve.points.isEmpty())
     {
         emit sigCurveFirstData(curveIndex);
+    }
+    update();
+}
+
+void QWavePlotWidget::appendData(int side, WaveCurveType type, double time, double value) {
+    for(auto& curr_c : m_curves) {
+        if(curr_c.side == side && curr_c.type == type){
+            bool wasEmpty = curr_c.points.isEmpty();
+            curr_c.points.push_back(WaveDataPoint(time, value));
+            if (wasEmpty && !curr_c.points.isEmpty()) {
+                emit sigCurveFirstData(1);
+            }
+        }
     }
     update();
 }
@@ -129,6 +190,16 @@ void QWavePlotWidget::setAllCurveVisible(bool visible)
     update();
 }
 
+void QWavePlotWidget::showCurveType(bool use_right, WaveCurveType type) {
+    for(auto& crv : m_curves) {
+        if(crv.useRightY != use_right) {
+            continue;
+        }
+        crv.visible = crv.type == type;
+    }
+    update();
+}
+
 // double QWavePlotWidget::timeToX(double t, double tMaxView, double plotWidth)
 // {
 //     if(tMaxView <= 1e-9) return m_marginLeft;
@@ -168,6 +239,7 @@ QVector<double> QWavePlotWidget::genTicks(double min, double max, int tickCnt)
     return res;
 }
 
+
 void QWavePlotWidget::calcDataRange(double &tLatest, double &leftMin, double &leftMax, double &rightMin, double &rightMax)
 {
     tLatest = 0.0;
@@ -175,6 +247,7 @@ void QWavePlotWidget::calcDataRange(double &tLatest, double &leftMin, double &le
     rightMin =1e20; rightMax =-1e20;
     for(auto& crv : m_curves)
     {
+        if(!crv.visible) continue;
         for(auto& p : crv.points)
         {
             tLatest = std::max(tLatest, p.t);
@@ -198,7 +271,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     QFont font = painter.font();
-    font.setPointSize(9);
+    font.setPointSize(10);
     painter.setFont(font);
     int w = width();
     int h = height();
@@ -238,10 +311,14 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     {
         double x = timeToX(tick, viewMin, viewMax, plotW);
         painter.drawLine(QPointF(x, m_marginTop+plotH), QPointF(x, m_marginTop+plotH+6));
-        painter.drawText(QRectF(x-25, m_marginTop+plotH+8,50,20), Qt::AlignHCenter, QString::number(tick, 'f',1));
+        if(m_axisCfg.bottom_x_unit == AxisUnit::kms){
+            painter.drawText(QRectF(x-25, m_marginTop+plotH+8,50,20), Qt::AlignHCenter, QString::number(static_cast<int>(tick * 1000)));  // ms
+        } else {
+            painter.drawText(QRectF(x-25, m_marginTop+plotH+8,50,20), Qt::AlignHCenter, QString::number(tick, 'f',1));
+        }  
     }
-    painter.drawText(QRect(m_marginLeft, h - m_marginBottom + 5, plotW,30), Qt::AlignHCenter, m_axisCfg.xLabel);
-
+    painter.drawText(QRect(m_marginLeft, h - m_marginBottom + 5, plotW,30), Qt::AlignHCenter, m_axisCfg.bottom_x + GetAxisUnit(m_axisCfg.bottom_x_unit));
+    
     // 左Y轴
     auto leftYTicks = genTicks(m_leftYMin, m_leftYMax, 6);
     for(double tick : leftYTicks)
@@ -250,7 +327,20 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.drawLine(QPointF(m_marginLeft-6, y), QPointF(m_marginLeft, y));
         painter.drawText(QRectF(0, y-10, m_marginLeft-8,20), Qt::AlignRight|Qt::AlignVCenter, QString::number(tick, 'f',2));
     }
-    painter.drawText(QRect(2, m_marginTop, m_marginLeft-10, plotH), Qt::AlignVCenter|Qt::AlignRight, m_axisCfg.leftYLabel);
+    QRect left_rect(-25, m_marginTop, m_marginLeft + 90, plotH + 10);
+    painter.save();
+    // 1. 将坐标系原点移动到矩形中心
+    painter.translate(left_rect.center());
+    // 2. 逆时针旋转90度，文字竖排（从上往下读）；-90则从下往上读
+    painter.rotate(-90);
+    // 3. 移回原点
+    painter.translate(-left_rect.center());
+
+    // 在旋转后的坐标系绘制文本
+    painter.drawText(left_rect, Qt::AlignCenter, m_axisCfg.left_y + GetAxisUnit(m_axisCfg.left_y_unit));
+
+    painter.restore();
+    // painter.drawText(QRect(2, m_marginTop, m_marginLeft-10, plotH), Qt::AlignVCenter|Qt::AlignRight, m_axisCfg.left_y);
 
     // 右Y轴
     auto rightYTicks = genTicks(m_rightYMin, m_rightYMax,6);
@@ -260,7 +350,20 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.drawLine(QPointF(m_marginLeft+plotW, y), QPointF(m_marginLeft+plotW+6, y));
         painter.drawText(QRectF(w-m_marginRight+8, y-10, m_marginRight-10,20), Qt::AlignLeft|Qt::AlignVCenter, QString::number(tick, 'f',2));
     }
-    painter.drawText(QRect(w-m_marginRight+8, m_marginTop, m_marginRight-10, plotH), Qt::AlignVCenter, m_axisCfg.rightYLabel);
+    // painter.drawText(QRect(w-m_marginRight+8, m_marginTop, m_marginRight-10, plotH), Qt::AlignVCenter, m_axisCfg.right_y);
+    QRect right_rect(w - m_marginRight - 60, m_marginTop, m_marginRight+90, plotH + 10);
+    painter.save();
+    // 1. 将坐标系原点移动到矩形中心
+    painter.translate(right_rect.center());
+    // 2. 逆时针旋转90度，文字竖排（从上往下读）；-90则从下往上读
+    painter.rotate(90);
+    // 3. 移回原点
+    painter.translate(-right_rect.center());
+
+    // 在旋转后的坐标系绘制文本
+    painter.drawText(right_rect, Qt::AlignCenter, m_axisCfg.right_y + GetAxisUnit(m_axisCfg.right_y_unit));
+
+    painter.restore();
 
     // 网格线
     painter.setPen(QPen(QColor(210,210,210),1,Qt::DotLine));

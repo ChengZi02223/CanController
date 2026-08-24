@@ -216,21 +216,8 @@ private:
     QLineEdit* stop_time_edit_ = nullptr;
 
     QWavePlotWithLegendWidget* m_wavePlot = nullptr;
-    // 位移相关曲线
-    int idxSaw_stay_1;
-    int idxSaw_devia_1;
-    int idxSaw_value_1;
-    int idxSaw_stay_2;
-    int idxSaw_devia_2;
-    int idxSaw_value_2;
+    // 左侧
 
-    // 电流相关曲线
-    int idxSine_pwm_1;
-    int idxSine_curr_1;
-    int idxSine_target_1;
-    int idxSine_pwm_2;
-    int idxSine_curr_2;
-    int idxSine_target_2;
     std::mutex m_time_mtx_;
     double m_time = 0.0;
     QDateTime m_time_;
