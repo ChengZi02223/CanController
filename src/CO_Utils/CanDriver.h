@@ -60,6 +60,8 @@ public:
     bool sendFD(TPCANMsgFD& fdMsg);
     bool receiveFD(TPCANMsgFD& fdMsg, TPCANTimestampFD* ts = nullptr);
 
+    bool CRCCheck(const can_frame& frame);
+
 private:
     CanDriver();
     ~CanDriver();

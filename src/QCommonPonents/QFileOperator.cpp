@@ -6,17 +6,20 @@
 #include <QFileInfo>
 
 #define EXCEL_DATA_START_ROW 2
+#define MODIFY_VALUE_COL 7
 
 // ==================== 自动打开/保存 ====================
 bool QFileOperator::openFile(const QString &filePath)
 {
+    m_last_load_file = filePath;
     QFileInfo info(filePath);
     QString suffix = info.suffix().toLower();
 
     if (suffix == "csv") {
         return openCSV(filePath);
     } else if (suffix == "xlsx" || suffix == "xls") {
-        return openExcel(filePath);
+        // return openExcel(filePath);
+        return ParseExcel(filePath);
     } else {
         qWarning() << "Unsupported file format:" << suffix;
         return false;
@@ -167,7 +170,42 @@ QString QFileOperator::escapeCSVField(const QString &field, QChar delimiter)
 #define USE_QXLSX
 #ifdef USE_QXLSX
 #include "xlsxdocument.h"
+
+/**
+ * @brief 获取单元格真实值，如果是被合并单元格，返回合并左上角的值
+ * @param doc QXlsx文档
+ * @param mergeRanges 全部合并单元格缓存
+ * @param row 物理行（从1开始）
+ * @param col 物理列（从1开始）
+ * @return 解析后字符串
+ */
+static QString getMergedCellValue(QXlsx::Document& doc, const QList<QXlsx::CellRange>& mergeRanges, int row, int col) {
+    for(const auto& range : mergeRanges)
+    {
+        if(row >= range.firstRow() && row <= range.lastRow()
+            && col >= range.firstColumn() && col <= range.lastColumn())
+        {
+            // 命中合并区域，读取左上角单元格
+            int realRow = range.firstRow();
+            int realCol = range.firstColumn();
+            if(auto cell = doc.cellAt(realRow, realCol))
+            {
+                return cell->value().toString();
+            }
+            return "";
+        }
+    }
+    // 不在任何合并区域，直接读取本单元格
+    if(auto cell = doc.cellAt(row, col))
+    {
+        return cell->value().toString();
+    }
+    return "";
+}
+
 #endif
+
+
 
 bool QFileOperator::openExcel(const QString &filePath)
 {
@@ -179,20 +217,29 @@ bool QFileOperator::openExcel(const QString &filePath)
     }
 
     m_data.clear();
+
+    int maxCol = doc.dimension().lastColumn();
+    if (maxCol <= 0) maxCol = 11; // 兜底，你的表实际是11列
+
     int row = EXCEL_DATA_START_ROW;
     while (true) {
         QStringList rowData;
-        int col = 1;
-        while (true) {
-           auto cell = doc.cellAt(row, col);
-            if (!cell) break;
-            QVariant value = cell->value();
-            rowData.append(value.toString());
-            col++;
+        bool hasAnyData = false;
+        for (int col = 1; col <= maxCol; col++) {
+            QVariant value;
+            if (auto cell = doc.cellAt(row, col)) {
+                value = cell->value();
+                if (!value.toString().isEmpty())
+                    hasAnyData = true;
+            }
+            rowData.append(value.toString()); // 空单元格也补空字符串，保证列对齐
         }
-        if (rowData.isEmpty() && row > 1) break; // 连续空行停止（简单启发）
-        if (!rowData.isEmpty()) m_data.append(rowData);
+        if (!hasAnyData && row > EXCEL_DATA_START_ROW)
+            break;
+        if (hasAnyData)
+            m_data.append(rowData);
         row++;
+        qDebug() << "row: "<< rowData;
     }
     return true;
 #else
@@ -200,6 +247,93 @@ bool QFileOperator::openExcel(const QString &filePath)
     qWarning() << "Excel support not compiled. Please integrate QXlsx library and define USE_QXLSX.";
     return false;
 #endif
+}
+
+bool QFileOperator::ParseExcel(const QString &filePath){
+#ifdef USE_QXLSX
+    QXlsx::Document doc(filePath);
+    if (!doc.load()) {
+        qWarning() << "Failed to load Excel file:" << filePath;
+        return false;
+    }
+    m_data.clear();
+
+    auto sheet = doc.currentWorksheet();
+    QList<QXlsx::CellRange> mergeRanges = sheet->mergedCells();
+
+    int maxCol = doc.dimension().lastColumn();
+    if (maxCol <= 0) maxCol = 11;
+
+    int row = EXCEL_DATA_START_ROW;
+
+    while (true)
+    {
+        // 判断当前行是否在某个纵向合并块内
+        QXlsx::CellRange hitMergeRange;
+        bool isMergeStart = false;
+        bool inAnyMerge = false;
+        for(const auto& r : mergeRanges)
+        {
+            if(row >= r.firstRow() && row <= r.lastRow() && r.rowCount()>1)
+            {
+                hitMergeRange = r;
+                inAnyMerge = true;
+                if(row == r.firstRow()){
+                    isMergeStart = true;
+                }
+                break;
+            }
+        }
+
+        if(!inAnyMerge)
+        {
+            // 普通行
+            QStringList rowData;
+            bool hasAnyData = false;
+            for(int col=1; col<=maxCol; col++)
+            {
+                QString val = getMergedCellValue(doc, mergeRanges, row, col);
+                rowData.append(val);
+                if(!val.isEmpty()) hasAnyData = true;
+            }
+            if(!hasAnyData && row > EXCEL_DATA_START_ROW){
+                break;
+            }
+            if(hasAnyData){
+                m_data.append(rowData);
+            }
+            row++;
+        }
+        else
+        {
+            // 处于合并区域，只在合并起始行一次性生成所有子行
+            if(isMergeStart)
+            {
+                int mergeFirst = hitMergeRange.firstRow();
+                int mergeLast  = hitMergeRange.lastRow();
+                // 遍历合并区域每一行，每一列调用getMergedCellValue自动补全所有合并列
+                for(int subRow = mergeFirst; subRow <= mergeLast; subRow++)
+                {
+                    QStringList subRowData;
+                    bool hasAnyData = false;
+                    for(int col = 1; col <= maxCol; col++)
+                    {
+                        QString val = getMergedCellValue(doc, mergeRanges, subRow, col);
+                        subRowData.append(val);
+                        if(!val.isEmpty()) hasAnyData = true;
+                    }
+                    if(hasAnyData){
+                        m_data.append(subRowData);
+                    }
+                    qDebug()<<"split merge subRow:"<<subRow<<" data:"<<subRowData;
+                }
+            }
+            // 直接跳到合并区域下一行，跳过中间被合并的物理行，避免重复解析
+            row = hitMergeRange.lastRow() + 1;
+        }
+    }
+#endif
+    return true;
 }
 
 bool QFileOperator::saveExcel(const QString &filePath)
@@ -214,6 +348,39 @@ bool QFileOperator::saveExcel(const QString &filePath)
     return doc.saveAs(filePath);
 #else
     Q_UNUSED(filePath)
+    qWarning() << "Excel support not compiled. Please integrate QXlsx library and define USE_QXLSX.";
+    return false;
+#endif
+}
+
+bool QFileOperator::SaveModifyValueToLastFile(const QList<QString> &paraList) {
+#ifdef USE_QXLSX
+    if(m_last_load_file.isEmpty()) {
+        return false;
+    }
+
+    QXlsx::Document doc(m_last_load_file);
+    if(!doc.load())
+    {
+        qWarning()<<"打开原文件失败："<<m_last_load_file;
+        return false;
+    }
+
+    int startExcelRow = 3;
+    for(int i = 0; i < paraList.size(); i++) {
+        int excelRow = startExcelRow + i;
+        QString modifyVal = paraList.at(i);
+        //只写入修改值这一列，其他全部保留原文件原样（合并单元格、样式全部不动）
+        doc.write(excelRow, MODIFY_VALUE_COL, modifyVal);
+    }
+
+    //保存覆盖原文件
+    bool ok = doc.saveAs(m_last_load_file);
+    if(!ok) {
+        qWarning()<<"保存回写文件失败！文件被占用？"<<m_last_load_file;
+    }
+    return ok;
+#else
     qWarning() << "Excel support not compiled. Please integrate QXlsx library and define USE_QXLSX.";
     return false;
 #endif

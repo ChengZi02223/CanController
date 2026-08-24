@@ -12,10 +12,10 @@
 #define BUTTON_HEIGHT 40
 
 #define ROW_COUNT 12
-#define COLUMN_COUNT 8
+#define COLUMN_COUNT 7
 #define ROW_HEIGHT 42
 
-static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限", "操作"});
+static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限"});
 // static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
 
 SettingPage::SettingPage(QWidget* parent)
@@ -47,11 +47,17 @@ void SettingPage::InitPage() {
 
     connect(function_btn_area_, &FunctionBtnArea::SendInputMode, setting_info_table_, &SettingInfoTable::OnChangeInputMode);
     connect(function_btn_area_, &FunctionBtnArea::SendClearModifyValue, setting_info_table_, &SettingInfoTable::OnClearModifyValues);
-    connect(function_btn_area_, &FunctionBtnArea::SendConfirmValues, setting_info_table_, &SettingInfoTable::OnConfirmAllValues);
-    connect(function_btn_area_, &FunctionBtnArea::SendInputMode, this, &SettingPage::SendInputMode);
+    // connect(function_btn_area_, &FunctionBtnArea::SendConfirmValues, setting_info_table_, &SettingInfoTable::OnConfirmAllValues);
+    connect(function_btn_area_, &FunctionBtnArea::SendSaveDefaultValue, setting_info_table_, &SettingInfoTable::OnSaveDefaultValue);
+    connect(function_btn_area_, &FunctionBtnArea::SendSaveToEPROM, setting_info_table_, &SettingInfoTable::OnSaveToEPROM);
+    connect(function_btn_area_, &FunctionBtnArea::SendReadFromEPROM, setting_info_table_, &SettingInfoTable::OnReadFromEPROM);
+    // connect(function_btn_area_, &FunctionBtnArea::SendInputMode, this, &SettingPage::SendInputMode);
+
     connect(basic_info_bar_, &BasicInfoBar::SendTestState, [=](TestState state){
         setting_info_table_->setEnabled(state == kTestStart);
+    #ifndef ON_TEST_MODE
         function_btn_area_->setEnabled(state == kTestStart);
+    #endif
     });
 }
 
@@ -66,7 +72,7 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
         auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
         auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
         if(save_item->text() != change_item->text()) {
-            save_item->setForeground(QBrush(Qt::black));
+            change_item->setForeground(QBrush(Qt::red));
         }
     });
     setObjectName("SettingInfoTable");
@@ -100,7 +106,7 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     idx_item->setTextAlignment(Qt::AlignCenter);
     setItem(row, INFO_TABLE_IDX_COLUMN, idx_item);
     // 保存值
-    auto save_item = new QTableWidgetItem();
+    auto save_item = new QTableWidgetItem(item.paramValue);
     save_item->setFlags(save_item->flags() & ~Qt::ItemIsEditable);
     save_item->setTextAlignment(Qt::AlignCenter);
     setItem(row, INFO_TABLE_SAVE_COLUMN, save_item);    
@@ -110,13 +116,13 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     p_item->setTextAlignment(Qt::AlignCenter);
     setItem(row, INFO_TABLE_MODIFY_COLUMN, p_item);
     // 确定标定按钮
-    auto enter_btn = new QPushButton("确认", this);
-    enter_btn->setObjectName("EnterBtn");
-    enter_btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    setCellWidget(row, COLUMN_COUNT - 1, enter_btn);
-    connect(enter_btn, &QPushButton::clicked, this, [this, row](){
-        OnEnterBtnClicked(row);
-    });
+    // auto enter_btn = new QPushButton("确认", this);
+    // enter_btn->setObjectName("EnterBtn");
+    // enter_btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    // setCellWidget(row, COLUMN_COUNT - 1, enter_btn);
+    // connect(enter_btn, &QPushButton::clicked, this, [this, row](){
+    //     OnEnterBtnClicked(row);
+    // });
     
 }
 
@@ -124,7 +130,7 @@ void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
     if(columnCount() < 0){
         return; 
     }
-    auto col_width = width() / columnCount();
+    auto col_width = (width() - 5) / columnCount();
     for(int i = 0; i < columnCount(); ++i) {
         setColumnWidth(i, col_width);
     }
@@ -136,6 +142,8 @@ void SettingInfoTable::OnLoadSettings() {
     if(tableDataList.empty()){
         return;
     }
+    clearContents();
+    setRowCount(0);
     for(auto item : tableDataList) {
         InsterRow(item);
     }
@@ -153,7 +161,21 @@ void SettingInfoTable::OnLoadSettings() {
 
 void SettingInfoTable::OnSaveSettings() {
     // todo
-    qDebug() << "OnSaveSettings";
+    // qDebug() << "OnSaveSettings";
+    QList<QString> para_list;
+    for(int i = 0; i < rowCount(); ++i) {
+        auto modify_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+        para_list << modify_item->text();
+    }
+    if(para_list.isEmpty()){
+        return;
+    }
+    auto file_op = QFileOperator::GetInstance();
+    bool res = file_op->SaveModifyValueToLastFile(para_list);
+    if(res) {
+        QMessageBox::information(this, "提示", tr("修改值已经成功保存到配置文件中：%1").arg(file_op->GetLastLoadFile()));
+    }
+    OnConfirmAllValues();
 }
 
 void SettingInfoTable::OnChangeInputMode(InputMode mode) {
@@ -178,19 +200,35 @@ void SettingInfoTable::OnClearModifyValues() {
 
 void SettingInfoTable::OnConfirmAllValues() {
     for(int i = 0; i < rowCount(); ++i) {
-        OnEnterBtnClicked(i);
+        auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
+        auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+        save_item->setText(change_item->text());
+        change_item->setForeground(QBrush(Qt::green));
     }
 }
 
-void SettingInfoTable::OnEnterBtnClicked(int row) {
-    if(row < 0 || row > rowCount()) {
-        return;
-    }
-    auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
-    auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
-    save_item->setText(change_item->text());
-    save_item->setForeground(QBrush(Qt::green));
+void SettingInfoTable::OnSaveDefaultValue() {
+    OnConfirmAllValues();
+    update();
 }
+
+void SettingInfoTable::OnSaveToEPROM() {
+
+}
+
+void SettingInfoTable::OnReadFromEPROM() {
+
+}
+
+// void SettingInfoTable::OnEnterBtnClicked(int row) {
+//     if(row < 0 || row > rowCount()) {
+//         return;
+//     }
+//     auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
+//     auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
+//     save_item->setText(change_item->text());
+//     save_item->setForeground(QBrush(Qt::green));
+// }
 
 void SettingInfoTable::OnModifyValueChanged(int col, int row) {
 
@@ -227,9 +265,9 @@ void FunctionBtnArea::InitButtons() {
     clear_setting_btn_ = new QPushButton("清空配置参数", this);
     clear_setting_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
     clear_setting_btn_->setObjectName("FuncBtn");
-    confirm_btn_ = new QPushButton("一键确认", this);
-    confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-    confirm_btn_->setObjectName("FuncBtn");
+    // confirm_btn_ = new QPushButton("一键确认", this);
+    // confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    // confirm_btn_->setObjectName("FuncBtn");
 
     main_layout->addWidget(load_setting_btn_);
     main_layout->addWidget(save_setting_btn_);
@@ -239,24 +277,28 @@ void FunctionBtnArea::InitButtons() {
     main_layout->addWidget(load_to_table_btn_);
     main_layout->addWidget(clear_setting_btn_);
     main_layout->addStretch();
-    main_layout->addWidget(confirm_btn_, 0, Qt::AlignBottom);
+    // main_layout->addWidget(confirm_btn_, 0, Qt::AlignBottom);
 
     ConnectSignles();
 }
 
 void FunctionBtnArea::ConnectSignles() {
     connect(load_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnLoadSettingBtnClicked);
-    connect(save_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnSaveSettingBtnClicked);
+    connect(save_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveSettings);
     connect(mode_change_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnModeChangeBtnClicked);
-    connect(save_default_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnSaveDefaultBtnClicked);
-    connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnSaveEepromBtnClicked);
-    connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnLoadToTableBtnClicked);
+    connect(save_default_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveDefaultValue);
+    connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveToEPROM);
+    connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendReadFromEPROM);
     connect(clear_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendClearModifyValue);
-    connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
+    // connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
 }
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
+#ifndef ON_TEST_MODE
+    QString file_path("D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明.xlsx");
+#else
     QString file_path = QFileDialog::getOpenFileName(nullptr, "Open File", "", "(*)");
+#endif
     auto file_op = QFileOperator::GetInstance();
     
     qDebug() << "Open File:" << file_path;
@@ -266,15 +308,15 @@ void FunctionBtnArea::OnLoadSettingBtnClicked() {
 }
 
 void FunctionBtnArea::OnSaveSettingBtnClicked() {
-    QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
-    qDebug() << "Save File:" << save_path;
+    // QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
+    // qDebug() << "Save File:" << save_path;
     emit SendSaveSettings();
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {
     QString mode = "";
     if(input_mode_ == kHand) {
-        mode = QString("自动模式");
+        mode = QString("禁止手输");
         input_mode_ = kAuto;
     } else if (input_mode_ == kAuto) {
         mode = QString("手输模式");
@@ -284,14 +326,14 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
     mode_change_btn_->setText(mode);
 }
 
-void FunctionBtnArea::OnSaveDefaultBtnClicked() {
+// void FunctionBtnArea::OnSaveDefaultBtnClicked() {
+//     emit SendSaveDefaultValue();
+// }
 
-}
+// void FunctionBtnArea::OnSaveEepromBtnClicked() {
+//     emit SendSaveToEPROM();
+// }
 
-void FunctionBtnArea::OnSaveEepromBtnClicked() {
-
-}
-
-void FunctionBtnArea::OnLoadToTableBtnClicked() {
-
-}
+// void FunctionBtnArea::OnLoadToTableBtnClicked() {
+//     emit SendReadFromEPROM();
+// }

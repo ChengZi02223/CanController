@@ -48,7 +48,10 @@ public:
 
     // Excel 操作（需要第三方库支持，此处提供框架）
     bool openExcel(const QString &filePath);
+    bool ParseExcel(const QString &filePath);
     bool saveExcel(const QString &filePath);
+    bool SaveModifyValueToLastFile(const QList<QString> &paraList);
+    QString GetLastLoadFile() {return m_last_load_file; }
 
     // 获取全部表格数据转为结构体数组
     QList<ParaItem> getTableItems() const;
@@ -71,6 +74,7 @@ private:
 
 private:
     QList<QStringList> m_data;  // 存储表格数据，每行为QStringList
+    QString m_last_load_file;
 
     // CSV 解析辅助函数
     QStringList parseCSVLine(const QString &line, QChar delimiter);

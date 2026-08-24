@@ -112,6 +112,7 @@ void CanController::CreateTabButtons() {
 
     auto can_config_btn = new QPushButton(this);
     can_config_btn->setFixedSize(30, 30);
+    can_config_btn->setObjectName("CanCongfigBtn");
     const QString res_path = ":/icons/config.ico";
     QFile file(res_path);
     // qDebug() << "资源路径：" << res_path;

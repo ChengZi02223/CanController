@@ -48,9 +48,12 @@ public slots:
     void OnChangeInputMode(InputMode mode);
     void OnClearModifyValues();
     void OnConfirmAllValues();
+    void OnSaveDefaultValue();
+    void OnSaveToEPROM();
+    void OnReadFromEPROM();
 
 private slots:
-    void OnEnterBtnClicked(int row);
+    // void OnEnterBtnClicked(int row);
     void OnModifyValueChanged(int col, int row);
 
 private:
@@ -73,15 +76,18 @@ signals:
     void SendSaveSettings();
     void SendInputMode(InputMode mode);
     void SendClearModifyValue();
-    void SendConfirmValues();
+    void SendSaveDefaultValue();
+    void SendSaveToEPROM();
+    void SendReadFromEPROM();
+    // void SendConfirmValues();
 
 private slots:
     void OnLoadSettingBtnClicked();
     void OnSaveSettingBtnClicked();
     void OnModeChangeBtnClicked();
-    void OnSaveDefaultBtnClicked();
-    void OnSaveEepromBtnClicked();
-    void OnLoadToTableBtnClicked();
+    // void OnSaveDefaultBtnClicked();
+    // void OnSaveEepromBtnClicked();
+    // void OnLoadToTableBtnClicked();
 
 private:
     QPushButton* load_setting_btn_ = nullptr;   //读取配置参数文件

@@ -26,10 +26,15 @@ static std::vector<uint8_t> SetTargetCMDValue(const std::array<uint8_t, 8> comma
     // 2. 复制模板生成待发送指令
     std::vector<uint8_t> cmd(command.begin(), command.end());
 
-    // 3. 【小端模式】填充第5、6字节（下标4、5）
-    cmd[4] = static_cast<uint8_t>(value & 0xFF);        // 低字节 0xE8
-    cmd[5] = static_cast<uint8_t>((value >> 8) & 0xFF); // 高字节 0x03
+    // 3. 【小端模式】填充第3、4字节（下标2、3）
+    cmd[2] = static_cast<uint8_t>(value & 0xFF);        // 低字节 0xE8
+    cmd[3] = static_cast<uint8_t>((value >> 8) & 0xFF); // 高字节 0x03
 
+    uint8_t sum = 0;
+    for(int i = 0; i < 7; ++i) {
+        sum += cmd[i];
+    }
+    cmd[7] = sum & 0xFF; // 取低8位
     return cmd;
 }
 
@@ -42,6 +47,22 @@ static std::vector<uint8_t> SetPIDCMDValue(const std::array<uint8_t, 8> command,
     // 3. 【小端模式】填充第5、6字节（下标4、5）
     cmd[4] = static_cast<uint8_t>(value & 0xFF);        // 低字节 0xE8
     cmd[5] = static_cast<uint8_t>((value >> 8) & 0xFF); // 高字节 0x03
+
+    return cmd;
+}
+
+// RPDO2斜坡配置     0x340   01 FA FA FF 19 19 19 19  RPDO2 的斜坡时间编码为 20ms/bit ，即 0x19=25，25×20=500ms
+static std::vector<uint8_t> RampTimeCMDConfig(const std::array<uint8_t, 8> command, double time) {
+    int bit = time / 20;
+
+    std::vector<uint8_t> cmd(command.begin(), command.end());
+    
+    uint8_t value_8 = static_cast<uint8_t>(bit);
+
+    cmd[4] = value_8;
+    cmd[5] = value_8;
+    cmd[6] = value_8;
+    cmd[7] = value_8;
 
     return cmd;
 }

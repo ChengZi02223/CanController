@@ -187,6 +187,7 @@ bool CanDriver::send(const can_frame& frame)
 {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     if (!isInitialized_ || !handle_) return false;
+    if(!CRCCheck(frame)) return false;
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;
     msg.ID      = frame.can_id & CAN_EFF_MASK; // 清除标志位，只保留29位ID
@@ -249,6 +250,22 @@ bool CanDriver::receive(can_frame& frame, int timeout_ms)
     return false;
 }
 
+bool CanDriver::CRCCheck(const can_frame& frame) {
+    // 只检测 0x240
+    if(frame.can_id != SEND_COB_ID) {
+        return true;
+    }
+    if(frame.can_dlc < 8) {
+        return false;
+    }
+    uint8_t sum = 0;
+    for(int i = 0; i < 7; ++i) {
+        sum += frame.data[i];
+    }
+    uint8_t recvSum = frame.data[7];
+    return (sum == recvSum);
+
+}
 
 // ====================== 可选：CAN FD 初始化/收发（适配新款FD硬件） ======================
 bool CanDriver::initFD(TPCANHandle channelHandle, const char* fdBitrateStr)

@@ -128,7 +128,7 @@ static inline uint16_t nmt_command_payload(uint8_t cmd, uint8_t node_id) {
  *        RPDO3: [0x6361 抖动幅度(2B), 0x6362 抖动频率(2B), 0x6330 斜坡类型(1B)]
  *============================================================================*/
 #define RPDO1_COB_ID(node)              (0x200u + (node))
-#define RPDO2_COB_ID(node)              (0x300u + (node))
+// #define RPDO2_COB_ID(node)              (0x300u + (node))
 #define RPDO3_COB_ID(node)              (0x400u + (node))
 
 /* 常用 RPDO 数据长度 (字节) */

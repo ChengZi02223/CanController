@@ -41,9 +41,13 @@ extern const std::vector<uint8_t> SDO_OPEN_LOOP_MODE_CMD;
 // 闭环模式
 extern const std::vector<uint8_t> SDO_CLOSE_LOOP_MODE_CMD;
 
+#define SEND_COB_ID  0x240
 // SDO写测试
-extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_1_VALUE_CMD; //开阀1
-extern const std::array<uint8_t, 8> SDO_WRITE_OPEN_2_VALUE_CMD; //开阀2
+extern const std::array<uint8_t, 8> SDO_PWM_OPEN_1_VALUE_CMD; //阀1PWM开环
+extern const std::array<uint8_t, 8> SDO_PWM_OPEN_2_VALUE_CMD; //阀2PWM开环
+extern const std::array<uint8_t, 8> SDO_CUR_OPEN_1_VALUE_CMD; //阀1电流开环
+extern const std::array<uint8_t, 8> SDO_CUR_OPEN_2_VALUE_CMD; //阀2电流开环
+
 extern const std::vector<uint8_t> SDO_WRITE_READ_VALUE_CMD;     //读取数值
 extern const std::vector<uint8_t> SDO_WRITE_CLOSE_1_CMD;      //关阀1
 extern const std::vector<uint8_t> SDO_WRITE_CLOSE_2_CMD;      //关阀2
@@ -64,11 +68,21 @@ extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_P_CMD; //阀2 P 参数控制
 extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_I_CMD; //阀2 I 参数控制
 extern const std::array<uint8_t, 8> SDO_WRITE_PID_2_D_CMD; //阀2 D 参数控制
 
+//发送目标值
+extern const std::array<uint8_t, 8> SDO_SEND_TARGET_1_VALUE_CMD;
+extern const std::array<uint8_t, 8> SDO_SEND_TARGET_2_VALUE_CMD;
+
+//归零与停止
+extern const std::vector<uint8_t> SDO_STOP_1_CMD; //阀1归零           0x240   00 00 00 00 11 00 00 11
+extern const std::vector<uint8_t> SDO_STOP_2_CMD; //阀2归零           0x240   00 00 00 00 12 00 00 12
+
 // 阶跃模式
 extern const std::vector<uint8_t> SDO_STEP_MODE_CMD;
 // 斜坡模式
 extern const std::vector<uint8_t> SDO_RAMP_MODE_CMD;
 // 配置斜坡
+#define RPDO2_COB_ID 0x340
+extern const std::array<uint8_t, 8> SDO_RPDO2_RAMP_TIME_CMD;
 // 伸出激活=500ms
 extern const std::vector<uint8_t> SDO_RAMP_EXTEND_TIME_CMD;
 extern const std::array<uint8_t, 8> SDO_SET_RAMP_EXTEND_TIME_CMD; //伸出激活： 斜坡时间
