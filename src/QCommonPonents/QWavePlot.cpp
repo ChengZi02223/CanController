@@ -393,10 +393,11 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
 
             double x = timeToX(dp.t, viewMin, viewMax, plotW);
             double y;
-            if(crv.useRightY)
+            if(crv.useRightY) {
                 y = valueToY(dp.val, m_rightYMin, m_rightYMax, plotH);
-            else
+            } else {
                 y = valueToY(dp.val, m_leftYMin, m_leftYMax, plotH);
+            }
             QPointF curr(x,y);
             if(!first)
                 painter.drawLine(prevPt, curr);

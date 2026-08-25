@@ -14,20 +14,16 @@ enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 enum LoopMode { kOpenLoop, kClosedLoop };
 
-struct DrawStayInfo {
+struct DrawCurveInfo {
     int side; // 1 | 2 侧
-    double time; // 时间
-    double pos_mm; // 实际位移
-    double deviation; // 控制偏差
-    double demand_value; // 最终需求值
-};
+    double time = 0.0; // 时间
+    double pos_mm = 0.0; // 实际位移
+    double deviation = 0.0; // 控制偏差
+    double demand_value = 0.0; // 最终需求值
 
-struct DrawCurrInfo {
-    int side; // 1 | 2 侧
-    double time; // 时间
-    double pwm_mm; // PWM输出
-    double deviation; // 控制偏差
-    double demand_value; // 最终需求值
+    double pwm_ratio = 0.0; // PWM输出值占空比
+    double real_curr = 0.0; // 实际电流
+    double target_curr = 0.0; // 目标电流
 };
 
 struct Tpdo2PositionInfo {
@@ -62,18 +58,18 @@ struct Tpdo3CurrentInfo {
         else
             return 2;
     }
-    int16_t GetPwmAbs() const {
-        return static_cast<int16_t>(std::abs(static_cast<int>(pwmOutput)));
+    double GetPwmAbs() const {
+        return static_cast<double>(std::abs(static_cast<int>(pwmOutput)));
     }
-    int16_t GetActualCurrentAbsMa() const {
-        return static_cast<int16_t>(std::abs(static_cast<int>(actualCurrentMa)));
+    double GetActualCurrentAbsMa() const {
+        return static_cast<double>(std::abs(static_cast<int>(actualCurrentMa)));
     }
-    int16_t GetTargetCurrentAbsMa() const {
-        return static_cast<int16_t>(std::abs(static_cast<int>(targetCurrentMa)));
+    double GetTargetCurrentAbsMa() const {
+        return static_cast<double>(std::abs(static_cast<int>(targetCurrentMa)));
     }
 };
 
-Q_DECLARE_METATYPE(DrawStayInfo)
+Q_DECLARE_METATYPE(DrawCurveInfo)
 struct BasicInfo;
 class BasicInfoBar;
 class QWavePlotWithLegendWidget;
@@ -111,7 +107,7 @@ private:
     void StartControl2Loop();
     void StopControl1Loop();
     void StopControl2Loop();
-    void DrawStay(const DrawStayInfo &info);
+    void DrawStay(const DrawCurveInfo &info);
 
     bool StartLoopCycle();
     void StopLoopCycle();
@@ -123,7 +119,7 @@ private:
     void SetPIDParam();
 
 signals:
-    void SendDrawStayFaInfo(const DrawStayInfo &info);
+    void SendDrawStayFaInfo(const DrawCurveInfo &info);
     void SendOpenLoopFinished();
 
 private slots:
@@ -163,7 +159,7 @@ private:
     QLineEdit* work_time_edit_ = nullptr;
 
     LoopMode cur_loop_mode_ = kOpenLoop; // 当前模式： 开环 | 闭环
-    // 开环循环动作线程
+    // 开环循环动作线程 //位移
     bool stay_1_running_ = false;
     QThread *stay_thread_1_ = nullptr;
     bool stay_2_running_ = false;

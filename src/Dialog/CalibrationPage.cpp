@@ -35,7 +35,7 @@ CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
 
     InitPage();
-    qRegisterMetaType<DrawStayInfo>("DrawStayInfo");
+    qRegisterMetaType<DrawCurveInfo>("DrawCurveInfo");
 
     connect(this, &CalibrationPage::SendOpenLoopFinished, this, [this](){
         if(cur_loop_mode_ == kOpenLoop) {
@@ -1061,8 +1061,16 @@ static const QMap<QString, AxisUnit> axis_label_unit_map = {
     {"电磁铁目标电流", AxisUnit::kmA}
 };
 
+    QString name;
+    int side;
+    QPen pen;
+    bool useRightY;
+    bool visible;
+    WaveCurveType type;
+    QVector<WaveDataPoint> points;
 static const std::vector<WaveCurve> wave_curves = {
     // ========== 左侧Y轴 useRightY = false ==========
+    //          name            side    pen           right_y visible           type              points
     WaveCurve{"阀1PWM输出占空比", 1, QPen(Qt::blue,2),  false, true,  WaveCurveType::kPWMRatio,      {}}, // 默认可见
     WaveCurve{"阀1目标电流",     1, QPen(Qt::blue,2),  false, false, WaveCurveType::kTargetCurrent, {}},
     WaveCurve{"阀1实际电流",     1, QPen(Qt::blue,2),  false, false, WaveCurveType::kRealCurrent,   {}},
@@ -1188,6 +1196,7 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     cfg.bottom_x_unit = AxisUnit::ks;
 
     m_wavePlot->setupAxis(cfg);
+    m_wavePlot->setAutoY(true);
 
     for(auto curve : wave_curves) {
         auto index = m_wavePlot->addCurve(curve);
@@ -1377,11 +1386,16 @@ void CalibrationPage::OnDrawStayFa1() {
     
     CanDriver::GetInstance()->ExecCmd(SEND_COB_ID, cur_fa_val_1_cmd_, kCmdTimeOut);
     std::lock_guard<std::mutex> lk(m_time_mtx_);
-    DrawStayInfo info;
+    DrawCurveInfo info;
     info.side = 1;
     info.time = m_time;
 #ifdef ON_TEST_MODE
     info.pos_mm = fmod(m_time*10,10);
+    info.deviation = fmod(m_time*10,20);
+    info.demand_value = fmod(m_time*10,30);
+    info.pwm_ratio = fmod(m_time*10,40);
+    info.real_curr = fmod(m_time*10,50);
+    info.target_curr = fmod(m_time*10,60);
 #else
     Tpdo2PositionInfo pos_info = ReadTpdo2Position(1);
     if(!pos_info.valid){
@@ -1390,6 +1404,11 @@ void CalibrationPage::OnDrawStayFa1() {
     info.pos_mm = pos_info.posMm; // 实际位移
     info.deviation = pos_info.deviationMm; // 控制偏差
     info.demand_value = pos_info.demandValueMm; // 最终需求值
+    
+    Tpdo3CurrentInfo curr_info = ReadTpdo3Current(1);
+    info.pwm_ratio = curr_info.GetPwmAbs(); // PWM输出值占空比
+    info.real_curr = curr_info.GetActualCurrentAbsMa(); // 实际电流
+    info.target_curr = curr_info.GetTargetCurrentAbsMa(); // 目标电流
 #endif
     auto now = QDateTime::currentDateTime();
     int diss = m_time_.msecsTo(now);
@@ -1402,11 +1421,16 @@ void CalibrationPage::OnDrawStayFa2() {
 
     CanDriver::GetInstance()->ExecCmd(SEND_COB_ID, cur_fa_val_2_cmd_, kCmdTimeOut);
     std::lock_guard<std::mutex> lk(m_time_mtx_);
-    DrawStayInfo info;
+    DrawCurveInfo info;
     info.side = 2;
     info.time = m_time;    
 #ifdef ON_TEST_MODE
     info.pos_mm = fmod(m_time*10,10);
+    info.deviation = fmod(m_time*10,20);
+    info.demand_value = fmod(m_time*10,30);
+    info.pwm_ratio = fmod(m_time*10,40);
+    info.real_curr = fmod(m_time*10,50);
+    info.target_curr = fmod(m_time*10,60);
 #else
     Tpdo2PositionInfo pos_info = ReadTpdo2Position(2);
     if(!pos_info.valid){
@@ -1415,13 +1439,19 @@ void CalibrationPage::OnDrawStayFa2() {
     info.pos_mm = pos_info.posMm; // 实际位移
     info.deviation = pos_info.deviationMm; // 控制偏差
     info.demand_value = pos_info.demandValueMm; // 最终需求值
+
+    Tpdo3CurrentInfo curr_info =  ReadTpdo3Current(2);
+    info.pwm_ratio = curr_info.GetPwmAbs(); // PWM输出值占空比
+    info.real_curr = curr_info.GetActualCurrentAbsMa(); // 实际电流
+    info.target_curr = curr_info.GetTargetCurrentAbsMa(); // 目标电流
+
 #endif
     m_time += static_cast<double>(m_time_.msecsTo(QDateTime::currentDateTime())) / 1000.0;
     SendDrawStayFaInfo(info);
     m_time_ = QDateTime::currentDateTime();
 }
 
-void CalibrationPage::DrawStay(const DrawStayInfo &info) {
+void CalibrationPage::DrawStay(const DrawCurveInfo &info) {
     int control_side = info.side;
     if(control_side != 1 && control_side != 2) {
         return;
@@ -1430,6 +1460,9 @@ void CalibrationPage::DrawStay(const DrawStayInfo &info) {
     m_wavePlot->appendData(control_side, WaveCurveType::kRealDisp, info.time, info.pos_mm);
     m_wavePlot->appendData(control_side, WaveCurveType::kCloseLoopErr, info.time, info.deviation);
     m_wavePlot->appendData(control_side, WaveCurveType::kDemandVal, info.time, info.demand_value);
+    m_wavePlot->appendData(control_side, WaveCurveType::kPWMRatio, info.time, info.pwm_ratio);
+    m_wavePlot->appendData(control_side, WaveCurveType::kRealCurrent, info.time, info.real_curr);
+    m_wavePlot->appendData(control_side, WaveCurveType::kTargetCurrent, info.time, info.target_curr);
 }
 
 // 电流
