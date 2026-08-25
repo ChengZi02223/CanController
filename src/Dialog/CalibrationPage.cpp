@@ -1,6 +1,5 @@
 #include "CalibrationPage.h"
 
-#include "BasicInfoBar.h"
 #include "CanDriver.h"
 #include "TaskMgr.h"
 #include "can_cmd.h"
@@ -13,9 +12,10 @@
 #include <mutex>
 #include <map>
 
+// #define kCalibratScale 10
+
 #define kFaMaxFlow 80 // L/Min
 #define kSleepTimeOut 300
-#define kCmdTimeOut 400
 #define kReadTPDOTimeOut 200
 
 #ifdef ON_TEST_MODE
@@ -23,11 +23,18 @@
 #else
     #define kCloseCycleWaitTime 15 //s
 #endif
+static const std::vector<int> Calibrat_list = {100, 90, 50, 10, 0, 0, 0, 10, 50, 90, 100};
 static const std::vector<double> flow_table = {1.0, 0.9, 0.5, 0.1, 0, 0, 0, 0.1, 0.5, 0.9, 1.0};
 
 inline int32_t GetTargetFlow(int i) {
     if(i >= 0 || i < flow_table.size()) {
         return flow_table[i] * kFaMaxFlow;
+    }
+} 
+
+inline int GetCalibratValue(int i) {
+    if(i >= 0 || i < Calibrat_list.size()) {
+        return Calibrat_list[i];
     }
 } 
 
@@ -67,6 +74,7 @@ void CalibrationPage::InitPage() {
 
     main_layout_->addLayout(left_layout, 0.5);
     main_layout_->addLayout(right_layout, 0.5);
+    connect(this, &CalibrationPage::SendInfoChanged, basic_info_bar_, &BasicInfoBar::OnChangeInfo);
 
     InitPageValue();
 }
@@ -764,18 +772,34 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                     break;
             }
             UpdateCalibInfo();
-            bool start = (calib_state_ == kStart);
+            on_calibrat_ = (calib_state_ == kStart);
             for(int c = 0; c < 3; c++) {
                 QTableWidgetItem* item = displace_table_->item(i, c);
                 if(item){
-                    item->setSelected(start);
+                    item->setSelected(on_calibrat_);
                 }
             }
-            if(start) {
+            if(on_calibrat_) {
                 InitCalibValues(i);
                 target_flow_edit_->setText(QString::number(GetTargetFlow(i)));
+                CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_READ_VALUE_CMD, kCmdTimeOut);
+                int value = GetCalibratValue(i);
+                if(i < 6) {
+                    cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, value);
+                    StartControl1Loop();
+                }else {
+                    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, value);
+                    StartControl2Loop();
+                }
             } else {
-                target_flow_edit_->setText("");
+                if(i < 6) {
+                    CanDriver::GetInstance()->ExecCmd(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD, kCmdTimeOut);
+                    StopControl1Loop();
+                }else {
+                    CanDriver::GetInstance()->ExecCmd(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD, kCmdTimeOut);
+                    StopControl2Loop();
+                }
+                CanDriver::GetInstance()->ExecCmd(NMT_COB_ID, NMT_CLOSE_READ_CMD, kCmdTimeOut);
             }
         });
 
@@ -794,11 +818,12 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
 
     auto sub_layout = new QHBoxLayout();
     auto displace_target_label = new QLabel("位移目标值:");
-    auto displace_target_edit = new QLineEdit();
-    displace_target_edit->setAlignment(Qt::AlignCenter);
+    displace_target_edit_ = new QLineEdit();
+    displace_target_edit_->setAlignment(Qt::AlignCenter);
     auto actual_value_label = new QLabel("位移实际值:");
-    auto actual_value_edit = new QLineEdit();
-    actual_value_edit->setAlignment(Qt::AlignCenter);
+    actual_value_edit_ = new QLineEdit();
+    actual_value_edit_->setAlignment(Qt::AlignCenter);
+    actual_value_edit_->setReadOnly(true);
     auto real_flow_label = new QLabel("实时流量:");
     auto real_flow_edit = new QLineEdit();
     real_flow_edit->setAlignment(Qt::AlignCenter);
@@ -837,10 +862,10 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     save_btn->setMinimumWidth(100);
 
     sub_layout->addWidget(displace_target_label);
-    sub_layout->addWidget(displace_target_edit);
+    sub_layout->addWidget(displace_target_edit_);
     sub_layout->addStretch();
     sub_layout->addWidget(actual_value_label);
-    sub_layout->addWidget(actual_value_edit);
+    sub_layout->addWidget(actual_value_edit_);
     sub_layout->addStretch();
     sub_layout->addWidget(real_flow_label);
     sub_layout->addWidget(real_flow_edit);
@@ -862,10 +887,10 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     main_layout->addWidget(range_slider_);
     
     connect(range_slider_, &QRangeSlider::valueChanged, [=](int value){
-        if(calib_state_ != kStart) {
+        displace_target_edit_->setText(QString::number(value));
+        if(!on_calibrat_) {
             return;
         }
-        displace_target_edit->setText(QString::number(value));
         // auto select_items = displace_table_->selectedItems();
         // if(select_items.isEmpty()) {
         //     return;
@@ -877,13 +902,13 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         //     (*it)->setText(QString::number(value));
         //     real_flow_edit->setText(QString::number(value));
         // }
-        auto selected_calib_item = displace_table_->item(select_calib_, 2);
-        selected_calib_item->setText(QString::number(value));
-        real_flow_edit->setText(QString::number(value));
+        // auto selected_calib_item = displace_table_->item(select_calib_, 2);
+        // selected_calib_item->setText(QString::number(value));
+        // real_flow_edit->setText(QString::number(value)); // 采集试验台的数据采集卡的数据，目前还没有要到接口，可以先空着
         UpdateCalibInfo();
     });
     connect(displace_table_, &QTableWidget::cellClicked, [this](int row, int col){
-        if(calib_state_ == kStart && row != select_calib_) return;
+        if(on_calibrat_ && row != select_calib_) return;
         auto control_item = displace_table_->item(row, 2); 
         range_slider_->setValue(control_item->text().toInt());
     });
@@ -897,9 +922,9 @@ void CalibrationPage::UpdateCalibInfo() {
     auto calib_item = displace_table_->item(select_calib_, 0);
     auto control_item = displace_table_->item(select_calib_, 2);
     QString state_str = "";
-    if(calib_state_ == kStart) {
+    if(on_calibrat_) {
         state_str = "开始标定";
-    } else if (calib_state_ == kEnd) {
+    } else {
         state_str = "结束标定";
     }
     auto text = QString("当前标定：%1 | %2 | %3 | %4").arg(v_head).arg(calib_item->text()).arg(control_item->text()).arg(state_str);
@@ -939,6 +964,7 @@ void CalibrationPage::InitCalibState(QPushButton *calib_btn) {
     }
 }
 
+
 void CalibrationPage::InitCalibValues(int row) {
     if(row < 0 || row > displace_table_->rowCount() - 1) {
         return;
@@ -946,7 +972,9 @@ void CalibrationPage::InitCalibValues(int row) {
     for(int i = 0; i < displace_table_->rowCount(); i++) {
         auto control_item = displace_table_->item(i, 2); 
         if(i == row) {
-            range_slider_->setValue(control_item->text().toInt());
+            auto value = control_item->text().toInt();
+            range_slider_->setValue(value);
+            displace_target_edit_->setText(QString::number(value));
         }
         SetRowCalib(i, i == row);
         for(int c = 0; c < 3; c++) {
@@ -1463,6 +1491,10 @@ void CalibrationPage::DrawStay(const DrawCurveInfo &info) {
     m_wavePlot->appendData(control_side, WaveCurveType::kPWMRatio, info.time, info.pwm_ratio);
     m_wavePlot->appendData(control_side, WaveCurveType::kRealCurrent, info.time, info.real_curr);
     m_wavePlot->appendData(control_side, WaveCurveType::kTargetCurrent, info.time, info.target_curr);
+
+    if(on_calibrat_) {
+        actual_value_edit_->setText(QString::number(info.pos_mm));
+    }
 }
 
 // 电流

@@ -1,6 +1,8 @@
 #include "SettingPage.h"
-#include "BasicInfoBar.h"
+
 #include "QFileOperator.h"
+#include "CanDriver.h"
+#include "can_cmd.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -59,6 +61,7 @@ void SettingPage::InitPage() {
         function_btn_area_->setEnabled(state == kTestStart);
     #endif
     });
+    connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
 }
 
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
@@ -115,6 +118,8 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     p_item->setFlags(p_item->flags() | Qt::ItemIsEditable);
     p_item->setTextAlignment(Qt::AlignCenter);
     setItem(row, INFO_TABLE_MODIFY_COLUMN, p_item);
+
+    default_values_[row] = item.paramValue;
     // 确定标定按钮
     // auto enter_btn = new QPushButton("确认", this);
     // enter_btn->setObjectName("EnterBtn");
@@ -144,6 +149,7 @@ void SettingInfoTable::OnLoadSettings() {
     }
     clearContents();
     setRowCount(0);
+    default_values_.clear();
     for(auto item : tableDataList) {
         InsterRow(item);
     }
@@ -207,30 +213,40 @@ void SettingInfoTable::OnConfirmAllValues() {
     }
 }
 
+void SettingInfoTable::ReloadDefaultValue() {
+    for(int i = 0; i < rowCount(); ++i) {
+        auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
+        auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+        auto default_value = default_values_[i];
+        save_item->setText(default_value);
+        change_item->setText(default_value);
+        change_item->setForeground(QBrush(Qt::black));
+    }
+}
+
 void SettingInfoTable::OnSaveDefaultValue() {
-    OnConfirmAllValues();
+    UpdateParams();
+    qDebug() << "保存默认参数";
+    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
+    ReloadDefaultValue();
     update();
 }
 
 void SettingInfoTable::OnSaveToEPROM() {
+    UpdateParams();
+    qDebug() << "保存到EPROM";
+    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_SAVE_USER_SETTING_CMD, kCmdTimeOut);
 
+    OnConfirmAllValues();
 }
 
 void SettingInfoTable::OnReadFromEPROM() {
-
+    qDebug() << "读取参数到表格";
+    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_LOAD_DEFAULT_CMD, kCmdTimeOut);
+    ReloadDefaultValue();
 }
 
-// void SettingInfoTable::OnEnterBtnClicked(int row) {
-//     if(row < 0 || row > rowCount()) {
-//         return;
-//     }
-//     auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
-//     auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
-//     save_item->setText(change_item->text());
-//     save_item->setForeground(QBrush(Qt::green));
-// }
-
-void SettingInfoTable::OnModifyValueChanged(int col, int row) {
+void SettingInfoTable::UpdateParams() {
 
 }
 
@@ -325,15 +341,3 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
     emit SendInputMode(input_mode_);
     mode_change_btn_->setText(mode);
 }
-
-// void FunctionBtnArea::OnSaveDefaultBtnClicked() {
-//     emit SendSaveDefaultValue();
-// }
-
-// void FunctionBtnArea::OnSaveEepromBtnClicked() {
-//     emit SendSaveToEPROM();
-// }
-
-// void FunctionBtnArea::OnLoadToTableBtnClicked() {
-//     emit SendReadFromEPROM();
-// }

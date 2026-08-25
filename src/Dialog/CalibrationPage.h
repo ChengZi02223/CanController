@@ -8,12 +8,11 @@
 #include <atomic>
 #include <iostream>
 #include <QDateTime>
-
+#include "BasicInfoBar.h"
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 enum LoopMode { kOpenLoop, kClosedLoop };
-
 struct DrawCurveInfo {
     int side; // 1 | 2 侧
     double time = 0.0; // 时间
@@ -121,6 +120,7 @@ private:
 signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);
     void SendOpenLoopFinished();
+    void SendInfoChanged(InfoType type, QString value);
 
 private slots:
     void OnControl1BtnClicked(bool checked);
@@ -203,6 +203,10 @@ private:
     std::vector<QPushButton*> calib_btns_;
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
+
+    QLineEdit *displace_target_edit_ = nullptr;
+    QLineEdit *actual_value_edit_ = nullptr;
+    bool on_calibrat_ = false;
 
     //周期信号响应区
     QLineEdit* cycle_signal_count_edit_ = nullptr;

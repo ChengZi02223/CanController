@@ -51,6 +51,14 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
     }
 
     InitData();
+
+    connect(serial_num_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kSerialNum, text); });
+    connect(model_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kModel, text); });
+    connect(channel_count_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kChannelCount, text);});
+    connect(manufacturer_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kManufacturer, text);});
+    connect(version_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kVersion, text);});
+    connect(baud_rate_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kBaudRate, text);});
+    connect(protocol_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kProtocol, text);});
 }
 
 void BasicInfoBar::CrateValBar() {
@@ -82,6 +90,34 @@ void BasicInfoBar::CreateHarBar() {
     main_layout_->addWidget(protocol_edit_);
     main_layout_->addWidget(start_btn_);
     connect(start_btn_, &QPushButton::clicked, this, &BasicInfoBar::OnStartBtnClicked);
+}
+
+void BasicInfoBar::OnChangeInfo(InfoType type, QString value) {
+    switch(type) {
+        case InfoType::kSerialNum:
+            serial_num_edit_->setText(value);
+        break;
+        case InfoType::kModel:
+            model_edit_->setText(value);
+        break;
+        case InfoType::kChannelCount:
+            channel_count_edit_->setText(value);
+        break;
+        case InfoType::kManufacturer:
+            manufacturer_edit_->setText(value);
+        break;
+        case InfoType::kVersion:
+            version_edit_->setText(value);
+        break;
+        case InfoType::kBaudRate:
+            baud_rate_edit_->setText(value);
+        break;
+        case InfoType::kProtocol:
+            protocol_edit_->setText(value);
+        break;
+        default:
+        break;
+    }
 }
 
 void BasicInfoBar::SetSerialNum(const QString& serial_num) {

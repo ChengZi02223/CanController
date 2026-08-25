@@ -7,6 +7,8 @@
 #include <PCANBasic.h>
 #include <mutex>
 
+#define kCmdTimeOut 400
+
 // 自定义 CAN 帧结构 (兼容 Linux can_frame 格式)
 struct can_frame {
     uint32_t can_id;   // CAN ID (11位或29位)

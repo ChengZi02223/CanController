@@ -482,7 +482,7 @@ QTableWidget#SettingInfoTable::item {
 }
 QTableWidget#SettingInfoTable::item:selected {
     background-color: #dbeafe;
-    /* color: #1e293b; */
+    color: #1e293b;
 }
 QTableWidget#SettingInfoTable QHeaderView::section {
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,

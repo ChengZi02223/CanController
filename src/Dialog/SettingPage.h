@@ -2,6 +2,8 @@
 #define _SETTING_PAGE_H_
 
 #include "QtWidgets.h"
+#include "BasicInfoBar.h"
+#include <map>
 
 class BasicInfoBar;
 class SettingInfoTable;
@@ -21,6 +23,7 @@ public:
 
 signals:
     void SendInputMode(InputMode mode);
+    void SendInfoChanged(InfoType type, QString value);
 
 private:
     void InitPage();
@@ -52,12 +55,14 @@ public slots:
     void OnSaveToEPROM();
     void OnReadFromEPROM();
 
-private slots:
-    // void OnEnterBtnClicked(int row);
-    void OnModifyValueChanged(int col, int row);
-
 private:
     void InsterRow(ParaItem item);
+    void ReloadDefaultValue();
+
+    void UpdateParams();
+
+private:
+    std::map<int, QString> default_values_;
 };
 
 class FunctionBtnArea : public QGroupBox {

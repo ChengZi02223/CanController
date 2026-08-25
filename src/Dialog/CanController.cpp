@@ -39,6 +39,7 @@ void CanController::InitWindow() {
             stacked_widget_->setCurrentIndex(1);
         }
     });
+    connect(setting_page_, &SettingPage::SendInfoChanged, calibration_page_, &CalibrationPage::SendInfoChanged);
     InitData();
 }
 

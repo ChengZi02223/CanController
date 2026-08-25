@@ -13,6 +13,7 @@ enum TestState {
     kTestEnd
 };
 
+enum InfoType {kSerialNum, kModel, kChannelCount, kManufacturer, kVersion, kBaudRate, kProtocol};
 struct BasicInfo {
     QString serial_num;     // 序列号
     QString date;           // 日期
@@ -44,6 +45,10 @@ public:
 
 signals:
     void SendTestState(TestState state);
+    void SendInfoChanged(InfoType type, QString value);
+
+public slots:
+    void OnChangeInfo(InfoType type, QString value);
 
 private slots:
     void SetModel(const QString& model);
