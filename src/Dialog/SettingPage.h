@@ -13,6 +13,8 @@ struct BasicInfo;
 
 enum InputMode {kHand, kAuto};
 
+enum ReadWriteType {kNone, kRead, kWirte, kReadOnly, kWriteOnly, kReadWrite};
+
 class SettingPage : public QWidget {
     Q_OBJECT    
 
@@ -63,6 +65,7 @@ private:
 
 private:
     std::map<int, QString> default_values_;
+    std::map<int, QString> user_values_;
 };
 
 class FunctionBtnArea : public QGroupBox {

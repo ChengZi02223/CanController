@@ -7,8 +7,6 @@ QRangeSlider::QRangeSlider(QWidget *parent)
 {
     // 创建控件
     m_slider = new QSlider(Qt::Horizontal);
-    m_slider->setRange(0, 100);
-    m_slider->setValue(0);
     m_slider->setTickPosition(QSlider::TicksBelow);
     m_slider->setTickInterval(10);
 
@@ -42,9 +40,16 @@ int QRangeSlider::value() const
     return m_slider->value();
 }
 
+void QRangeSlider::SetRange(int min, int max) {
+    m_slider->setRange(min, max);
+    m_slider->setValue(min);
+    min_value_ = min;
+    max_value_ = max;
+}
+
 void QRangeSlider::setValue(int val)
 {
-    val = qBound(0, val, 100);
+    val = qBound(min_value_, val, max_value_);
     if (val != m_slider->value()) {
         m_slider->setValue(val);
         // valueChanged 信号会在 slider 的 valueChanged 中发出，无需重复发送
@@ -54,7 +59,7 @@ void QRangeSlider::setValue(int val)
 void QRangeSlider::onLeftClicked()
 {
     int newVal = m_slider->value() - 1;
-    if (newVal >= 0) {
+    if (newVal >= min_value_) {
         m_slider->setValue(newVal);
     }
 }
@@ -62,7 +67,7 @@ void QRangeSlider::onLeftClicked()
 void QRangeSlider::onRightClicked()
 {
     int newVal = m_slider->value() + 1;
-    if (newVal <= 100) {
+    if (newVal <= max_value_) {
         m_slider->setValue(newVal);
     }
 }

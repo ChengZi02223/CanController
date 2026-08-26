@@ -3,6 +3,7 @@
 #include "QFileOperator.h"
 #include "CanDriver.h"
 #include "can_cmd.h"
+#include "Utils.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -16,6 +17,41 @@
 #define ROW_COUNT 12
 #define COLUMN_COUNT 7
 #define ROW_HEIGHT 42
+
+inline ReadWriteType GetReadWriteType(const QString &text) {
+    QString s = text.trimmed();
+    // 空、"-" 返回kNone
+    if (s.isEmpty() || s == "-")
+    {
+        return ReadWriteType::kNone;
+    }
+
+    QString lower = s.toLower();
+
+    // ========== 只读场景：r、ro、中文"只读" ==========
+    if (lower == "r" || lower == "ro" || s.contains("只读"))
+    {
+        return ReadWriteType::kReadOnly;
+    }
+    // ========== 只写场景：w、wo、中文"只写" ==========
+    if (lower == "w" || lower == "wo" || s.contains("只写"))
+    {
+        return ReadWriteType::kWriteOnly;
+    }
+    // ========== 读写场景：rw ==========
+    if (lower == "rw")
+    {
+        return ReadWriteType::kReadWrite;
+    }
+
+    // 单独读、单独写（如果业务需要区分kRead / kWrite，例如纯"r"代表仅读，纯"w"仅写）
+    // 上面已经把 r/ro 归为kReadOnly，w/wo归为kWriteOnly；
+    // 如果希望区分 kRead(仅读) 和 kReadOnly(只读禁止修改)，可以调整逻辑。
+
+    // 未知文本返回kNone
+    return ReadWriteType::kNone;
+    
+}
 
 static const QStringList info_table_h_head({"参数名称", "对象字典", "索引", "保存值", "修改值", "下限", "上限"});
 // static const QStringList info_table_v_head({"最大电流", "额定电压", "响应时间", "增益系数", "滤波深度", "死区时间", "保护阈值", "校准偏移", "过流保护", "温度补偿", "采样周期", "通讯超时"});
@@ -57,9 +93,7 @@ void SettingPage::InitPage() {
 
     connect(basic_info_bar_, &BasicInfoBar::SendTestState, [=](TestState state){
         setting_info_table_->setEnabled(state == kTestStart);
-    #ifndef ON_TEST_MODE
         function_btn_area_->setEnabled(state == kTestStart);
-    #endif
     });
     connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
 }
@@ -115,7 +149,12 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     setItem(row, INFO_TABLE_SAVE_COLUMN, save_item);    
     // 参数值
     auto p_item = new QTableWidgetItem(item.paramValue);
-    p_item->setFlags(p_item->flags() | Qt::ItemIsEditable);
+    if(GetReadWriteType(item.rwDesc) == ReadWriteType::kReadOnly) {
+        p_item->setFlags(p_item->flags() & ~Qt::ItemIsEditable);
+    } else {
+        p_item->setFlags(p_item->flags() | Qt::ItemIsEditable);
+    }
+    
     p_item->setTextAlignment(Qt::AlignCenter);
     setItem(row, INFO_TABLE_MODIFY_COLUMN, p_item);
 
@@ -237,13 +276,22 @@ void SettingInfoTable::OnSaveToEPROM() {
     qDebug() << "保存到EPROM";
     CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_SAVE_USER_SETTING_CMD, kCmdTimeOut);
 
-    OnConfirmAllValues();
+    for(int i = 0; i < rowCount(); ++i) {
+        user_values_[i] = item(i, INFO_TABLE_MODIFY_COLUMN)->text();
+    }
 }
 
 void SettingInfoTable::OnReadFromEPROM() {
     qDebug() << "读取参数到表格";
     CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_LOAD_DEFAULT_CMD, kCmdTimeOut);
-    ReloadDefaultValue();
+    for(int i = 0; i < rowCount(); ++i) {
+        auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
+        auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+        auto default_value = user_values_[i];
+        save_item->setText(default_value);
+        change_item->setText(default_value);
+        change_item->setForeground(QBrush(Qt::black));
+    }
 }
 
 void SettingInfoTable::UpdateParams() {
@@ -310,7 +358,7 @@ void FunctionBtnArea::ConnectSignles() {
 }
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
-#ifndef ON_TEST_MODE
+#ifdef ON_TEST_MODE
     QString file_path("D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明.xlsx");
 #else
     QString file_path = QFileDialog::getOpenFileName(nullptr, "Open File", "", "(*)");

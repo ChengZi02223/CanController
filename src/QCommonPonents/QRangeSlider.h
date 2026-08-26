@@ -14,6 +14,7 @@ public:
 
     // 获取当前数值
     int value() const;
+    void SetRange(int min, int max);
 
 public slots:
     // 设置数值（自动限制范围并同步控件）
@@ -32,6 +33,9 @@ private:
     QSlider    *m_slider;
     QPushButton *m_leftBtn;
     QPushButton *m_rightBtn;
+
+    int min_value_;
+    int max_value_;
 };
 
 #endif // _RANGE_SLIDER_H_
