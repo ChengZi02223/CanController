@@ -13,6 +13,7 @@ struct BasicInfo;
 
 enum InputMode {kHand, kAuto};
 
+enum ParamType {kError, kUINT8, kUINT16, kUINT32, kSTRING};
 enum ReadWriteType {kNone, kRead, kWirte, kReadOnly, kWriteOnly, kReadWrite};
 
 class SettingPage : public QWidget {
@@ -26,6 +27,10 @@ public:
 signals:
     void SendInputMode(InputMode mode);
     void SendInfoChanged(InfoType type, QString value);
+    void SendRowValue(QString value, QString idx, QString sub_idx);
+
+private slots:
+    void OnValueChanged(QTableWidgetItem *item);
 
 private:
     void InitPage();
@@ -35,6 +40,8 @@ private:
     BasicInfoBar* basic_info_bar_ = nullptr;
     SettingInfoTable* setting_info_table_ = nullptr;
     FunctionBtnArea* function_btn_area_ = nullptr;
+
+    QTableWidgetItem *last_item_ = nullptr;
 };
 
 class SettingInfoTable : public QTableWidget {
@@ -43,6 +50,8 @@ class SettingInfoTable : public QTableWidget {
 public:
     SettingInfoTable(QWidget* parent = nullptr);
     ~SettingInfoTable(){}
+
+    std::vector<uint8_t> GetRowCMD(int row);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -56,9 +65,11 @@ public slots:
     void OnSaveDefaultValue();
     void OnSaveToEPROM();
     void OnReadFromEPROM();
+    void OnSetRowValue(QString value, QString idx, QString sub_idx = "");
 
 private:
     void InsterRow(ParaItem item);
+    std::vector<uint8_t> CreateRowCmd(ParaItem item);
     void ReloadDefaultValue();
 
     void UpdateParams();
@@ -66,6 +77,9 @@ private:
 private:
     std::map<int, QString> default_values_;
     std::map<int, QString> user_values_;
+    // std::vector<RowItemIndex> row_items_;
+
+    std::map<int, std::vector<uint8_t>> row_cmd_map_;
 };
 
 class FunctionBtnArea : public QGroupBox {

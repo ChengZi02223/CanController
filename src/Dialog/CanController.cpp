@@ -19,6 +19,7 @@ CanController::CanController(QWidget* parent)
     int screenW = fullRect.width();
     int screenH = fullRect.height();
     setMinimumSize(screenW * 1 / 2, screenH * 3 / 4);
+    setWindowIcon(QIcon(":/icons/HZLK.png"));
 }
 
 CanController::~CanController() {}
@@ -40,6 +41,7 @@ void CanController::InitWindow() {
         }
     });
     connect(setting_page_, &SettingPage::SendInfoChanged, calibration_page_, &CalibrationPage::SendInfoChanged);
+    connect(calibration_page_, &CalibrationPage::SendRowValue, setting_page_, &SettingPage::SendRowValue);
     InitData();
 }
 

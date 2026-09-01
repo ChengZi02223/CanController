@@ -29,19 +29,19 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
     channel_count_edit_->setEnabled(false);
     manufacturer_edit_ = new QInfoEdit("厂家：", this);   //厂家
     manufacturer_edit_->setAlignment(Qt::AlignCenter);
-    // manufacturer_edit_->setReadOnly(true);
+    manufacturer_edit_->setReadOnly(true);
     manufacturer_edit_->setEnabled(false);
     version_edit_ = new QInfoEdit("版本：", this);        //版本
     version_edit_->setAlignment(Qt::AlignCenter);
-    // version_edit_->setReadOnly(true);
+    version_edit_->setReadOnly(true);
     version_edit_->setEnabled(false);
     baud_rate_edit_ = new QInfoEdit("波特率：", this);      //波特率
     baud_rate_edit_->setAlignment(Qt::AlignCenter);
-    // baud_rate_edit_->setReadOnly(true);
+    baud_rate_edit_->setReadOnly(true);
     baud_rate_edit_->setEnabled(false);
     protocol_edit_ = new QInfoEdit("协议：", this);       //协议
     protocol_edit_->setAlignment(Qt::AlignCenter);
-    // protocol_edit_->setReadOnly(true);
+    protocol_edit_->setReadOnly(true);
     protocol_edit_->setEnabled(false);
 
     if(style == LayoutStyle::kHar) {

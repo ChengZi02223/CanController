@@ -153,6 +153,7 @@ void QWavePlotWidget::setLeftYRange(double min, double max)
     m_autoY = false;
     m_leftYMin = min;
     m_leftYMax = max;
+    update();
 }
 
 void QWavePlotWidget::setRightYRange(double min, double max)
@@ -160,11 +161,13 @@ void QWavePlotWidget::setRightYRange(double min, double max)
     m_autoY = false;
     m_rightYMin = min;
     m_rightYMax = max;
+    update();
 }
 
 void QWavePlotWidget::setAutoY(bool enable)
 {
     m_autoY = enable;
+    update();
 }
 
 void QWavePlotWidget::setCurveVisible(int curveIndex, bool visible)
@@ -385,6 +388,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         painter.setPen(crv.pen);
         QPointF prevPt;
         bool first = true;
+        double dp_v, y;
         for(auto& dp : crv.points)
         {
             // 过滤不在当前可视窗口的点
@@ -392,11 +396,11 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
                 continue;
 
             double x = timeToX(dp.t, viewMin, viewMax, plotW);
-            double y;
+            dp_v = dp.val;
             if(crv.useRightY) {
-                y = valueToY(dp.val, m_rightYMin, m_rightYMax, plotH);
+                y = valueToY(dp_v, m_rightYMin, m_rightYMax, plotH);
             } else {
-                y = valueToY(dp.val, m_leftYMin, m_leftYMax, plotH);
+                y = valueToY(dp_v, m_leftYMin, m_leftYMax, plotH);
             }
             QPointF curr(x,y);
             if(!first)
@@ -404,6 +408,13 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
             prevPt = curr;
             first = false;
         }
+        if(crv.useRightY) {
+            painter.drawLine(QPointF(m_marginLeft+plotW,y), QPointF(m_marginLeft+plotW + 5, y));
+            painter.drawText(QRectF(w-m_marginRight+8, y, m_marginRight-10,20), Qt::AlignLeft|Qt::AlignVCenter, QString::number(dp_v, 'f',2));
+        } else {
+            painter.drawLine(QPointF(m_marginLeft - 5 ,y), QPointF(m_marginLeft, y));
+            painter.drawText(QRectF(0, y - 10, m_marginLeft-8,20), Qt::AlignRight|Qt::AlignVCenter, QString::number(dp_v, 'f',2));
+        }        
     }
 }
 

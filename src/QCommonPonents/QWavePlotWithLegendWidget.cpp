@@ -3,13 +3,42 @@
 #include <QPainter>
 #include <QHBoxLayout>
 #include <QDebug>
+#include <QDoubleValidator>
 
 QWavePlotWithLegendWidget::QWavePlotWithLegendWidget(QWidget *parent)
     : QWidget(parent)
 {
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
-    m_mainLayout->setSpacing(6);
+    m_mainLayout->setSpacing(2);
+
+    m_left_max_y = new QLineEdit("1.00", this);
+    m_left_max_y->setFixedWidth(100);
+    QDoubleValidator* val = new QDoubleValidator(m_left_max_y);
+    val->setRange(-100000.0, 100000.0);   
+    val->setDecimals(2);                
+    val->setNotation(QDoubleValidator::StandardNotation); 
+    val->setLocale(QLocale::C);           
+    m_left_max_y->setValidator(val);
+    m_left_max_y->setAlignment(Qt::AlignCenter);
+
+    m_right_max_y = new QLineEdit("1.00", this);
+    m_right_max_y->setFixedWidth(100);
+    QDoubleValidator* val2 = new QDoubleValidator(m_right_max_y);
+    val2->setRange(-100000.0,100000.0);
+    val2->setDecimals(2);
+    val2->setNotation(QDoubleValidator::StandardNotation);
+    val2->setLocale(QLocale::C);
+    m_right_max_y->setValidator(val2);
+    m_right_max_y->setAlignment(Qt::AlignCenter);
+
+    QHBoxLayout *layout = new QHBoxLayout();
+    layout->addWidget(m_left_max_y);
+    layout->addStretch();
+    layout->addWidget(m_right_max_y);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+    m_mainLayout->addLayout(layout);
 
     // 绘图控件
     m_plot = new QWavePlotWidget(this);
@@ -22,6 +51,15 @@ QWavePlotWithLegendWidget::QWavePlotWithLegendWidget(QWidget *parent)
     m_mainLayout->addWidget(m_legendContainer);
     connect(m_plot, &QWavePlotWidget::sigCurveFirstData,
             this, &QWavePlotWithLegendWidget::refreshLegend);
+        
+    connect(m_left_max_y, &QLineEdit::textChanged, this, [this](QString text){
+
+        setLeftYRange(0, text.toDouble());
+    });
+
+    connect(m_right_max_y, &QLineEdit::textChanged, this, [this](QString text){
+        setRightYRange(0, text.toDouble());
+    });
 }
 
 void QWavePlotWithLegendWidget::clearAllLegendItems()

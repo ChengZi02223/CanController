@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QPen>
+#include <QLineEdit>
 #include "QWavePlot.h"
 #include "FlowLayout.h"
 
@@ -54,6 +55,8 @@ private:
 private:
     QVBoxLayout* m_mainLayout;
     QWavePlotWidget* m_plot;
+    QLineEdit *m_left_max_y;
+    QLineEdit *m_right_max_y;
     QWidget* m_legendContainer;
     FlowLayout* m_legendFlowLayout;
     QList<LegendItem> m_legendItems;

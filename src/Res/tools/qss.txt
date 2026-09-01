@@ -55,6 +55,15 @@ QPushButton:disabled {
    特定按钮 - 亮色高定版
    ================================================== */
 
+#CanCongfigBtn {
+    background-color: transparent;
+    border-color: none;
+}
+
+#CanCongfigBtn:hover {
+    border-color: #2a2a2a;
+}
+
 /* 刷新按钮 - 亮银色 */
 #RefreshBtn {
     background-color: #5c5c5c;
@@ -198,31 +207,59 @@ QPushButton:disabled {
 }
 
 /* ---------- 顶部标签页 ---------- */
+/* ---------- 顶部标签页 现代化版 ---------- */
 QPushButton#SettingPageTabBtn,
 QPushButton#TestPageTabBtn {
     background-color: #e2e8f0;
     color: #475569;
     border: none;
-    padding: 8px 24px;
+    padding: 10px 26px;
+    border-radius: 10px 10px 0px 0px;
+    font-weight: 500;
+    font-size:14pt;
+    margin-right:4px;
+    margin-bottom:0px;
+}
+
+/* 激活选中状态：白色悬浮，轻微阴影，视觉上浮 */
+/* ---------- 顶部标签页｜简约下划线版 ---------- */
+/* ---------- 顶部标签页｜高辨识度Tab ---------- */
+QPushButton#SettingPageTabBtn,
+QPushButton#TestPageTabBtn {
+    background-color: #e2e8f0;
+    color: #475569;
+    border: none;
+    /* transparent占位边框，防止切换界面跳动 */
+    border-bottom:4px solid transparent;
+    padding: 4px 24px;
     border-radius: 8px 8px 0 0;
     font-weight: 500;
-    margin-right: 2px;
+    font-size:14pt;
+    margin-right: 3px;
 }
+
+/* 选中：底部高亮粗条 + 背景变白 + 文字主题蓝，双重强化 */
 QPushButton#SettingPageTabBtn:checked,
 QPushButton#TestPageTabBtn:checked {
     background-color: #ffffff;
-    color: #1e293b;
-    border-bottom: 3px solid #3b82f6;
+    color: #1d4ed8;
     font-weight: 600;
+    font-size:14pt;
+    border-bottom:4px solid #2563eb;
 }
+
 QPushButton#SettingPageTabBtn:hover,
 QPushButton#TestPageTabBtn:hover {
     background-color: #cbd5e1;
 }
+
 QPushButton#SettingPageTabBtn:checked:hover,
 QPushButton#TestPageTabBtn:checked:hover {
-    background-color: #f8fafc;
+    background-color: #ffffff;
+    color:#1d4ed8;
 }
+
+
 
 /* ---------- 开始按钮（翠绿渐变） ---------- */
 QPushButton#StartBtn {
@@ -441,7 +478,7 @@ QTableWidget#SettingInfoTable {
 QTableWidget#SettingInfoTable::item {
     padding: 4px 5px;
     border: none;
-    color: #1e293b;
+    /* color: #1e293b; */
 }
 QTableWidget#SettingInfoTable::item:selected {
     background-color: #dbeafe;
@@ -474,7 +511,6 @@ QTableWidget#DisplaceTable {
 
 /* ----- 单元格（强制黑白分明） ----- */
 QTableWidget#DisplaceTable::item {
-    color: #000000;                      /* 纯黑文字（最保险） */
     background-color: #ffffff;           /* 纯白背景 */
     padding: 3px 4px;
     border: none;
@@ -488,13 +524,11 @@ QTableWidget#DisplaceTable::item:alternate {
 /* 选中行（高亮为淡蓝，文字保持黑色） */
 QTableWidget#DisplaceTable::item:selected {
     background-color: #bfdbfe;
-    color: #000000;
 }
 
 /* ----- 表头（水平）保留黄色风格 ----- */
 QTableWidget#DisplaceTable QHeaderView::section:horizontal {
     background-color: #facc15;           /* 亮黄 */
-    color: #000000;                      /* 纯黑文字 */
     font-weight: 600;
     border: none;
     padding: 8px 12px;
@@ -503,12 +537,10 @@ QTableWidget#DisplaceTable QHeaderView::section:horizontal {
 /* 表头（垂直） */
 QTableWidget#DisplaceTable QHeaderView::section:vertical {
     background-color: #fefce8;
-    color: #000000;
 }
 
 /* 禁用状态下保持可见（如果表格被禁用） */
 QTableWidget#DisplaceTable:disabled::item {
-    color: #4b5563;
     background-color: #f3f4f6;
 }
 

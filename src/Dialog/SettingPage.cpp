@@ -4,6 +4,7 @@
 #include "CanDriver.h"
 #include "can_cmd.h"
 #include "Utils.h"
+#include "CanManager.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -17,6 +18,41 @@
 #define ROW_COUNT 12
 #define COLUMN_COUNT 7
 #define ROW_HEIGHT 42
+
+#define TEST_CONFIG_FILE "D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明V1.xlsx"
+
+// enum ParamType {kNone, kUINT8, kUINT16, kUINT32, kSTRING};
+inline ParamType GetParamType(const QString &text) {
+    QString s = text.trimmed();
+    if (s.isEmpty()) {
+        return ParamType::kError;
+    }
+
+    if(s.contains("32")) {
+        return  ParamType::kUINT32;
+    } else if(s.contains("16")) {
+        return  ParamType::kUINT16;
+    } else if(s.contains("8")) {
+        return  ParamType::kUINT8;
+    } else if(s.toLower().contains("string")) {
+        return  ParamType::kSTRING;
+    }
+    return ParamType::kError;
+}
+
+inline uint8_t GetCmdHeadByType(QString text) {
+    auto type = GetParamType(text);
+    if(type == ParamType::kUINT8) {
+        return 0x2F;
+    } else if(type == ParamType::kUINT16) {
+        return 0x2B;
+    } else if(type == ParamType::kUINT32) {
+        return 0x23;
+    } else if(type == ParamType::kSTRING) {
+        return 0x00; // need define
+    }
+    return 0x00;
+}
 
 inline ReadWriteType GetReadWriteType(const QString &text) {
     QString s = text.trimmed();
@@ -96,9 +132,29 @@ void SettingPage::InitPage() {
         function_btn_area_->setEnabled(state == kTestStart);
     });
     connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
+    connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
+    connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
+    connect(CanManager::GetInstance(), &CanManager::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
 }
 
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
+
+void SettingPage::OnValueChanged(QTableWidgetItem *item) {
+    // if(last_item_ != nullptr && last_item_ == item) {
+    //     return;
+    // } 
+    // last_item_ = item;
+
+    // qDebug() << item->text() << ": "<<item->row() << "--" << item->column();
+
+    // auto cmd = setting_info_table_->GetRowCMD(item->row());
+    // if(cmd.empty()) {
+    //     return;
+    // }
+
+    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
+    
+}
 
 SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
     setEditTriggers(QAbstractItemView::AllEditTriggers);
@@ -122,9 +178,10 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     bool ok;
     int serialNum = item.serialNum.toInt(&ok);
     if(!ok || serialNum < 0) return;
-    int row = serialNum - 1;
+    if(item.objDictName.trimmed().isEmpty()) return;  // 跳过空行(序号33)
+    int row = rowCount();          // 顺序追加，不用序号算
     insertRow(row);
-    setRowHeight(row,ROW_HEIGHT); 
+    setRowHeight(row, ROW_HEIGHT);
 
     auto param_item = new QTableWidgetItem(item.objDictName);
     param_item->setFlags(param_item->flags() & ~Qt::ItemIsEditable);
@@ -167,7 +224,61 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     // connect(enter_btn, &QPushButton::clicked, this, [this, row](){
     //     OnEnterBtnClicked(row);
     // });
-    
+    row_cmd_map_[row] = CreateRowCmd(item);
+    // row_items_.push_back({row, item.indexNum, item.subIndex, item.paramValue});
+}
+
+std::vector<uint8_t> SettingInfoTable::GetRowCMD(int row) {
+    return row_cmd_map_[row];
+}
+
+void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx) {
+    if(idx.isEmpty()) {
+        return;
+    }
+    qDebug() << "OnSetRowValue: " << value << " " << idx << " " << sub_idx;
+    QString targetIndex = idx.toUpper();
+    for(int row = 0; row < rowCount(); row++) {
+        QTableWidgetItem* objItem = item(row, INFO_TABLE_OBJ_COLUMN);
+        if(!objItem) continue;
+
+        // 表格单元格文本统一大写，比对
+        QString tableIndex = objItem->text().toUpper();
+        if(tableIndex != targetIndex)
+            continue;
+
+        // 对象字典索引匹配成功，校验子索引
+        bool subMatch = false;
+        if(sub_idx.isEmpty() || sub_idx == "--") {
+            subMatch = true;
+        } else {
+            QTableWidgetItem* subItem = item(row, INFO_TABLE_IDX_COLUMN);
+            if(subItem != nullptr) {
+                QString tableSub = subItem->text().toUpper();
+                QString targetSub = sub_idx.toUpper();
+                if(tableSub == targetSub) {
+                    subMatch = true;
+                }
+            }
+        }
+
+        if(subMatch) {
+            QTableWidgetItem* modItem = item(row, INFO_TABLE_MODIFY_COLUMN);
+            if(modItem) {
+                modItem->setText(value);
+                qDebug()<<"成功更新行"<<row<<" value="<<value;
+            }
+        }
+    }
+}
+
+std::vector<uint8_t> SettingInfoTable::CreateRowCmd(ParaItem item) {
+    std::array<uint8_t, 8> command = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    command[0] = GetCmdHeadByType(item.dataType);
+    FillValueToCmd(QStringToUint16(item.indexNum), command, 1, 2);
+
+    std::vector<uint8_t> vec_cmd(command.begin(), command.end());
+    return vec_cmd;
 }
 
 void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
@@ -181,6 +292,7 @@ void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
 }
 
 void SettingInfoTable::OnLoadSettings() {
+    QSignalBlocker blocker(this);
     auto file_op = QFileOperator::GetInstance();
     QList<ParaItem> tableDataList = file_op->getTableItems();
     if(tableDataList.empty()){
@@ -188,6 +300,7 @@ void SettingInfoTable::OnLoadSettings() {
     }
     clearContents();
     setRowCount(0);
+    // row_items_.clear();
     default_values_.clear();
     for(auto item : tableDataList) {
         InsterRow(item);
@@ -266,7 +379,7 @@ void SettingInfoTable::ReloadDefaultValue() {
 void SettingInfoTable::OnSaveDefaultValue() {
     UpdateParams();
     qDebug() << "保存默认参数";
-    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
+    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
     ReloadDefaultValue();
     update();
 }
@@ -274,7 +387,7 @@ void SettingInfoTable::OnSaveDefaultValue() {
 void SettingInfoTable::OnSaveToEPROM() {
     UpdateParams();
     qDebug() << "保存到EPROM";
-    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_SAVE_USER_SETTING_CMD, kCmdTimeOut);
+    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_USER_SETTING_CMD, kCmdTimeOut);
 
     for(int i = 0; i < rowCount(); ++i) {
         user_values_[i] = item(i, INFO_TABLE_MODIFY_COLUMN)->text();
@@ -283,15 +396,9 @@ void SettingInfoTable::OnSaveToEPROM() {
 
 void SettingInfoTable::OnReadFromEPROM() {
     qDebug() << "读取参数到表格";
-    CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_LOAD_DEFAULT_CMD, kCmdTimeOut);
-    for(int i = 0; i < rowCount(); ++i) {
-        auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
-        auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
-        auto default_value = user_values_[i];
-        save_item->setText(default_value);
-        change_item->setText(default_value);
-        change_item->setForeground(QBrush(Qt::black));
-    }
+    CanManager::GetInstance()->Start();
+    bool ret =  CanManager::GetInstance()->SendFrame(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE);
+    qDebug()<<"[CanManager]发送0x640批量读指令 "<<(ret?"成功":"失败");
 }
 
 void SettingInfoTable::UpdateParams() {
@@ -359,7 +466,7 @@ void FunctionBtnArea::ConnectSignles() {
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
 #ifdef ON_TEST_MODE
-    QString file_path("D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明.xlsx");
+    QString file_path(TEST_CONFIG_FILE);
 #else
     QString file_path = QFileDialog::getOpenFileName(nullptr, "Open File", "", "(*)");
 #endif

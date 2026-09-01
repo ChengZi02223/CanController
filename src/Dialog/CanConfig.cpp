@@ -16,6 +16,7 @@ CanConfigWin::CanConfigWin(QWidget *parent)
     setupUI();
     receiveTimer = new QTimer(this);
     connect(receiveTimer, &QTimer::timeout, this, &CanConfigWin::onReceiveTimer);
+    setWindowIcon(QIcon(":/icons/HZLK.png"));
 #ifndef ON_TEST_MODE
     receiveTimer->start(50);
 #endif

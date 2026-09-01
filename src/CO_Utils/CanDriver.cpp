@@ -112,8 +112,7 @@ void CanDriver::close()
     }
 }
 
-bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms)
-{
+bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
@@ -133,15 +132,19 @@ bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, ca
     if(!send(frame)) {
         return false;
     }
+#endif
+}
+
+bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms) {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    SendCmd(cobId, cmd, timeout_ms);
     receive(response, timeout_ms);
     return true;
-#endif
 }
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-    can_frame dummy{};
-    return ExecCmd(cobId, cmd, dummy, timeout_ms);
+    return SendCmd(cobId, cmd, timeout_ms);
 }
 
 bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)

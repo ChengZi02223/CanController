@@ -13,6 +13,8 @@ enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 enum LoopMode { kOpenLoop, kClosedLoop };
+
+enum LoopSide { kSideOne, kSideTwo};
 struct DrawCurveInfo {
     int side; // 1 | 2 侧
     double time = 0.0; // 时间
@@ -121,6 +123,8 @@ signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);
     void SendOpenLoopFinished();
     void SendInfoChanged(InfoType type, QString value);
+    void SendRowValue(QString value, QString idx, QString sub_idx);
+    void SendCalibCurrentValue(double value);
 
 private slots:
     void OnControl1BtnClicked(bool checked);
@@ -160,14 +164,15 @@ private:
 
     LoopMode cur_loop_mode_ = kOpenLoop; // 当前模式： 开环 | 闭环
     // 开环循环动作线程 //位移
-    bool stay_1_running_ = false;
+    std::atomic<bool> stay_1_running_{false};
     QThread *stay_thread_1_ = nullptr;
-    bool stay_2_running_ = false;
+    std::atomic<bool> stay_2_running_{false};
     QThread *stay_thread_2_ = nullptr;
 
     std::atomic<bool> is_open_running_{false};
     std::thread open_loop_thread_;
     bool is_on_cycle_ = false;
+    LoopSide curr_side_ = kSideOne;
 
     QPushButton* control_1_btn_ = nullptr;
     QPushButton* control_2_btn_ = nullptr;

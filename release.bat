@@ -6,11 +6,11 @@ cd /d D:\Desktop\yc\PartTimeJobs\Windows\CanController
 if exist .\build (
     rmdir /s /q .\build
 )
-if exist .\build (
-    echo ERROR: build Faild
-    pause
-    exit /b 1
-)
+@REM if exist .\build (
+@REM     echo ERROR: build Faild
+@REM     pause
+@REM     exit /b 1
+@REM )
 
 @REM cmake Release
 cmake -B .\build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release

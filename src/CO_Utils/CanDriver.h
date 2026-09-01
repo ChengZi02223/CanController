@@ -50,6 +50,7 @@ public:
     bool IsInitialized() const { return isInitialized_; }
     void close();
 
+    bool SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms = -1);
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
     bool ExecCmds(const std::vector<CanCmdItem>& cmdList);

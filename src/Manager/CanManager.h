@@ -15,6 +15,13 @@
 #include "CanDriver.h"
 #include "CO_CMD.h"
 
+enum BatchReadState
+{
+    kBatchRead_Idle,        // 空闲
+    kBatchRead_WaitAck,     // 已经发送0x640，等待0x5C0应答
+    kBatchRead_Receiving    // 收到0x5C0，正在接收0x4C0批量数据帧
+};
+
 struct NodeInfo {
     uint8_t nodeId;
     uint8_t nmtState;
@@ -45,9 +52,11 @@ public:
     void Stop();
     bool IsRunning() const { return m_running; }
 
+    bool SendFrame(uint32_t id, const std::vector<uint8_t>& data);
+
 
 signals:
-    
+    void SendRowValue(QString value, QString idx, QString sub_idx);
 private:
     explicit CanManager(QObject *parent = nullptr);
     ~CanManager();
@@ -56,10 +65,11 @@ private:
     void ReceiverLoop();
 
     // 底层CAN封装（线程安全，内部加锁）
-    bool SendFrame(uint32_t id, const std::vector<uint8_t>& data);
+    
     bool ReceiveFrame(uint32_t& id, std::vector<uint8_t>& data, int timeoutMs);
 
     void ProcessFrame(uint32_t cobId, const std::vector<uint8_t>& data);
+    void Parse0x4C0Frame(const std::vector<uint8_t>& data);
 
     // 线程控制
     std::atomic<bool> m_running;
@@ -70,6 +80,7 @@ private:
     QMap<uint8_t, NodeInfo> m_nodes;
 
     QMutex m_canMutex;
+    BatchReadState m_batchReadState = kBatchRead_Idle;
 };
 
 #endif // _CAN_MANAGER_H_
