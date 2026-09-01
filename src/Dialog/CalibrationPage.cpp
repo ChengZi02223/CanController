@@ -18,8 +18,7 @@
 // #define kCalibratScale 10
 
 #define kFaMaxFlow 80 // L/Min
-#define kSleepTimeOut 300
-#define kReadTPDOTimeOut 200
+
 #define kCloseCycleWaitTime 5 //s
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};

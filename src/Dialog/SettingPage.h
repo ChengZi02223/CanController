@@ -8,8 +8,10 @@
 class BasicInfoBar;
 class SettingInfoTable;
 class FunctionBtnArea;
+class ProgressDialog;
 
 struct BasicInfo;
+struct can_frame;
 
 enum InputMode {kHand, kAuto};
 
@@ -92,6 +94,11 @@ public:
 private:
     void InitButtons();
     void ConnectSignles();
+    bool StartReadFromEPROM();
+    void StopReadFromEPROM();
+    void ParseEPROMFrame(const can_frame &frame);
+    bool TestEPROMSenCmd(can_frame &frame); // for test mode
+    void ClearStringFragmentCache();
 
 signals:
     void SendLoadSettings();
@@ -100,8 +107,10 @@ signals:
     void SendClearModifyValue();
     void SendSaveDefaultValue();
     void SendSaveToEPROM();
-    void SendReadFromEPROM();
+    void SendReadValue(QString value, QString idx, QString sub_idx);
     // void SendConfirmValues();
+    void updateProgress(int percent);
+    void SendReadFinished();
 
 private slots:
     void OnLoadSettingBtnClicked();
@@ -109,7 +118,7 @@ private slots:
     void OnModeChangeBtnClicked();
     // void OnSaveDefaultBtnClicked();
     // void OnSaveEepromBtnClicked();
-    // void OnLoadToTableBtnClicked();
+    void OnLoadToTableBtnClicked();
 
 private:
     QPushButton* load_setting_btn_ = nullptr;   //读取配置参数文件
@@ -121,7 +130,17 @@ private:
     QPushButton* clear_setting_btn_ = nullptr;    //清空配置参数
     QPushButton* confirm_btn_ = nullptr;    //一键确认
 
+    ProgressDialog* progress_dialog_ = nullptr;
+
     InputMode input_mode_ = kHand;
+
+    std::atomic<bool> parser_running_{false};
+    QThread *parser_thread_ = nullptr;
+    std::mutex m_mtx_;
+    int read_index_ = 0;
+    int parse_count_ = 0;
+
+    std::map<QString,QString> str_fragment_cache_;
 };
 
 

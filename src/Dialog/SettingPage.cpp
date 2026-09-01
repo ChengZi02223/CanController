@@ -5,6 +5,7 @@
 #include "can_cmd.h"
 #include "Utils.h"
 #include "CanManager.h"
+#include "ProgressDialog.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -20,6 +21,8 @@
 #define ROW_HEIGHT 42
 
 #define TEST_CONFIG_FILE "D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明V1.xlsx"
+
+static int info_table_count = 0;
 
 // enum ParamType {kNone, kUINT8, kUINT16, kUINT32, kSTRING};
 inline ParamType GetParamType(const QString &text) {
@@ -124,7 +127,7 @@ void SettingPage::InitPage() {
     // connect(function_btn_area_, &FunctionBtnArea::SendConfirmValues, setting_info_table_, &SettingInfoTable::OnConfirmAllValues);
     connect(function_btn_area_, &FunctionBtnArea::SendSaveDefaultValue, setting_info_table_, &SettingInfoTable::OnSaveDefaultValue);
     connect(function_btn_area_, &FunctionBtnArea::SendSaveToEPROM, setting_info_table_, &SettingInfoTable::OnSaveToEPROM);
-    connect(function_btn_area_, &FunctionBtnArea::SendReadFromEPROM, setting_info_table_, &SettingInfoTable::OnReadFromEPROM);
+    connect(function_btn_area_, &FunctionBtnArea::SendReadValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
     // connect(function_btn_area_, &FunctionBtnArea::SendInputMode, this, &SettingPage::SendInputMode);
 
     connect(basic_info_bar_, &BasicInfoBar::SendTestState, [=](TestState state){
@@ -134,7 +137,6 @@ void SettingPage::InitPage() {
     connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
     connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
     connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
-    connect(CanManager::GetInstance(), &CanManager::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
 }
 
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
@@ -145,7 +147,7 @@ void SettingPage::OnValueChanged(QTableWidgetItem *item) {
     // } 
     // last_item_ = item;
 
-    // qDebug() << item->text() << ": "<<item->row() << "--" << item->column();
+    // qDebug() << item->text() << ": "<<item->row() << "——" << item->column();
 
     // auto cmd = setting_info_table_->GetRowCMD(item->row());
     // if(cmd.empty()) {
@@ -248,27 +250,24 @@ void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx
             continue;
 
         // 对象字典索引匹配成功，校验子索引
-        bool subMatch = false;
-        if(sub_idx.isEmpty() || sub_idx == "--") {
-            subMatch = true;
-        } else {
-            QTableWidgetItem* subItem = item(row, INFO_TABLE_IDX_COLUMN);
-            if(subItem != nullptr) {
-                QString tableSub = subItem->text().toUpper();
-                QString targetSub = sub_idx.toUpper();
-                if(tableSub == targetSub) {
-                    subMatch = true;
-                }
-            }
+        QTableWidgetItem* sub_idx_item = item(row, INFO_TABLE_IDX_COLUMN);
+        if(!sub_idx_item) continue;
+
+        // 表格单元格文本统一大写，比对
+        QString sub_index = sub_idx_item->text().toUpper();
+        if(sub_index == "——") {
+            sub_index = "0X00";
+        } 
+        
+        if(sub_index != sub_idx && !sub_idx.contains(sub_index)){
+            continue;
         }
 
-        if(subMatch) {
-            QTableWidgetItem* modItem = item(row, INFO_TABLE_MODIFY_COLUMN);
-            if(modItem) {
-                modItem->setText(value);
-                qDebug()<<"成功更新行"<<row<<" value="<<value;
-            }
-        }
+        // 匹配成功，更新修改值
+        QTableWidgetItem* modify_item = item(row, INFO_TABLE_MODIFY_COLUMN);
+        if(!modify_item) continue;
+        modify_item->setText(value);
+        // qDebug() << "成功更新行: "<<row << value << " " << idx << " " << sub_idx  <<" == " <<sub_index ;
     }
 }
 
@@ -285,7 +284,7 @@ void SettingInfoTable::resizeEvent(QResizeEvent* event)  {
     if(columnCount() < 0){
         return; 
     }
-    auto col_width = (width() - 5) / columnCount();
+    auto col_width = (width() - 10) / columnCount();
     for(int i = 0; i < columnCount(); ++i) {
         setColumnWidth(i, col_width);
     }
@@ -315,6 +314,7 @@ void SettingInfoTable::OnLoadSettings() {
             setItem(i, j, value_item);
         }
     }
+    info_table_count = rowCount();
 }
 
 void SettingInfoTable::OnSaveSettings() {
@@ -395,10 +395,7 @@ void SettingInfoTable::OnSaveToEPROM() {
 }
 
 void SettingInfoTable::OnReadFromEPROM() {
-    qDebug() << "读取参数到表格";
-    CanManager::GetInstance()->Start();
-    bool ret =  CanManager::GetInstance()->SendFrame(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE);
-    qDebug()<<"[CanManager]发送0x640批量读指令 "<<(ret?"成功":"失败");
+    
 }
 
 void SettingInfoTable::UpdateParams() {
@@ -459,7 +456,7 @@ void FunctionBtnArea::ConnectSignles() {
     connect(mode_change_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnModeChangeBtnClicked);
     connect(save_default_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveDefaultValue);
     connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveToEPROM);
-    connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendReadFromEPROM);
+    connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnLoadToTableBtnClicked);
     connect(clear_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendClearModifyValue);
     // connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
 }
@@ -495,4 +492,175 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
     }
     emit SendInputMode(input_mode_);
     mode_change_btn_->setText(mode);
+}
+
+void FunctionBtnArea::OnLoadToTableBtnClicked() {
+    qDebug() << "读取参数到表格";
+    can_frame frame{};
+    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
+#ifndef ON_TEST_MODE
+    if (!ret || frame.can_id != 0x5C0) {
+        QMessageBox::warning(this, "警告", "读取参数到表格失败，未接收到开始读取指令！");
+        return;
+    }
+#endif
+    StartReadFromEPROM();
+
+    progress_dialog_ = new ProgressDialog(this);
+    progress_dialog_->setTitleText("正在读取参数，请稍候...");
+    progress_dialog_->setButtonText("OK");
+    
+    connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
+    connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
+    connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
+        StopReadFromEPROM();
+    });
+
+    progress_dialog_->exec();
+}
+
+bool FunctionBtnArea::TestEPROMSenCmd(can_frame &frame) {
+    if(read_index_ >= kBatchReadTestFrames.size()){
+        return false;
+    }
+    auto test_frame = kBatchReadTestFrames[read_index_];
+    frame.can_id = test_frame.cobId;
+    frame.can_dlc = 8;
+    std::copy(test_frame.data, test_frame.data + 8, frame.data);
+    // PrintCmd(frame.can_id, std::vector<uint8_t>(frame.data, frame.data + frame.can_dlc), "Receive: ");
+    read_index_ ++;
+    return true;
+}
+
+bool FunctionBtnArea::StartReadFromEPROM() {
+    if(parser_thread_ != nullptr){
+        return false; 
+    }
+    parse_count_ = 0;
+    read_index_ = 0;
+    parser_running_.store(true);
+    parser_thread_ = QThread::create([this](){
+        while(parser_running_.load()) {
+            can_frame frame{};
+#ifdef ON_TEST_MODE
+            if (TestEPROMSenCmd(frame)) {
+                ParseEPROMFrame(frame);
+            }
+#else
+            if (CanDriver::GetInstance()->receive(frame, kCmdTimeOut)) {
+                ParseEPROMFrame(frame);
+            }
+#endif
+            QThread::msleep(kSleepTimeOut);
+        }
+    });
+    parser_thread_->start();
+    qDebug()<< "读取线程开始";
+}
+
+void FunctionBtnArea::StopReadFromEPROM() {
+    if(parser_thread_ == nullptr) {
+        return;
+    }
+    
+    parser_running_.store(false); //退出循环条件
+    parser_thread_->quit();
+    parser_thread_->wait(); //阻塞等待线程安全结束
+    delete parser_thread_;
+    parser_thread_ = nullptr;
+    parse_count_ = 0;
+    disconnect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
+    ClearStringFragmentCache();
+    qDebug()<< "读取线程已结束";
+}
+
+void FunctionBtnArea::ClearStringFragmentCache() {
+    std::lock_guard<std::mutex> lk(m_mtx_);
+    str_fragment_cache_.clear();
+}
+
+void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
+    int local_parse_count;
+    bool is_string_final_segment = false;
+    QString final_str_value;
+    QString final_index;
+    QString final_subindex;
+
+    {
+        std::lock_guard<std::mutex> lk(m_mtx_);
+        if(frame.can_dlc < 8) {
+            qDebug()<<"[frame]数据长度不足8字节";
+            return;
+        }
+        if(frame.data[0] == 0xFF) {
+            emit SendReadFinished();
+            return;
+        }
+
+        uint16_t indexRaw = (static_cast<uint16_t>(frame.data[2]) << 8) | static_cast<uint16_t>(frame.data[1]);
+        uint8_t subIndexRaw = frame.data[3];
+        QString strIndex = QString("0x%1").arg(indexRaw,4,16,QChar('0')).toUpper();
+        QString strSubIndex = QString("0x%1").arg(subIndexRaw,2,16,QChar('0')).toUpper();
+
+        // ========== 判断是否字符串分片帧 data[0]==0x04 ==========
+        if(frame.data[0] == 0x04) {
+            //分片号，bit7标记是否结束分片
+            uint8_t seg_flag = frame.data[4];
+            bool is_last_seg = ((seg_flag & 0x80) != 0);
+            QString cache_key = QString("%1,%2").arg(strIndex).arg(strSubIndex);
+
+            //取出本分片3个字节 data5 data6 data7，转为char追加
+            QByteArray seg_bytes;
+            seg_bytes.append(static_cast<char>(frame.data[5]));
+            seg_bytes.append(static_cast<char>(frame.data[6]));
+            seg_bytes.append(static_cast<char>(frame.data[7]));
+
+            //追加到缓存
+            str_fragment_cache_[cache_key].append(QString::fromLocal8Bit(seg_bytes));
+
+            if(is_last_seg)
+            {
+                //最后分片，取出完整字符串，拷贝到局部变量，锁外emit
+                final_str_value = str_fragment_cache_[cache_key];
+                final_index = strIndex;
+                final_subindex = strSubIndex;
+                //清除该key缓存
+                str_fragment_cache_.erase(cache_key);
+                is_string_final_segment = true;
+
+                parse_count_++;
+                local_parse_count = parse_count_;
+            }
+            else
+            {
+                //中间分片，只缓存，不发送信号，不增加parse_count
+                return;
+            }
+        } else {
+            //====普通数值帧，原有逻辑不变====
+            uint32_t valueRaw = (static_cast<uint32_t>(frame.data[7])<<24)
+                                | (static_cast<uint32_t>(frame.data[6])<<16)
+                                | (static_cast<uint32_t>(frame.data[5])<<8)
+                                | static_cast<uint32_t>(frame.data[4]);
+            QString strValue = QString::number(valueRaw);
+
+            parse_count_++;
+            local_parse_count = parse_count_;
+
+            //锁内只拷贝，emit放到锁外面
+            final_str_value = strValue;
+            final_index = strIndex;
+            final_subindex = strSubIndex;
+            is_string_final_segment = false;
+        }
+    } //锁释放
+
+    //========锁外面发送信号，避免锁内emit死锁风险========
+    emit SendReadValue(final_str_value, final_index, final_subindex);
+
+    int percent = 0;
+    if(info_table_count > 0) {
+        percent = static_cast<int>(100.0 * local_parse_count / info_table_count);
+    }
+    emit updateProgress(percent);
 }
