@@ -6,6 +6,7 @@
 #include "can_cmd.h"
 #include "Utils.h"
 #include <QDateTime>
+#include <QThread>
 
 CanDriver::CanDriver()
     : handle_(nullptr), isInitialized_(false)
@@ -112,12 +113,24 @@ void CanDriver::close()
     }
 }
 
+bool CanDriver::SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd, int maxRetries, int retryIntervalMs) {
+    for (int i = 0; i < maxRetries; ++i) {
+        if (SendCmd(cobId, cmd, kCmdTimeOut)) {
+            return true;
+        }
+        if (i < maxRetries - 1) {
+            QThread::msleep(retryIntervalMs);
+        }
+    }
+    return false;
+}
+
 bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
     PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
     return true;
-#else
+#endif
     can_frame frame{};
     frame.can_id = cobId;
     frame.can_dlc = static_cast<uint8_t>(cmd.size()); // 不要硬写8！使用实际长度
@@ -132,7 +145,7 @@ bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, i
     if(!send(frame)) {
         return false;
     }
-#endif
+    return true;
 }
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms) {

@@ -31,7 +31,7 @@ signals:
     void SendInfoChanged(InfoType type, QString value);
     void SendRowValue(QString value, QString idx, QString sub_idx);
 
-private slots:
+public slots:
     void OnValueChanged(QTableWidgetItem *item);
 
 private:
@@ -44,6 +44,8 @@ private:
     FunctionBtnArea* function_btn_area_ = nullptr;
 
     QTableWidgetItem *last_item_ = nullptr;
+
+    QString old_item_value_ = "";
 };
 
 class SettingInfoTable : public QTableWidget {
@@ -54,6 +56,7 @@ public:
     ~SettingInfoTable(){}
 
     std::vector<uint8_t> GetRowCMD(int row);
+    ParamType GetRowParamType(int row);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -66,7 +69,6 @@ public slots:
     void OnConfirmAllValues();
     void OnSaveDefaultValue();
     void OnSaveToEPROM();
-    void OnReadFromEPROM();
     void OnSetRowValue(QString value, QString idx, QString sub_idx = "");
 
 private:
@@ -79,7 +81,7 @@ private:
 private:
     std::map<int, QString> default_values_;
     std::map<int, QString> user_values_;
-    // std::vector<RowItemIndex> row_items_;
+    std::map<int, ParamType> p_item_type_;
 
     std::map<int, std::vector<uint8_t>> row_cmd_map_;
 };

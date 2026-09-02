@@ -50,6 +50,7 @@ public:
     bool IsInitialized() const { return isInitialized_; }
     void close();
 
+    bool SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd, int maxRetries = 3, int retryIntervalMs = 10);
     bool SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms = -1);
     bool ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);

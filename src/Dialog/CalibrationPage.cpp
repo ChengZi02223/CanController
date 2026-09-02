@@ -24,31 +24,44 @@ static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25,
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
 static const std::vector<int> flow_yugu_values = {154, 132, 115, 110, 99, 0, 68, 62, 53, 39, 23};  //预估值
 static const std::vector<int> flow_yugu_value_subidxs = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E};  //预估值
+static const std::vector<int> flow_curr_value_subidxs = {0x12, 0x13, 0x14, 0x15, 0x16, 0xFF, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E};  //预估值
 
 #define CAN_EXEC_CMD(id, cmd)  CanDriver::GetInstance()->SendCmd(id, cmd, kCmdTimeOut);
+#define CAN_EXEC_CMD_WITH_RETRY(id, cmd)  CanDriver::GetInstance()->SendCmdWithRetry(id, cmd, 3, 10);
 
 inline int32_t GetTargetFlow(int i) {
     if(i >= 0 || i < flow_table.size()) {
         return flow_table[i] * kFaMaxFlow;
     }
+    return 0;
 } 
 
 inline int32_t GetYuGuValueSubIdx(int i) {
     if(i >= 0 || i < flow_yugu_value_subidxs.size()) {
         return flow_yugu_value_subidxs[i];
     }
+    return 0xFF;
+} 
+
+inline int32_t GetCurrValueSubIdx(int i) {
+    if(i >= 0 || i < flow_curr_value_subidxs.size()) {
+        return flow_curr_value_subidxs[i];
+    }
+    return 0xFF;
 } 
 
 inline int GetCalibratValue(int i) {
     if(i >= 0 || i < Calibrat_list.size()) {
         return Calibrat_list[i];
     }
-} 
+    return 0;
+}
 
 inline int GetCalibratYuGuValue(int i) {
     if(i >= 0 || i < flow_yugu_values.size()) {
         return flow_yugu_values[i];
     }
+    return 0;
 }
 
 inline double CalcDisplacement(double y, int i)
@@ -425,7 +438,7 @@ void CalibrationPage::OnControlCur2BtnClicked(bool checked) {
         std::cout << "输入数值非法"<<std::endl;
         return;
     }
-    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_CUR_OPEN_2_VALUE_CMD, percent);
+    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_CUR_OPEN_2_VALUE_CMD, percent, 1);
 
     StartControl2Loop();
 }
@@ -675,7 +688,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_2_CMD);
             StopControl2Loop();
         }
-        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // ChangeLoopMode(kClosedLoop);
@@ -727,7 +740,7 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_2_CMD);
             StopControl2Loop();
         }
-        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // ChangeLoopMode(kClosedLoop);// 闭环模式
@@ -767,7 +780,7 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
     std::cout << "close cycle clicked, checked:" << checked << std::endl;
     if (!checked) {
         StopLoopCycle();
-        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // CAN_EXEC_CMD(SDO_COB_ID, SDO_RAMP_MODE_CMD);
@@ -1026,6 +1039,10 @@ void CalibrationPage::OnSaveCalibValueBtnCLicked() {
         QTableWidgetItem* yugu_item = displace_table_->item(i, 2);
         auto sub_index = QString("0x%1").arg(GetYuGuValueSubIdx(i),2,16,QLatin1Char('0')).toUpper();
         emit SendRowValue(yugu_item->text(), "0x2003", sub_index);
+
+        QTableWidgetItem* curr_item = displace_table_->item(i, 1);
+        sub_index = QString("0x%1").arg(GetCurrValueSubIdx(i),2,16,QLatin1Char('0')).toUpper();
+        emit SendRowValue(curr_item->text(), "0x2003", sub_index);        
     }
 }
 

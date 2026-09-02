@@ -6,6 +6,7 @@
 #include "Utils.h"
 #include "CanManager.h"
 #include "ProgressDialog.h"
+#include "CustomDelegate.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -35,12 +36,25 @@ inline ParamType GetParamType(const QString &text) {
         return  ParamType::kUINT32;
     } else if(s.contains("16")) {
         return  ParamType::kUINT16;
-    } else if(s.contains("8")) {
+    } else if(s.contains("8") || s == "RECORD") {
         return  ParamType::kUINT8;
     } else if(s.toLower().contains("string")) {
         return  ParamType::kSTRING;
     }
     return ParamType::kError;
+}
+
+inline int GetParamTypeMaxValue(ParamType type) {
+    switch(type) {
+        case ParamType::kUINT8:
+            return 0xFF;
+        case ParamType::kUINT16:
+            return 0xFFFF;
+        case ParamType::kUINT32:
+            return 0xFFFFFFFF;
+        default:
+            return 0;
+    }
 }
 
 inline uint8_t GetCmdHeadByType(QString text) {
@@ -135,26 +149,50 @@ void SettingPage::InitPage() {
         function_btn_area_->setEnabled(state == kTestStart);
     });
     connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
-    connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
+    // connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
     connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
+    CustomDelegate* m_delegate = new CustomDelegate(this);
+    setting_info_table_->setItemDelegate(m_delegate);
+    connect(m_delegate, &CustomDelegate::cellEditReturnPressed,
+            this, [this](int row, int col, const QString &newText){
+        auto item = setting_info_table_->item(row, col);
+        if(item) {
+            // qDebug() << "Old value: " << item->text() << ", New value: " << newText;
+            old_item_value_ = item->text();
+            item->setText(newText);
+            OnValueChanged(item);
+        }
+    });
 }
 
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
 
 void SettingPage::OnValueChanged(QTableWidgetItem *item) {
-    // if(last_item_ != nullptr && last_item_ == item) {
-    //     return;
-    // } 
-    // last_item_ = item;
+    if(last_item_ != nullptr && last_item_ == item) {
+        return;
+    } 
+    last_item_ = item;
+    auto cmd = setting_info_table_->GetRowCMD(item->row());
+    if(cmd.empty()) {
+        return;
+    }
+    
+    auto type = setting_info_table_->GetRowParamType(item->row());
+    if(GetParamTypeMaxValue(type) < item->text().toULongLong()) {
+        QMessageBox::warning(this, "Warning", "修改值超出范围!");
+        item->setText(old_item_value_);
+        return;
+    }
+    // qDebug() << "OnValueChanged: " << item->text() << " type: " << static_cast<int>(type);
+    if(type == ParamType::kUINT8) {
+        cmd[4] = QStringToUint8Dec(item->text());
+    } else if(type == ParamType::kUINT16) {
+        Fill16ValueToCmd(QStringToUint16Dec(item->text()), cmd, 4);
+    } else if(type == ParamType::kUINT32) {
+        Fill32ValueToCmd(QStringToUint32Dec(item->text()), cmd, 4);
+    } 
 
-    // qDebug() << item->text() << ": "<<item->row() << "——" << item->column();
-
-    // auto cmd = setting_info_table_->GetRowCMD(item->row());
-    // if(cmd.empty()) {
-    //     return;
-    // }
-
-    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
+    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
     
 }
 
@@ -227,11 +265,22 @@ void SettingInfoTable::InsterRow(ParaItem item) {
     //     OnEnterBtnClicked(row);
     // });
     row_cmd_map_[row] = CreateRowCmd(item);
-    // row_items_.push_back({row, item.indexNum, item.subIndex, item.paramValue});
+    p_item_type_[row] = GetParamType(item.dataType);
 }
 
 std::vector<uint8_t> SettingInfoTable::GetRowCMD(int row) {
     return row_cmd_map_[row];
+}
+
+ParamType SettingInfoTable::GetRowParamType(int row) {
+    if(row < 0 || row >= rowCount()) {
+        return ParamType::kError;
+    }
+    auto p_item = item(row, INFO_TABLE_PARAM_COLUMN);
+    if(!p_item) {
+        return ParamType::kError;
+    }
+    return p_item_type_.at(row);
 }
 
 void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx) {
@@ -272,11 +321,21 @@ void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx
 }
 
 std::vector<uint8_t> SettingInfoTable::CreateRowCmd(ParaItem item) {
-    std::array<uint8_t, 8> command = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    // qDebug() << "CreateRowCmd: " << item.objDictName << " " << item.indexNum << " " << item.subIndex << " " << item.paramValue;
+    std::vector<uint8_t> command = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     command[0] = GetCmdHeadByType(item.dataType);
-    FillValueToCmd(QStringToUint16(item.indexNum), command, 1, 2);
+    Fill16ValueToCmd(QStringToUint16Hex(item.indexNum), command, 1);
+    auto subIndex = item.subIndex.trimmed();
+    if(subIndex.isEmpty() || subIndex == "——") {
+        command[3] = 0x00;
+    } else {
+        command[3] = QStringToUint8Hex(item.subIndex);
+    }
 
     std::vector<uint8_t> vec_cmd(command.begin(), command.end());
+
+    // PrintCmd(SDO_COB_ID, vec_cmd, "Create Row CMD: ");
+
     return vec_cmd;
 }
 
@@ -299,7 +358,7 @@ void SettingInfoTable::OnLoadSettings() {
     }
     clearContents();
     setRowCount(0);
-    // row_items_.clear();
+    p_item_type_.clear();
     default_values_.clear();
     for(auto item : tableDataList) {
         InsterRow(item);
@@ -392,10 +451,6 @@ void SettingInfoTable::OnSaveToEPROM() {
     for(int i = 0; i < rowCount(); ++i) {
         user_values_[i] = item(i, INFO_TABLE_MODIFY_COLUMN)->text();
     }
-}
-
-void SettingInfoTable::OnReadFromEPROM() {
-    
 }
 
 void SettingInfoTable::UpdateParams() {

@@ -8,7 +8,7 @@
 #define kSleepTimeOut 300
 #define kReadTPDOTimeOut 200
 
-#define ON_TEST_MODE
+// #define ON_TEST_MODE
 // 提取响应中指定字节数据
 inline uint16_t ExtractFromVectorData(const std::vector<uint8_t>& data, int byte1, int byte2) {
     // 小端序：前字节为低字节，后字节为高字节
@@ -72,17 +72,84 @@ static std::vector<uint8_t> RampTimeCMDConfig(const std::array<uint8_t, 8> comma
     return cmd;
 }
 
-static uint16_t QStringToUint16(const QString& strVal) {
+//十六进制字符串转 uint16_t
+static uint16_t QStringToUint16Hex(const QString& strVal) {
     bool ok = false;
-    uint16_t outVal = static_cast<uint16_t>(strVal.toUInt(&ok, 16));
-    if(!ok) return 0x00;
-    return outVal;
+    // 使用基数 0 让 Qt 自动根据前缀识别进制（0x 为十六进制，0 为八进制，否则十进制）
+    unsigned int val = strVal.toUInt(&ok, 0);
+    if (!ok || val > 0xFFFFU)
+        return 0x0000;
+    return static_cast<uint16_t>(val);
 }
 
-static void FillValueToCmd(uint16_t indexValue, std::array<uint8_t, 8>& command, int index1, int index2) {
-    // 小端：低字节存下标1，高字节存下标2
-    command[index1] = static_cast<uint8_t>(indexValue & 0xFF);         // 低字节
-    command[index2] = static_cast<uint8_t>((indexValue >> 8) & 0xFF);   // 高字节
+//十六进制字符串转 uint8_t
+static uint8_t QStringToUint8Hex(const QString& strVal) {
+    bool ok = false;
+    unsigned int val = strVal.toUInt(&ok, 0);
+    if (!ok || val > 0xFFU)
+        return 0x00;
+    return static_cast<uint8_t>(val);
+}
+
+// 十进制字符串 -> uint8_t（范围 0~255）
+static uint8_t QStringToUint8Dec(const QString& strVal) {
+    bool ok = false;
+    unsigned int val = strVal.toUInt(&ok, 10);  // 强制十进制
+    if (!ok || val > 0xFFU) {
+        qWarning() << "QStringToUint8Dec: 转换失败或超出范围，输入:" << strVal;
+        return 0;
+    }
+    return static_cast<uint8_t>(val);
+}
+
+// 十进制字符串 -> uint16_t（范围 0~65535）
+static uint16_t QStringToUint16Dec(const QString& strVal) {
+    bool ok = false;
+    unsigned int val = strVal.toUInt(&ok, 10);
+    if (!ok || val > 0xFFFFU) {
+        qWarning() << "QStringToUint16Dec: 转换失败或超出范围，输入:" << strVal;
+        return 0;
+    }
+    return static_cast<uint16_t>(val);
+}
+
+// 十进制字符串 -> uint32_t（范围 0~4294967295）
+static uint32_t QStringToUint32Dec(const QString& strVal) {
+    bool ok = false;
+    uint32_t val = strVal.toUInt(&ok, 10);  // 注意 Qt 的 toUInt 返回 uint，最大 2^32-1，OK
+    if (!ok) {
+        qWarning() << "QStringToUint32Dec: 转换失败，输入:" << strVal;
+        return 0;
+    }
+    // toUInt 本身已保证范围，无需额外检查（但若需严格，可追加）
+    return val;
+}
+
+static void Fill16ValueToCmd(uint16_t indexValue, std::vector<uint8_t>& command, int start_index) {
+    //16位占用2字节，需要 start_index +1 < command.size()
+    if(start_index < 0 || (start_index + 1) >= static_cast<int>(command.size())) {
+        qWarning() << "Invalid start_index or span for Fill16ValueToCmd";
+        return;
+    }
+    // 小端：低字节存start_index，高字节存start_index+1
+    command[start_index]     = static_cast<uint8_t>(indexValue & 0xFF);         // 低字节
+    command[start_index + 1] = static_cast<uint8_t>((indexValue >> 8) & 0xFF); // 高字节
+}
+
+
+static void Fill32ValueToCmd(uint32_t value, std::vector<uint8_t>& command, int start_index)
+{
+    //32位占4字节，start_index+3不能超出vector有效范围
+    if(start_index < 0 || (start_index + 3) >= static_cast<int>(command.size()))
+    {
+        qWarning() << "Invalid start_index for Fill32ValueToCmd";
+        return;
+    }
+    // 小端模式：低字节放在起始下标，依次往上
+    command[start_index]     = static_cast<uint8_t>(value & 0xFF);         // byte0 低字节
+    command[start_index + 1] = static_cast<uint8_t>((value >> 8)  & 0xFF); // byte1
+    command[start_index + 2] = static_cast<uint8_t>((value >> 16) & 0xFF); // byte2
+    command[start_index + 3] = static_cast<uint8_t>((value >> 24) & 0xFF); // byte3 高字节
 }
 
 
@@ -107,7 +174,6 @@ static bool CheckAnswerHead(const uint8_t data[8], const std::vector<uint8_t> &h
                       data);
 }
 
-#ifdef ON_TEST_MODE
 struct TestFrame {
     uint32_t cobId;
     uint8_t  data[8];
@@ -184,6 +250,5 @@ static std::vector<TestFrame> kBatchReadTestFrames = {
     {0x4C0, {0xFF,0xFF,0x37,0x3D,0x7E,0x00,0x00,0x00}},
 };
 
-#endif
 
 #endif // _UTILS_H
