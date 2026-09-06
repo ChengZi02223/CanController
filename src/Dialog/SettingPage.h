@@ -57,8 +57,14 @@ public:
     std::vector<uint8_t> GetRowCMD(int row);
     ParamType GetRowParamType(int row);
 
+    void ChangRowValue(QTableWidgetItem *item, QString old_value = "");
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
+
+signals:    
+    void updateProgress(int percent);
+    void SendReadFinished();
 
 public slots:
     void OnLoadSettings();
@@ -76,6 +82,7 @@ private:
     void ReloadDefaultValue();
 
     void UpdateParams();
+    bool IsItemReadOnly(QTableWidgetItem *item);
 
 private:
     std::map<int, QString> default_values_;
@@ -83,6 +90,11 @@ private:
     std::map<int, ParamType> p_item_type_;
 
     std::map<int, std::vector<uint8_t>> row_cmd_map_;
+    ProgressDialog* save_progress_dialog_ = nullptr;
+
+    std::atomic<bool> save_running_{false};
+    QThread *save_thread_ = nullptr;
+    std::mutex s_mtx_;
 };
 
 class FunctionBtnArea : public QGroupBox {
@@ -124,7 +136,7 @@ private slots:
     void OnSaveSettingBtnClicked();
     void OnModeChangeBtnClicked();
     // void OnSaveDefaultBtnClicked();
-    void OnSaveEepromBtnClicked();
+    // void OnSaveEepromBtnClicked();
     void OnLoadToTableBtnClicked();
 
 private:
