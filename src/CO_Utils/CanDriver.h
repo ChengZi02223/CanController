@@ -65,6 +65,7 @@ public:
     bool receiveFD(TPCANMsgFD& fdMsg, TPCANTimestampFD* ts = nullptr);
 
     bool CRCCheck(const can_frame& frame);
+    void FlushRxBuffer();
 
 private:
     CanDriver();

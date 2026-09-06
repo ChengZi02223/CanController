@@ -452,14 +452,33 @@ void CanConfigWin::SendData(uint32_t id, uint8_t dlc, QString data) {
     }
 }
 
+static int read_index_ = 0;
+static bool TestEPROMSenCmd(can_frame &frame) {
+    if(read_index_ >= kBatchReadTestFrames.size()){
+        read_index_ = 0;
+        return false;
+    }
+    auto test_frame = kBatchReadTestFrames[read_index_];
+    frame.can_id = test_frame.cobId;
+    frame.can_dlc = 8;
+    std::copy(test_frame.data, test_frame.data + 8, frame.data);
+    // PrintCmd(frame.can_id, std::vector<uint8_t>(frame.data, frame.data + frame.can_dlc), "Receive: ");
+    read_index_ ++;
+    return true;
+}
+
 void CanConfigWin::onReceiveTimer()
 {
 #ifdef ON_TEST_MODE
-    can_frame frame = {
-        0x123,          // can_id
-        8,              // can_dlc，实际使用4个字节
-        {0x11,0x22,0x33,0x44,0x09,0x92,0x00,0x00}  // data[8]，必须写满8个或者用{}
-    };
+    // can_frame frame = {
+    //     0x123,          // can_id
+    //     8,              // can_dlc，实际使用4个字节
+    //     {0x11,0x22,0x33,0x44,0x09,0x92,0x00,0x00}  // data[8]，必须写满8个或者用{}
+    // };
+    can_frame frame;
+    if(!TestEPROMSenCmd(frame)){
+        return;
+    }
 #else
     if (!canReady) return;
     can_frame frame;
@@ -469,6 +488,7 @@ void CanConfigWin::onReceiveTimer()
 #ifndef ON_TEST_MODE
     while (CanDriver::GetInstance()->receive(frame, 0)) {
 #endif
+        emit SendReadFromEPROM(frame);
         int row = twReceive->rowCount();
         twReceive->insertRow(row);
         QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");

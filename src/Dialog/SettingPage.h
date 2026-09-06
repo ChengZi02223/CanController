@@ -43,7 +43,6 @@ private:
     SettingInfoTable* setting_info_table_ = nullptr;
     FunctionBtnArea* function_btn_area_ = nullptr;
 
-    QTableWidgetItem *last_item_ = nullptr;
 
     QString old_item_value_ = "";
 };
@@ -96,8 +95,11 @@ public:
 private:
     void InitButtons();
     void ConnectSignles();
-    bool StartReadFromEPROM();
-    void StopReadFromEPROM();
+    // bool StartReadFromEPROM();
+    // void StopReadFromEPROM();
+    // bool StartProgressThread();
+    // void StopProgressThread();
+
     void ParseEPROMFrame(const can_frame &frame);
     bool TestEPROMSenCmd(can_frame &frame); // for test mode
     void ClearStringFragmentCache();
@@ -114,12 +116,15 @@ signals:
     void updateProgress(int percent);
     void SendReadFinished();
 
+public slots:
+    void OnReadFromEPROM(can_frame frame);
+
 private slots:
     void OnLoadSettingBtnClicked();
     void OnSaveSettingBtnClicked();
     void OnModeChangeBtnClicked();
     // void OnSaveDefaultBtnClicked();
-    // void OnSaveEepromBtnClicked();
+    void OnSaveEepromBtnClicked();
     void OnLoadToTableBtnClicked();
 
 private:
@@ -136,9 +141,11 @@ private:
 
     InputMode input_mode_ = kHand;
 
-    std::atomic<bool> parser_running_{false};
-    QThread *parser_thread_ = nullptr;
-    std::mutex m_mtx_;
+    // std::atomic<bool> parser_running_{false};
+    // QThread *parser_thread_ = nullptr;
+    // std::mutex m_mtx_;
+
+    bool start_read_eprom_ = false;
     int read_index_ = 0;
     int parse_count_ = 0;
 

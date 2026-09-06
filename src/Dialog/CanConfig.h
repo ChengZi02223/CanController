@@ -29,6 +29,9 @@ public:
         return &instance;
     }
 
+signals:
+    void SendReadFromEPROM(can_frame frame);
+
 private slots:
     void onRefreshDevices();
     void onInit();

@@ -7,6 +7,7 @@
 #include "CanManager.h"
 #include "ProgressDialog.h"
 #include "CustomDelegate.h"
+#include "CanConfig.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -157,7 +158,7 @@ void SettingPage::InitPage() {
             this, [this](int row, int col, const QString &newText){
         auto item = setting_info_table_->item(row, col);
         if(item) {
-            // qDebug() << "Old value: " << item->text() << ", New value: " << newText;
+            qDebug() << "Old value: " << item->text() << ", New value: " << newText;
             old_item_value_ = item->text();
             item->setText(newText);
             OnValueChanged(item);
@@ -168,10 +169,6 @@ void SettingPage::InitPage() {
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
 
 void SettingPage::OnValueChanged(QTableWidgetItem *item) {
-    if(last_item_ != nullptr && last_item_ == item) {
-        return;
-    } 
-    last_item_ = item;
     auto cmd = setting_info_table_->GetRowCMD(item->row());
     if(cmd.empty()) {
         return;
@@ -204,8 +201,11 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
         }
         auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
         auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
-        if(save_item->text() != change_item->text()) {
+        // qDebug() << "Cell changed: " << save_item->text() << " --- " << change_item->text();
+        if(save_item->text().trimmed() != change_item->text().trimmed()) {
             change_item->setForeground(QBrush(Qt::red));
+        } else {
+            change_item->setForeground(QBrush(Qt::black));
         }
     });
     setObjectName("SettingInfoTable");
@@ -287,7 +287,7 @@ void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx
     if(idx.isEmpty()) {
         return;
     }
-    qDebug() << "OnSetRowValue: " << value << " " << idx << " " << sub_idx;
+    // qDebug() << "OnSetRowValue: " << value << " " << idx << " " << sub_idx;
     QString targetIndex = idx.toUpper();
     for(int row = 0; row < rowCount(); row++) {
         QTableWidgetItem* objItem = item(row, INFO_TABLE_OBJ_COLUMN);
@@ -439,7 +439,7 @@ void SettingInfoTable::OnSaveDefaultValue() {
     UpdateParams();
     qDebug() << "保存默认参数";
     CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
-    ReloadDefaultValue();
+    OnConfirmAllValues();
     update();
 }
 
@@ -455,6 +455,12 @@ void SettingInfoTable::OnSaveToEPROM() {
 
 void SettingInfoTable::UpdateParams() {
 
+    for(int i = 0; i < rowCount(); ++i) {
+        auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+        // OnValueChanged(change_item);
+        change_item->setForeground(QBrush(Qt::black));
+        qDebug() << "UpdateParams: " << change_item->text();
+    }
 }
 
 FunctionBtnArea::FunctionBtnArea(QWidget* parent) : QGroupBox(parent) {
@@ -488,6 +494,9 @@ void FunctionBtnArea::InitButtons() {
     clear_setting_btn_ = new QPushButton("清空配置参数", this);
     clear_setting_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
     clear_setting_btn_->setObjectName("FuncBtn");
+    progress_dialog_ = new ProgressDialog(this);
+    progress_dialog_->setVisible(false);
+    progress_dialog_->setButtonText("OK");
     // confirm_btn_ = new QPushButton("一键确认", this);
     // confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
     // confirm_btn_->setObjectName("FuncBtn");
@@ -510,10 +519,20 @@ void FunctionBtnArea::ConnectSignles() {
     connect(save_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveSettings);
     connect(mode_change_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnModeChangeBtnClicked);
     connect(save_default_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveDefaultValue);
-    connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveToEPROM);
+    connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnSaveEepromBtnClicked);
     connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnLoadToTableBtnClicked);
     connect(clear_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendClearModifyValue);
     // connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
+
+    connect(CanConfigWin::GetInstance(), &CanConfigWin::SendReadFromEPROM, this, &FunctionBtnArea::OnReadFromEPROM);
+    connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
+    connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
+    connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
+        // StopReadFromEPROM();
+        start_read_eprom_ = false;
+        parse_count_ = 0;
+        ClearStringFragmentCache();
+    });
 }
 
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
@@ -534,6 +553,12 @@ void FunctionBtnArea::OnSaveSettingBtnClicked() {
     // QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
     // qDebug() << "Save File:" << save_path;
     emit SendSaveSettings();
+}
+
+void FunctionBtnArea::OnSaveEepromBtnClicked() {
+    progress_dialog_->setTitleText("正在保存参数到EPROM，请稍候...");
+    progress_dialog_->exec();
+    emit SendSaveToEPROM();
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {
@@ -559,18 +584,9 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
         return;
     }
 #endif
-    StartReadFromEPROM();
-
-    progress_dialog_ = new ProgressDialog(this);
+    // StartReadFromEPROM();
+    start_read_eprom_ = true;
     progress_dialog_->setTitleText("正在读取参数，请稍候...");
-    progress_dialog_->setButtonText("OK");
-    
-    connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
-    connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
-    connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
-        StopReadFromEPROM();
-    });
-
     progress_dialog_->exec();
 }
 
@@ -587,6 +603,7 @@ bool FunctionBtnArea::TestEPROMSenCmd(can_frame &frame) {
     return true;
 }
 
+#ifdef tt
 bool FunctionBtnArea::StartReadFromEPROM() {
     if(parser_thread_ != nullptr){
         return false; 
@@ -628,10 +645,18 @@ void FunctionBtnArea::StopReadFromEPROM() {
     ClearStringFragmentCache();
     qDebug()<< "读取线程已结束";
 }
+#endif
 
 void FunctionBtnArea::ClearStringFragmentCache() {
-    std::lock_guard<std::mutex> lk(m_mtx_);
+    // std::lock_guard<std::mutex> lk(m_mtx_);
     str_fragment_cache_.clear();
+}
+
+void FunctionBtnArea::OnReadFromEPROM(can_frame frame) {
+    if(!start_read_eprom_){
+        return;
+    }
+    ParseEPROMFrame(frame);
 }
 
 void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
@@ -642,7 +667,7 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
     QString final_subindex;
 
     {
-        std::lock_guard<std::mutex> lk(m_mtx_);
+        // std::lock_guard<std::mutex> lk(m_mtx_);
         if(frame.can_dlc < 8) {
             qDebug()<<"[frame]数据长度不足8字节";
             return;

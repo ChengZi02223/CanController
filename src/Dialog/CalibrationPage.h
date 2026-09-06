@@ -170,7 +170,7 @@ private:
     QThread *stay_thread_2_ = nullptr;
 
     std::atomic<bool> is_open_running_{false};
-    std::thread open_loop_thread_;
+    QThread *open_loop_thread_;
     bool is_on_cycle_ = false;
     LoopSide curr_side_ = kSideOne;
 
@@ -222,7 +222,10 @@ private:
 
     QWavePlotWithLegendWidget* m_wavePlot = nullptr;
     // 左侧
-
+    std::condition_variable cv_;
+    std::mutex cv_mtx_;
+    bool stop_requested_{false};
+    std::atomic<bool> is_stopping_{false};
     std::mutex m_time_mtx_;
     double m_time = 0.0;
     QDateTime m_time_;

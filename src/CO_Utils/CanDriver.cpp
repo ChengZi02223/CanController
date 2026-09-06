@@ -283,6 +283,11 @@ bool CanDriver::CRCCheck(const can_frame& frame) {
 
 }
 
+void CanDriver::FlushRxBuffer() {
+    can_frame dummy;
+    while (receive(dummy, 10)) { /* 读空 */ }
+}
+
 // ====================== 可选：CAN FD 初始化/收发（适配新款FD硬件） ======================
 bool CanDriver::initFD(TPCANHandle channelHandle, const char* fdBitrateStr)
 {

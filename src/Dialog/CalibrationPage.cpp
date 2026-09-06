@@ -18,6 +18,7 @@
 // #define kCalibratScale 10
 
 #define kFaMaxFlow 80 // L/Min
+#define kThreadWaitTime 200
 
 #define kCloseCycleWaitTime 5 //s
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
@@ -460,34 +461,56 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
 }
 
 bool CalibrationPage::StartLoopCycle() {
+
     // 已经在运行，禁止重复启动
     if(is_open_running_.load()){
         return false;
     }
     is_open_running_.store(true);
-    if(open_loop_thread_.joinable()) {
-        open_loop_thread_.join();
+    if(open_loop_thread_ != nullptr){
+        return false; //已经启动，防止重复创建
     }
     // is_on_cycle_ = true;
-    open_loop_thread_ = std::thread([this]() {
+    open_loop_thread_ = QThread::create([this]() {
         ExecuteLoopCycle();
     });
+
+    open_loop_thread_->start();
 
     return true;
 }
 
 void CalibrationPage::StopLoopCycle() {
-    // 1.通知线程业务循环退出
-    is_open_running_.store(false);
-
-    // 2.如果线程有效，join阻塞等待子线程执行完毕
-    if(open_loop_thread_.joinable()) {
-        open_loop_thread_.join();
+    if (is_stopping_.exchange(true)) return;
+    if(open_loop_thread_ == nullptr){
+        return;
     }
-    // is_on_cycle_ = false;
+    {
+        std::lock_guard<std::mutex> lock(cv_mtx_);
+        stop_requested_ = true;
+        is_open_running_.store(false);
+    }
+    cv_.notify_all();
 
-    OnControl1BtnClicked(false);
-    OnControl2BtnClicked(false);
+    if(stay_1_running_.load()) {
+        StopControl1Loop();
+    }
+    if(stay_2_running_.load()) {
+        StopControl2Loop();
+    }
+
+    open_loop_thread_->wait();   // 无限等待，确保完成清理
+    delete open_loop_thread_;
+    open_loop_thread_ = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(cv_mtx_);
+        stop_requested_ = false;
+    }
+    // OnControl1BtnClicked(false);
+    // OnControl2BtnClicked(false);
+    is_stopping_.store(false);
+    CanDriver::GetInstance()->FlushRxBuffer();
 }
 
 void CalibrationPage::ExecuteLoopCycle() {
@@ -529,44 +552,82 @@ void CalibrationPage::ExecuteLoopCycle() {
     if(!stay_2_running_.load()) {
         StartControl2Loop();
     }
-    while(is_open_running_.load()) {
-        if(loop_count == cycle_count) {
+    while(is_open_running_.load() && loop_count < cycle_count) {
+        if(stop_requested_) {
             break;
         }
         curr_side_ = kSideOne;
         // 1侧开环控制
         qDebug() << "1 中位停留： " << neutral_stay_time / 1000 << "s";
         cur_fa_val_1_cmd_ = SetTargetCMDValue(send_target_1_cmd, 0, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(neutral_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
 
         qDebug() << "1 工作位停留： " << work_stay_time / 1000 << "s";
         cur_fa_val_1_cmd_ = SetTargetCMDValue(send_target_1_cmd, percent_1, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(work_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
 
         qDebug() << "1 中位停留： " << neutral_stay_time / 1000 << "s";
         cur_fa_val_1_cmd_ = SetTargetCMDValue(send_target_1_cmd, 0, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(neutral_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
         curr_side_ = kSideTwo;
 
         // 2侧开环控制
         qDebug() << "2 中位停留： " << neutral_stay_time / 1000 << "s";
         cur_fa_val_2_cmd_ = SetTargetCMDValue(send_target_2_cmd, 0, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(neutral_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
 
         qDebug() << "2 工作位停留： " << work_stay_time / 1000 << "s";
         cur_fa_val_2_cmd_ = SetTargetCMDValue(send_target_2_cmd, percent_2, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(work_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(work_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
 
         qDebug() << "2 中位停留： " << neutral_stay_time / 1000 << "s";
         cur_fa_val_2_cmd_ = SetTargetCMDValue(send_target_2_cmd, 0, factor);
-        std::this_thread::sleep_for(std::chrono::milliseconds(neutral_stay_time));
+        {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            // 如果 stop_requested_ 变为 true 或超时，wait_for 返回
+            cv_.wait_for(lock, std::chrono::milliseconds(neutral_stay_time),
+                         [this]{ return stop_requested_; });
+        }
+        if (stop_requested_) break;
 
         loop_count++;
         qDebug() << "-------一个循环结束-------";
     }
     qDebug() << "loop count: "<< loop_count;
     // is_on_work_stay_time_ = false;
-    emit SendOpenLoopFinished();
+    if (is_open_running_.load()) {   // 正常完成
+        emit SendOpenLoopFinished();
+    }
 }
 
 // Implementation for creating PID setting area
@@ -688,7 +749,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_2_CMD);
             StopControl2Loop();
         }
-        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // ChangeLoopMode(kClosedLoop);
@@ -740,7 +801,7 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_2_CMD);
             StopControl2Loop();
         }
-        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // ChangeLoopMode(kClosedLoop);// 闭环模式
@@ -780,7 +841,7 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
     std::cout << "close cycle clicked, checked:" << checked << std::endl;
     if (!checked) {
         StopLoopCycle();
-        CAN_EXEC_CMD_WITH_RETRY(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         return;
     } else {
         // CAN_EXEC_CMD(SDO_COB_ID, SDO_RAMP_MODE_CMD);
@@ -864,8 +925,8 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                 default:
                     break;
             }
-            UpdateCalibInfo();
             on_calibrat_ = (calib_state_ == kStart);
+            UpdateCalibInfo();
             for(int c = 0; c < 3; c++) {
                 QTableWidgetItem* item = displace_table_->item(i, c);
                 if(item){
@@ -990,7 +1051,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
             return;
         }
         int yugu_v = CalcDisplacement(value, select_calib_);
-        qDebug() << "预估： "<<yugu_v;
+        // qDebug() << "预估： "<<yugu_v;
         if(select_calib_ < 6) {
             cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, yugu_v);
         }else {
@@ -1001,13 +1062,14 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     });
     connect(displace_table_, &QTableWidget::cellClicked, [this](int row, int col){
         select_calib_ = row;
-        if(on_calibrat_) return;
+        if(!on_calibrat_) return;
         auto control_item = displace_table_->item(row, 2); 
         range_slider_->setValue(control_item->text().toInt());
     });
     connect(save_btn, &QPushButton::clicked , this, CalibrationPage::OnSaveCalibValueBtnCLicked);
 
     connect(this, &CalibrationPage::SendCalibCurrentValue, this, [this](int value){
+        if(!on_calibrat_) return;
         auto control_item = displace_table_->item(select_calib_, 1);
         control_item->setText(QString::number(value));
         UpdateCalibInfo();
@@ -1017,17 +1079,20 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
 }
 
 void CalibrationPage::UpdateCalibInfo() {
+    auto side = select_calib_ < 6 ? "1侧" : "2侧";
+    side = select_calib_ == 5 ? "中位" : side;
     auto v_head = displace_table_->verticalHeaderItem(select_calib_)->text();
     auto calib_item = displace_table_->item(select_calib_, 0);
     auto control_item = displace_table_->item(select_calib_, 2);
     QString state_str = on_calibrat_? "结束" : "标定中";
-    auto text = QString("当前标定：%1 | %2 | %3 | %4").arg(v_head).arg(calib_item->text()).arg(control_item->text()).arg(state_str);
+    auto text = QString("当前标定：%1 | %2 | %3 | %4 | %5").arg(side).arg(v_head).arg(calib_item->text()).arg(control_item->text()).arg(state_str);
     info_label_->setText(text);
 }
 
 void CalibrationPage::OnSaveCalibValueBtnCLicked() {
     for(auto btn : calib_btns_) {
         btn->setText("开始标定");
+        btn->setChecked(false);
     }
     calib_state_ = kEnd;
     for(int i = 0; i < displace_table_->rowCount(); i++) {
@@ -1059,6 +1124,7 @@ void CalibrationPage::InitCalibState(QPushButton *calib_btn) {
             not_on_end ++;
         }
         btn->setText("开始标定");
+        btn->setChecked(false);
     }
     if(not_on_end > 0) {
         calib_state_ = kEnd;
@@ -1395,10 +1461,12 @@ void CalibrationPage::StopControl1Loop() {
     }
 
     stay_1_running_.store(false); //退出循环条件
-    stay_thread_1_->quit();
-    stay_thread_1_->wait(); //阻塞等待线程安全结束
+    // stay_thread_1_->quit();
+    stay_thread_1_->wait(); 
     delete stay_thread_1_;
     stay_thread_1_ = nullptr;
+
+    CanDriver::GetInstance()->FlushRxBuffer();
 }
 
 void CalibrationPage::StopControl2Loop() {
@@ -1407,10 +1475,12 @@ void CalibrationPage::StopControl2Loop() {
     }
 
     stay_2_running_.store(false);//退出循环条件
-    stay_thread_2_->quit();
-    stay_thread_2_->wait(); //阻塞等待线程安全结束
+    // stay_thread_2_->quit();
+    stay_thread_2_->wait();
     delete stay_thread_2_;
     stay_thread_2_ = nullptr;
+
+    CanDriver::GetInstance()->FlushRxBuffer();
 }
 
 // double sineVal_1 = 10 * sin(2*M_PI*0.5*m_time);
