@@ -41,6 +41,11 @@ void ProgressDialog::setTitleText(const QString &text)
     m_labelTitle->setText(text);
 }
 
+void ProgressDialog::Exec() {
+    m_btnOperate->setVisible(false);
+    exec();
+}
+
 void ProgressDialog::setProgressValue(int value)
 {
     m_progressBar->setValue(value);

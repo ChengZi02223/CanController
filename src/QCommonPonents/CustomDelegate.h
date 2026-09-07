@@ -1,6 +1,5 @@
 #ifndef CUSTOMDELEGATE_H
 #define CUSTOMDELEGATE_H
-
 #include <QStyledItemDelegate>
 #include <QModelIndex>
 
@@ -17,6 +16,11 @@ protected:
     QWidget *createEditor(QWidget *parent,
                           const QStyleOptionViewItem &option,
                           const QModelIndex &index) const override;
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override;
+
+    bool eventFilter(QObject *obj, QEvent *event) override;
 };
 
 #endif // CUSTOMDELEGATE_H

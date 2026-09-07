@@ -8,6 +8,7 @@
 #include "ProgressDialog.h"
 #include "CustomDelegate.h"
 #include "CanConfig.h"
+#include "MessageBox.h"
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -158,7 +159,7 @@ void SettingPage::InitPage() {
             this, [this](int row, int col, const QString &newText){
         auto item = setting_info_table_->item(row, col);
         if(item) {
-            qDebug() << "Old value: " << item->text() << ", New value: " << newText;
+            // qDebug() << "Old value: " << item->text() << ", New value: " << newText;
             old_item_value_ = item->text();
             item->setText(newText);
             OnValueChanged(item);
@@ -180,9 +181,15 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
         }
         auto save_item = item(row, INFO_TABLE_SAVE_COLUMN);
         auto change_item = item(row, INFO_TABLE_MODIFY_COLUMN);
-        // qDebug() << "Cell changed: " << save_item->text() << " --- " << change_item->text();
+        // qDebug() << "Cell changed: " << save_item->text() << " --- " << change_item->text() << " ==" << on_Save_default_;
+        
         if(save_item->text().trimmed() != change_item->text().trimmed()) {
-            change_item->setForeground(QBrush(Qt::red));
+            if(on_Save_default_) {
+                change_item->setForeground(QBrush(Qt::green));
+            } else {
+                change_item->setForeground(QBrush(Qt::red));
+            }            
+            // change_item->setForeground(QBrush(Qt::red));
         } else {
             change_item->setForeground(QBrush(Qt::black));
         }
@@ -200,7 +207,7 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
     connect(save_progress_dialog_, &ProgressDialog::SendClose, this, [this](){
         if(save_thread_ != nullptr) {
             save_running_.store(false);
-            save_thread_->quit();
+            // save_thread_->quit();
             save_thread_->wait();
             delete save_thread_;
             save_thread_ = nullptr;
@@ -335,6 +342,13 @@ std::vector<uint8_t> SettingInfoTable::CreateRowCmd(ParaItem item) {
     return vec_cmd;
 }
 
+bool SettingInfoTable::IsPIDParam(QTableWidgetItem *it) {
+    auto row = it->row();
+    auto index = item(row, INFO_TABLE_OBJ_COLUMN)->text();
+    return index == "0x2020";
+
+}
+
 void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) {
     auto cmd = GetRowCMD(item->row());
     if(cmd.empty()) {
@@ -345,18 +359,41 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
         return;
     }
     auto type = GetRowParamType(item->row());
-    if(!old_value.isEmpty() && GetParamTypeMaxValue(type) < item->text().toULongLong()) {
-        QMessageBox::warning(this, "Warning", "修改值超出范围!");
-        item->setText(old_value);
+    bool ok = false;
+    auto item_text = item->text();
+    if(IsPIDParam(item)){
+        double value = item_text.toDouble();
+        item_text = QString::number(value *1000);
+    }
+    qulonglong val = item_text.toULongLong(&ok);
+    qulonglong paramMax = static_cast<qulonglong>(GetParamTypeMaxValue(type));
+
+    bool outOfRange = false;
+    if (!ok) {
+        outOfRange = true;
+    } else {
+        if(val > paramMax) {
+            outOfRange = true;
+        }
+    }
+
+    if(outOfRange) {
+        QTimer::singleShot(0, this, [=](){
+            auto msg = item_text.isEmpty() ? QString("第 %1 行数据为空！").arg(item->row() + 1) : QString("修改值 %1 超出允许范围!").arg(item_text);
+            MsgBox::warning(msg);
+        });
+        if(!on_Save_eeprom_){
+            item->setText(old_value);
+        }
         return;
     }
     // qDebug() << "OnValueChanged: " << item->text() << " type: " << static_cast<int>(type);
     if(type == ParamType::kUINT8) {
-        cmd[4] = QStringToUint8Dec(item->text());
+        cmd[4] = QStringToUint8Dec(item_text);
     } else if(type == ParamType::kUINT16) {
-        Fill16ValueToCmd(QStringToUint16Dec(item->text()), cmd, 4);
+        Fill16ValueToCmd(QStringToUint16Dec(item_text), cmd, 4);
     } else if(type == ParamType::kUINT32) {
-        Fill32ValueToCmd(QStringToUint32Dec(item->text()), cmd, 4);
+        Fill32ValueToCmd(QStringToUint32Dec(item_text), cmd, 4);
     } 
 
     CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
@@ -408,7 +445,9 @@ void SettingInfoTable::OnLoadSettings() {
 }
 
 void SettingInfoTable::OnSaveSettings() {
-    // todo
+    if(info_table_count == 0) {
+        return;
+    }
     // qDebug() << "OnSaveSettings";
     QList<QString> para_list;
     for(int i = 0; i < rowCount(); ++i) {
@@ -421,12 +460,15 @@ void SettingInfoTable::OnSaveSettings() {
     auto file_op = QFileOperator::GetInstance();
     bool res = file_op->SaveModifyValueToLastFile(para_list);
     if(res) {
-        QMessageBox::information(this, "提示", tr("修改值已经成功保存到配置文件中：%1").arg(file_op->GetLastLoadFile()));
+        MsgBox::info(tr("修改值已经成功保存到配置文件中：%1").arg(file_op->GetLastLoadFile()));
     }
     OnConfirmAllValues();
 }
 
 void SettingInfoTable::OnChangeInputMode(InputMode mode) {
+    if(info_table_count == 0) {
+        return;
+    }
     bool editable = (mode == kHand);
 
     for(int i = 0; i < rowCount(); ++i) {
@@ -440,6 +482,9 @@ void SettingInfoTable::OnChangeInputMode(InputMode mode) {
 }
 
 void SettingInfoTable::OnClearModifyValues() {
+    if(info_table_count == 0) {
+        return;
+    }
     for(int i = 0; i < rowCount(); ++i) {
         auto modify_item = item(i, INFO_TABLE_MODIFY_COLUMN);
         modify_item->setText("");
@@ -447,15 +492,22 @@ void SettingInfoTable::OnClearModifyValues() {
 }
 
 void SettingInfoTable::OnConfirmAllValues() {
+    if(info_table_count == 0) {
+        return;
+    }
+    
     for(int i = 0; i < rowCount(); ++i) {
         auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
         auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
         save_item->setText(change_item->text());
-        change_item->setForeground(QBrush(Qt::green));
+        // change_item->setForeground(QBrush(Qt::green));
     }
 }
 
 void SettingInfoTable::ReloadDefaultValue() {
+    if(info_table_count == 0) {
+        return;
+    }
     for(int i = 0; i < rowCount(); ++i) {
         auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
         auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
@@ -467,40 +519,72 @@ void SettingInfoTable::ReloadDefaultValue() {
 }
 
 void SettingInfoTable::OnSaveDefaultValue() {
+    if(info_table_count == 0) {
+        return;
+    }
+    qDebug()<< "保存到默认参数";
+    on_Save_default_ = true;
     UpdateParams();
     CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
     OnConfirmAllValues();
     update();
+    on_Save_default_ = false;
 }
 
 void SettingInfoTable::OnSaveToEPROM() {
+    if(info_table_count == 0) {
+        return;
+    }
+    on_Save_eeprom_ = true;
     UpdateParams();
-    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_USER_SETTING_CMD, kCmdTimeOut);
+    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_EEPROM_CMD, kCmdTimeOut);
 
     for(int i = 0; i < rowCount(); ++i) {
         user_values_[i] = item(i, INFO_TABLE_MODIFY_COLUMN)->text();
     }
+    on_Save_eeprom_ = false;
 }
 
 void SettingInfoTable::UpdateParams() {
+    if(info_table_count == 0) {
+        return;
+    }
     if(save_thread_ != nullptr){
         return; 
+    }
+    if(on_Save_default_){
+        int changed_num = 0;
+        for(int i = 0; i < rowCount(); ++i) {
+            auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
+            auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+            if(save_item->text().trimmed() == change_item->text().trimmed()) {
+                continue;
+            }
+            changed_num ++;
+        }
+        if(changed_num == 0) {
+            return;
+        }        
     }
 
     save_running_.store(true);
     save_thread_ = QThread::create([this](){
         for(int i = 0; i < rowCount(); ++i) {
+            emit updateProgress((i + 1) * 100 / rowCount());
+            auto save_item = item(i, INFO_TABLE_SAVE_COLUMN);
             auto change_item = item(i, INFO_TABLE_MODIFY_COLUMN);
+            if(on_Save_default_ && save_item->text().trimmed() == change_item->text().trimmed()) {
+                continue;
+            }
             ChangRowValue(change_item);
             change_item->setForeground(QBrush(Qt::black));
-            emit updateProgress((i + 1) * 100 / rowCount());
             QThread::msleep(200); 
         }
         emit SendReadFinished();
     });
     save_thread_->start();
     save_progress_dialog_->setTitleText("正在保存参数到EPROM，请稍候...");
-    save_progress_dialog_->exec();
+    save_progress_dialog_->Exec();
 }
 
 FunctionBtnArea::FunctionBtnArea(QWidget* parent) : QGroupBox(parent) {
@@ -568,7 +652,6 @@ void FunctionBtnArea::ConnectSignles() {
     connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
     connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
     connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
-        // StopReadFromEPROM();
         start_read_eprom_ = false;
         parse_count_ = 0;
         ClearStringFragmentCache();
@@ -596,6 +679,9 @@ void FunctionBtnArea::OnSaveSettingBtnClicked() {
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {
+    if(info_table_count == 0) {
+        return;
+    }
     QString mode = "";
     if(input_mode_ == kHand) {
         mode = QString("禁止手输");
@@ -609,6 +695,9 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
 }
 
 void FunctionBtnArea::OnLoadToTableBtnClicked() {
+    if(info_table_count == 0) {
+        return;
+    }
     qDebug() << "读取参数到表格";
     can_frame frame{};
     bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
@@ -621,7 +710,7 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
     // StartReadFromEPROM();
     start_read_eprom_ = true;
     progress_dialog_->setTitleText("正在读取参数，请稍候...");
-    progress_dialog_->exec();
+    progress_dialog_->Exec();
 }
 
 bool FunctionBtnArea::TestEPROMSenCmd(can_frame &frame) {

@@ -26,7 +26,7 @@ extern const std::vector<uint8_t> CHANGE_TO_J1939_CMD_RPS;
 
 // 参数配置
 extern const std::vector<uint8_t> SDO_SAVE_DEFAULT_CMD; // 保存默认参数
-extern const std::vector<uint8_t> SDO_SAVE_USER_SETTING_CMD; // 保存个人设置
+extern const std::vector<uint8_t> SDO_SAVE_EEPROM_CMD; // 保存个人设置
 extern const std::vector<uint8_t> SDO_LOAD_DEFAULT_CMD; // 恢复出厂设置
 
 extern const std::vector<uint8_t> SDO_READ_PARAM_TO_TABLE; // 读取参数到表格

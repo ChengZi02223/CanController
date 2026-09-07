@@ -25,8 +25,8 @@ echo.
 @REM     rd /s /q build
 @REM )
 :: 2. Create new build dir
-@REM echo [2/4] Creating build directory...
-@REM mkdir build
+echo [2/4] Creating build directory...
+mkdir build
 cd build
 
 :: 3. CMake configure for Debug

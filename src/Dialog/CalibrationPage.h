@@ -208,6 +208,7 @@ private:
     std::vector<QPushButton*> calib_btns_;
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
+    bool already_on_calib_ = false;
 
     QLineEdit *displace_target_edit_ = nullptr;
     QLineEdit *actual_value_edit_ = nullptr;

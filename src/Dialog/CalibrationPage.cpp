@@ -742,6 +742,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     }
     if(!checked) {
         // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
+        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         if(IsOnSideControl1()) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_1_CMD);
             StopControl1Loop();
@@ -793,6 +794,7 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
     }
 
     if(!checked) {
+        CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         // {0x2B, 0x00, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00}
         if(IsOnSideControl1()) {
             CAN_EXEC_CMD(SEND_COB_ID, SDO_STOP_1_CMD);
@@ -840,8 +842,8 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
     cur_loop_mode_ = kClosedLoop;
     std::cout << "close cycle clicked, checked:" << checked << std::endl;
     if (!checked) {
-        StopLoopCycle();
         CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        StopLoopCycle();
         return;
     } else {
         // CAN_EXEC_CMD(SDO_COB_ID, SDO_RAMP_MODE_CMD);
@@ -946,14 +948,16 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
                     StartControl2Loop();
                 }
             } else {
-                if(i < 6) {
-                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
-                    StopControl1Loop();
-                }else {
-                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
-                    StopControl2Loop();
+                if(!already_on_calib_) {
+                    if(i < 6) {
+                        CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                        StopControl1Loop();
+                    }else {
+                        CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                        StopControl2Loop();
+                    }
+                    CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);                    
                 }
-                CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
             }
         });
 
@@ -1084,16 +1088,25 @@ void CalibrationPage::UpdateCalibInfo() {
     auto v_head = displace_table_->verticalHeaderItem(select_calib_)->text();
     auto calib_item = displace_table_->item(select_calib_, 0);
     auto control_item = displace_table_->item(select_calib_, 2);
-    QString state_str = on_calibrat_? "结束" : "标定中";
+    QString state_str = on_calibrat_? "标定中" : "结束";
     auto text = QString("当前标定：%1 | %2 | %3 | %4 | %5").arg(side).arg(v_head).arg(calib_item->text()).arg(control_item->text()).arg(state_str);
     info_label_->setText(text);
 }
 
 void CalibrationPage::OnSaveCalibValueBtnCLicked() {
+    if(on_calibrat_) {
+        if(stay_1_running_.load()) {
+            StopControl1Loop();
+        }
+        if(stay_2_running_.load()) {
+            StopControl2Loop();
+        }
+    }
     for(auto btn : calib_btns_) {
         btn->setText("开始标定");
         btn->setChecked(false);
     }
+    on_calibrat_ = false;
     calib_state_ = kEnd;
     for(int i = 0; i < displace_table_->rowCount(); i++) {
         SetRowCalib(i, false);
@@ -1123,12 +1136,13 @@ void CalibrationPage::InitCalibState(QPushButton *calib_btn) {
         if(btn->text() != "开始标定") {
             not_on_end ++;
         }
-        btn->setText("开始标定");
         btn->setChecked(false);
+        btn->setText("开始标定");
     }
     if(not_on_end > 0) {
         calib_state_ = kEnd;
     }
+    already_on_calib_ = not_on_end > 0;
 }
 
 

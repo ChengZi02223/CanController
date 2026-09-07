@@ -83,6 +83,7 @@ private:
 
     void UpdateParams();
     bool IsItemReadOnly(QTableWidgetItem *item);
+    bool IsPIDParam(QTableWidgetItem *it);
 
 private:
     std::map<int, QString> default_values_;
@@ -95,6 +96,10 @@ private:
     std::atomic<bool> save_running_{false};
     QThread *save_thread_ = nullptr;
     std::mutex s_mtx_;
+
+    QString last_value_;
+    bool on_Save_default_ = false;
+    bool on_Save_eeprom_ = false;
 };
 
 class FunctionBtnArea : public QGroupBox {

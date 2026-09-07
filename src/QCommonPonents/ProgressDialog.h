@@ -17,6 +17,7 @@ public:
     void setTitleText(const QString& text);
     // 设置按钮文字
     void setButtonText(const QString& text);
+    void Exec();
 
 signals:
     // 按钮被点击信号

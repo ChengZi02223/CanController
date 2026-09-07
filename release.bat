@@ -3,9 +3,9 @@
 cd /d D:\Desktop\yc\PartTimeJobs\Windows\CanController
 
 @REM 删除旧构建目录
-if exist .\build (
-    rmdir /s /q .\build
-)
+@REM if exist .\build (
+@REM     rmdir /s /q .\build
+@REM )
 @REM if exist .\build (
 @REM     echo ERROR: build Faild
 @REM     pause
