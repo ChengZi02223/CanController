@@ -206,6 +206,7 @@ private:
 
     std::map<QPushButton*, CalibState> states_map_;
     std::vector<QPushButton*> calib_btns_;
+    std::vector<QPushButton*> verify_btns_;
     CalibState calib_state_ = kEnd; //标定按钮
     CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
     bool already_on_calib_ = false;

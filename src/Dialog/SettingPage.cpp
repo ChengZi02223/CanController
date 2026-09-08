@@ -695,19 +695,45 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
 }
 
 void FunctionBtnArea::OnLoadToTableBtnClicked() {
-    if(info_table_count == 0) {
+    if (info_table_count == 0) {
         return;
     }
     qDebug() << "读取参数到表格";
-    can_frame frame{};
-    bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
+
+    // ========== 循环重试，直到发送成功或用户取消 ==========
+    const int MAX_RETRIES = 10;          // 最多重试50次
+    const int RETRY_INTERVAL_MS = 100;   // 每次重试间隔100ms
+    bool success = false;
+
+    for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
+        can_frame frame{};               // 每次重新定义，避免旧数据干扰
+        bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
+
 #ifndef ON_TEST_MODE
-    if (!ret || frame.can_id != 0x5C0) {
-        QMessageBox::warning(this, "警告", "读取参数到表格失败，未接收到开始读取指令！");
+        if (ret && frame.can_id == 0x5C0) {
+            success = true;
+            break;
+        }
+#else
+        // 测试模式下，直接认为成功（若您保留测试宏）
+        success = true;
+        break;
+#endif
+
+        // 发送失败，稍等再重试
+        QThread::msleep(RETRY_INTERVAL_MS);
+        // 可选：每10次打印一次日志
+        if (attempt % 10 == 0) {
+            qDebug() << "重试读取参数... 第" << attempt << "次";
+        }
+    }
+
+    if (!success) {
+        QMessageBox::warning(this, "警告", "读取参数到表格失败，已重试" + QString::number(MAX_RETRIES) + "次，请检查CAN通信！");
         return;
     }
-#endif
-    // StartReadFromEPROM();
+
+    // 成功后的逻辑
     start_read_eprom_ = true;
     progress_dialog_->setTitleText("正在读取参数，请稍候...");
     progress_dialog_->Exec();

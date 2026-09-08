@@ -98,6 +98,7 @@ bool CanDriver::init(TPCANHandle channelHandle, uint32_t baudrate)
         std::cerr << "CAN初始化失败:" << errText << " 错误码:0x" << std::hex << status << std::endl;
         return false;
     }
+    baudrate_ = baudrate;
     handle_ = reinterpret_cast<void*>(static_cast<uintptr_t>(channelHandle));
     isInitialized_ = true;
     return true;
@@ -150,9 +151,10 @@ bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, i
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms) {
     std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-    SendCmd(cobId, cmd, timeout_ms);
-    receive(response, timeout_ms);
-    return true;
+    FlushRxBuffer();                        // ★ 先清旧应答，防止读到子线程残留响应
+    if (!SendCmd(cobId, cmd, timeout_ms))
+        return false;                       // ★ 把真实结果返回，不要无条件true
+    return receive(response, timeout_ms);
 }
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
@@ -287,6 +289,35 @@ void CanDriver::FlushRxBuffer() {
     can_frame dummy;
     while (receive(dummy, 10)) { /* 读空 */ }
 }
+
+// 轻量清理：CAN_Reset 清空驱动的接收+发送FIFO
+// 注意：PEAK官方文档明确 —— 已进入硬件缓冲区的帧不会被CAN_Reset删除
+bool CanDriver::FlushBuffers() {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    if (!isInitialized_ || !handle_) return false;
+
+    TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
+    TPCANStatus status = CAN_Reset(h);
+    if (status != PCAN_ERROR_OK) {
+        char errText[256] = {0};
+        CAN_GetErrorText(status, 0x09, errText);
+        std::cerr << "FlushBuffers失败:" << errText << std::endl;
+        return false;
+    }
+    return true;
+}
+
+// 彻底复位：CAN_Uninitialize + CAN_Initialize
+// PEAK官方论坛确认：这是唯一能清掉"卡在硬件里无限重发的帧"的方法
+bool CanDriver::HardReset() {
+    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    if (!isInitialized_ || !handle_) return false;
+
+    TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
+    close();                        // CAN_Uninitialize 复位CAN控制器硬件
+    return init(h, baudrate_);    // 重新初始化，TX队列彻底清空
+}
+
 
 // ====================== 可选：CAN FD 初始化/收发（适配新款FD硬件） ======================
 bool CanDriver::initFD(TPCANHandle channelHandle, const char* fdBitrateStr)

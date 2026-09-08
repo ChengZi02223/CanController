@@ -30,6 +30,11 @@ static const std::vector<int> flow_curr_value_subidxs = {0x12, 0x13, 0x14, 0x15,
 #define CAN_EXEC_CMD(id, cmd)  CanDriver::GetInstance()->SendCmd(id, cmd, kCmdTimeOut);
 #define CAN_EXEC_CMD_WITH_RETRY(id, cmd)  CanDriver::GetInstance()->SendCmdWithRetry(id, cmd, 3, 10);
 
+#define CAN_CLEAR_BUFF CanDriver::GetInstance()->FlushBuffers(); \
+                       CanDriver::GetInstance()->FlushRxBuffer();  
+
+#define CAN_QUEUE_CLEAN_GUARD CanQueueCleanGuard guard;
+
 inline int32_t GetTargetFlow(int i) {
     if(i >= 0 || i < flow_table.size()) {
         return flow_table[i] * kFaMaxFlow;
@@ -474,7 +479,7 @@ bool CalibrationPage::StartLoopCycle() {
     open_loop_thread_ = QThread::create([this]() {
         ExecuteLoopCycle();
     });
-
+    CAN_CLEAR_BUFF
     open_loop_thread_->start();
 
     return true;
@@ -510,7 +515,7 @@ void CalibrationPage::StopLoopCycle() {
     // OnControl1BtnClicked(false);
     // OnControl2BtnClicked(false);
     is_stopping_.store(false);
-    CanDriver::GetInstance()->FlushRxBuffer();
+    CAN_CLEAR_BUFF
 }
 
 void CalibrationPage::ExecuteLoopCycle() {
@@ -964,8 +969,37 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         auto verify_btn = new QPushButton("验证标定");
         verify_btn->setMinimumWidth(40);
         verify_btn->setObjectName("CalibBtn");
+        verify_btn->setCheckable(true);
         displace_table_->setCellWidget(i, 4, verify_btn);
-        connect(verify_btn, &QPushButton::clicked, this, [this, i, verify_btn](){
+        verify_btns_.push_back(verify_btn);
+        connect(verify_btn, &QPushButton::clicked, this, [this, i, verify_btn](bool checked){
+            if(checked) {
+                auto v = displace_table_->item(i, 2)->text().toInt();
+                int yugu_v = CalcDisplacement(v, i);
+                CAN_EXEC_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
+                if(i < 6) {
+                    cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, yugu_v);
+                    StartControl1Loop();
+                }else {
+                    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, yugu_v);
+                    StartControl2Loop();
+                }
+            } else {
+                if(i < 6) {
+                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                    StopControl1Loop();
+                }else {
+                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                    StopControl2Loop();
+                }
+                CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);   
+            }
+            for(auto &btn: verify_btns_) {
+                if(btn != verify_btn) {
+                    btn->setChecked(false);
+                }
+            }
+
         });
 
     }
@@ -1046,14 +1080,14 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     main_layout->addWidget(range_slider_);
     
     connect(range_slider_, &QRangeSlider::valueChanged, [=](int value){
+        if(!on_calibrat_) {
+            return;
+        }        
         displace_target_edit_->setText(QString::number(value));
         auto step_item = displace_table_->item(select_calib_, 0);
         step_item->setText(QString::number(value));
         auto selected_calib_item = displace_table_->item(select_calib_, 2);
         selected_calib_item->setText(QString::number(value));
-        if(!on_calibrat_) {
-            return;
-        }
         int yugu_v = CalcDisplacement(value, select_calib_);
         // qDebug() << "预估： "<<yugu_v;
         if(select_calib_ < 6) {
@@ -1439,10 +1473,12 @@ void CalibrationPage::StartControl1Loop() {
     if(stay_thread_1_ != nullptr){
         return; //已经启动，防止重复创建
     }
+    CAN_CLEAR_BUFF
     curr_side_ = kSideOne;
     stay_1_running_.store(true);
     if(!stay_2_running_.load()) m_time_ = QDateTime::currentDateTime();
     stay_thread_1_ = QThread::create([this](){
+        CAN_QUEUE_CLEAN_GUARD
         // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
         while(stay_1_running_.load()) {
             OnDrawStayFa1(); //执行你的业务函数
@@ -1456,11 +1492,13 @@ void CalibrationPage::StartControl2Loop() {
     if(stay_thread_2_ != nullptr){
         return; //已经启动，防止重复创建
     }
+    CAN_CLEAR_BUFF
     curr_side_ = kSideTwo;
     stay_2_running_.store(true);
     if(!stay_1_running_.load()) m_time_ = QDateTime::currentDateTime();
     stay_thread_2_ = QThread::create([this](){
         // 子线程循环，等价原来定时器不断触发OnDrawStayFa1
+        CAN_QUEUE_CLEAN_GUARD
         while(stay_2_running_.load()) {
             OnDrawStayFa2(); //执行你的业务函数
             QThread::msleep(kSleepTimeOut);
@@ -1479,8 +1517,7 @@ void CalibrationPage::StopControl1Loop() {
     stay_thread_1_->wait(); 
     delete stay_thread_1_;
     stay_thread_1_ = nullptr;
-
-    CanDriver::GetInstance()->FlushRxBuffer();
+    CAN_CLEAR_BUFF
 }
 
 void CalibrationPage::StopControl2Loop() {
@@ -1493,8 +1530,7 @@ void CalibrationPage::StopControl2Loop() {
     stay_thread_2_->wait();
     delete stay_thread_2_;
     stay_thread_2_ = nullptr;
-
-    CanDriver::GetInstance()->FlushRxBuffer();
+    CAN_CLEAR_BUFF
 }
 
 // double sineVal_1 = 10 * sin(2*M_PI*0.5*m_time);

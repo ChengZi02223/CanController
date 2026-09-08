@@ -35,11 +35,8 @@ struct CanCmdItem
 class CanDriver {
 public:
     static CanDriver* GetInstance() {
-        static CanDriver * instance = nullptr;
-        if(instance == nullptr) {
-            instance = new CanDriver();
-        }
-        return instance;
+        static CanDriver instance;
+        return &instance;
     }
 
     // 【新增】自动扫描本机所有PCAN通道，返回全部通道列表
@@ -66,6 +63,10 @@ public:
 
     bool CRCCheck(const can_frame& frame);
     void FlushRxBuffer();
+    // 【新增】清空驱动层收发FIFO（对应 PCAN 的 CAN_Reset）
+    bool FlushBuffers();
+    // 【新增】彻底复位通道：连"已进入硬件缓冲区、正在重发的帧"也一并清掉
+    bool HardReset();
 
 private:
     CanDriver();
@@ -74,5 +75,12 @@ private:
     std::recursive_mutex m_io_mtx_;
     void* handle_;
     bool isInitialized_;
+
+    uint32_t baudrate_;
 };
+
+struct CanQueueCleanGuard {
+    ~CanQueueCleanGuard() { CanDriver::GetInstance()->FlushBuffers(); }
+};
+
 #endif // CAN_DRIVER_HPP
