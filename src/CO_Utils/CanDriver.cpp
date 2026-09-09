@@ -79,9 +79,15 @@ std::vector<CanChannelInfo> CanDriver::scanAllChannels()
 // ====================== 改造初始化：直接传入扫描到的handle ======================
 bool CanDriver::init(TPCANHandle channelHandle, uint32_t baudrate)
 {
-    // 先关闭已有通道
-    close();
+    std::lock_guard<std::mutex> lk_tx(m_tx_mtx_);
+    std::lock_guard<std::mutex> lk_rx(m_rx_mtx_);
+    close_NoLock();   // 调用无锁版本！！不要调用带锁close()！！
+    return init_NoLock(channelHandle, baudrate);
+}
 
+// 内部无锁，调用者已经持有tx+rx锁
+bool CanDriver::init_NoLock(TPCANHandle channelHandle, uint32_t baudrate)
+{
     TPCANBaudrate pcanBaud;
     switch (baudrate) {
         case 125000: pcanBaud = PCAN_BAUD_125K; break;
@@ -90,11 +96,10 @@ bool CanDriver::init(TPCANHandle channelHandle, uint32_t baudrate)
         case 1000000: pcanBaud = PCAN_BAUD_1M;   break;
         default:      pcanBaud = PCAN_BAUD_250K; break;
     }
-
-    TPCANStatus status = CAN_Initialize(channelHandle, pcanBaud, 0, 0, 0);
+    TPCANStatus status = CAN_Initialize(channelHandle, pcanBaud, 0,0,0);
     if (status != PCAN_ERROR_OK) {
         char errText[256] = {0};
-        CAN_GetErrorText(status, 0x09, errText); // 0x09=英文错误信息
+        CAN_GetErrorText(status,0x09,errText);
         std::cerr << "CAN初始化失败:" << errText << " 错误码:0x" << std::hex << status << std::endl;
         return false;
     }
@@ -106,6 +111,14 @@ bool CanDriver::init(TPCANHandle channelHandle, uint32_t baudrate)
 
 void CanDriver::close()
 {
+    std::lock_guard<std::mutex> lk_tx(m_tx_mtx_);
+    std::lock_guard<std::mutex> lk_rx(m_rx_mtx_);
+    close_NoLock();
+}
+
+// 内部无锁，调用者必须已经持有tx+rx锁
+void CanDriver::close_NoLock()
+{
     if (isInitialized_ && handle_) {
         TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
         CAN_Uninitialize(pcanHandle);
@@ -115,8 +128,9 @@ void CanDriver::close()
 }
 
 bool CanDriver::SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd, int maxRetries, int retryIntervalMs) {
+    std::lock_guard<std::mutex> lock(m_tx_mtx_);
     for (int i = 0; i < maxRetries; ++i) {
-        if (SendCmd(cobId, cmd, kCmdTimeOut)) {
+        if (SendCmd_NoLock(cobId, cmd, kCmdTimeOut)) {
             return true;
         }
         if (i < maxRetries - 1) {
@@ -126,46 +140,54 @@ bool CanDriver::SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd
     return false;
 }
 
-bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+bool CanDriver::SendCmd_NoLock(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms)
+{
     PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
     return true;
 #endif
     can_frame frame{};
     frame.can_id = cobId;
-    frame.can_dlc = static_cast<uint8_t>(cmd.size()); // 不要硬写8！使用实际长度
-    // 拷贝vector到data数组，最多拷贝8字节（CAN标准最大载荷）
+    frame.can_dlc = static_cast<uint8_t>(cmd.size());
     const size_t copyLen = std::min(cmd.size(), sizeof(frame.data));
     std::memcpy(frame.data, cmd.data(), copyLen);
-
     if(frame.can_id > 0x7FF){
         frame.can_id |= CAN_EFF_FLAG;
     }
-
-    if(!send(frame)) {
+    if(!send_NoLock(frame)) {
         return false;
     }
     return true;
 }
 
+bool CanDriver::SendCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
+    std::lock_guard<std::mutex> lock(m_tx_mtx_);
+    return SendCmd_NoLock(cobId, cmd, timeout_ms);
+}
+
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t> cmd, can_frame& response, int timeout_ms) {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-    FlushRxBuffer();                        // ★ 先清旧应答，防止读到子线程残留响应
-    if (!SendCmd(cobId, cmd, timeout_ms))
-        return false;                       // ★ 把真实结果返回，不要无条件true
+    FlushRxBuffer();
+
+    {
+        std::lock_guard<std::mutex> lock(m_tx_mtx_);
+        if (!SendCmd_NoLock(cobId, cmd, timeout_ms))
+        {
+            return false;
+        }
+    } 
+
     return receive(response, timeout_ms);
 }
 
 bool CanDriver::ExecCmd(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms) {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-    return SendCmd(cobId, cmd, timeout_ms);
+    std::lock_guard<std::mutex> lock(m_tx_mtx_);
+    return SendCmd_NoLock(cobId, cmd, timeout_ms);
 }
 
 bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
 {
     // 整个批量发送全程持有互斥锁，保证多条报文连续输出，不被其他ExecCmd抢占
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    std::lock_guard<std::mutex> lock(m_tx_mtx_);
 
     for (const auto& item : cmdList)
     {
@@ -189,7 +211,7 @@ bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
         }
 
         // 发送失败直接返回false，不再继续发送剩下的报文
-        if (!send(frame))
+        if (!send_NoLock(frame))
         {
             return false;
         }
@@ -203,19 +225,21 @@ bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
 // ====================== 原有发送函数不变 ======================
 bool CanDriver::send(const can_frame& frame)
 {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    std::lock_guard<std::mutex> lock(m_tx_mtx_);
+    return send_NoLock(frame);
+}
+
+bool CanDriver::send_NoLock(const can_frame& frame) {
     if (!isInitialized_ || !handle_) return false;
-    if(!CRCCheck(frame)) return false;
+    if (!CRCCheck(frame)) return false;
+
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;
-    msg.ID      = frame.can_id & CAN_EFF_MASK; // 清除标志位，只保留29位ID
-    if(frame.can_id & CAN_EFF_FLAG) {
-        msg.MSGTYPE = PCAN_MESSAGE_EXTENDED; // 扩展帧！
-    } else {
-        msg.MSGTYPE = PCAN_MESSAGE_STANDARD;
-    }
-    msg.LEN     = frame.can_dlc;
+    msg.ID = frame.can_id & CAN_EFF_MASK;
+    msg.MSGTYPE = (frame.can_id & CAN_EFF_FLAG) ? PCAN_MESSAGE_EXTENDED : PCAN_MESSAGE_STANDARD;
+    msg.LEN = frame.can_dlc;
     std::memcpy(msg.DATA, frame.data, 8);
+
     TPCANStatus status = CAN_Write(pcanHandle, &msg);
     if (status != PCAN_ERROR_OK) {
         std::cerr << "发送失败，错误码: 0x" << std::hex << status << std::endl;
@@ -223,50 +247,49 @@ bool CanDriver::send(const can_frame& frame)
     }
     return true;
 }
-
 // ====================== 原有接收函数优化：增加错误文本 ======================
 bool CanDriver::receive(can_frame& frame, int timeout_ms)
 {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
-
     if (!isInitialized_ || !handle_)
     {
         return false;
     }
-
     TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
     TPCANMsg msg;
     TPCANTimestamp ts;
-
     qint64 start = QDateTime::currentMSecsSinceEpoch();
+
     do
     {
-        TPCANStatus status = CAN_Read(pcanHandle, &msg, &ts);
-        if (status == PCAN_ERROR_OK)
+        TPCANStatus status;
         {
-            // 读到有效报文，填充输出frame
-            frame.can_id = msg.ID;
-            frame.can_dlc = msg.LEN;
-            // 按真实DLC拷贝，剩余字节清零，避免栈垃圾
-            memset(frame.data, 0, sizeof(frame.data));
-            std::memcpy(frame.data, msg.DATA, msg.LEN);
-            return true;
+            // 【锁范围极小：只保护一次CAN_Read，读完马上释放！Sleep不在锁内】
+            std::lock_guard<std::mutex> lk_rx(m_rx_mtx_);
+            status = CAN_Read(pcanHandle, &msg, &ts);
+            if (status == PCAN_ERROR_OK)
+            {
+                frame.can_id = msg.ID;
+                frame.can_dlc = msg.LEN;
+                memset(frame.data, 0, sizeof(frame.data));
+                std::memcpy(frame.data, msg.DATA, msg.LEN);
+                return true;
+            }
+            else if (status != PCAN_ERROR_QRCVEMPTY)
+            {
+                char errText[256] = {0};
+                CAN_GetErrorText(status, 0x09, errText);
+                std::cerr << "接收异常:" << errText << " 错误码:0x" << std::hex << status << std::endl;
+                return false;
+            }
         }
-        else if (status != PCAN_ERROR_QRCVEMPTY)
-        {
-            // 不是队列为空，是真实硬件错误
-            char errText[256] = {0};
-            CAN_GetErrorText(status, 0x09, errText);
-            std::cerr << "接收异常:" << errText << " 错误码:0x" << std::hex << status << std::endl;
-            return false;
-        }
-        // status == PCAN_ERROR_QRCVEMPTY，队列空，小sleep让出CPU
+        // 出大括号：rx锁已经释放！！sleep在锁外面！！
         Sleep(2);
     } while ((QDateTime::currentMSecsSinceEpoch() - start) < timeout_ms);
 
     // 超时
     return false;
 }
+
 
 bool CanDriver::CRCCheck(const can_frame& frame) {
     // 只检测 0x240
@@ -293,7 +316,8 @@ void CanDriver::FlushRxBuffer() {
 // 轻量清理：CAN_Reset 清空驱动的接收+发送FIFO
 // 注意：PEAK官方文档明确 —— 已进入硬件缓冲区的帧不会被CAN_Reset删除
 bool CanDriver::FlushBuffers() {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    std::lock_guard<std::mutex> lk_tx(m_tx_mtx_);
+    std::lock_guard<std::mutex> lk_rx(m_rx_mtx_);
     if (!isInitialized_ || !handle_) return false;
 
     TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
@@ -310,44 +334,11 @@ bool CanDriver::FlushBuffers() {
 // 彻底复位：CAN_Uninitialize + CAN_Initialize
 // PEAK官方论坛确认：这是唯一能清掉"卡在硬件里无限重发的帧"的方法
 bool CanDriver::HardReset() {
-    std::lock_guard<std::recursive_mutex> lock(m_io_mtx_);
+    std::lock_guard<std::mutex> lk_tx(m_tx_mtx_);
+    std::lock_guard<std::mutex> lk_rx(m_rx_mtx_);
     if (!isInitialized_ || !handle_) return false;
 
     TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
-    close();                        // CAN_Uninitialize 复位CAN控制器硬件
-    return init(h, baudrate_);    // 重新初始化，TX队列彻底清空
-}
-
-
-// ====================== 可选：CAN FD 初始化/收发（适配新款FD硬件） ======================
-bool CanDriver::initFD(TPCANHandle channelHandle, const char* fdBitrateStr)
-{
-    close();
-    TPCANStatus status = CAN_InitializeFD(channelHandle, (TPCANBitrateFD)fdBitrateStr);
-    if (status != PCAN_ERROR_OK)
-    {
-        char errText[256] = {0};
-        CAN_GetErrorText(status, 0x09, errText);
-        std::cerr << "CAN FD初始化失败:" << errText << std::endl;
-        return false;
-    }
-    handle_ = reinterpret_cast<void*>(static_cast<uintptr_t>(channelHandle));
-    isInitialized_ = true;
-    return true;
-}
-
-bool CanDriver::sendFD(TPCANMsgFD& fdMsg)
-{
-    if (!isInitialized_) return false;
-    TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
-    TPCANStatus s = CAN_WriteFD(h, &fdMsg);
-    return s == PCAN_ERROR_OK;
-}
-
-bool CanDriver::receiveFD(TPCANMsgFD& fdMsg, TPCANTimestampFD* ts)
-{
-    if (!isInitialized_) return false;
-    TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
-    TPCANStatus s = CAN_ReadFD(h, &fdMsg, ts);
-    return s == PCAN_ERROR_OK;
+    close_NoLock();                        // CAN_Uninitialize 复位CAN控制器硬件
+    return init_NoLock(h, baudrate_);    // 重新初始化，TX队列彻底清空
 }

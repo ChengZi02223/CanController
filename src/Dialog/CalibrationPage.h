@@ -170,7 +170,7 @@ private:
     QThread *stay_thread_2_ = nullptr;
 
     std::atomic<bool> is_open_running_{false};
-    QThread *open_loop_thread_;
+    QThread *open_loop_thread_ = nullptr;
     bool is_on_cycle_ = false;
     LoopSide curr_side_ = kSideOne;
 

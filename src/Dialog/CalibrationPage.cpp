@@ -5,7 +5,7 @@
 #include "can_cmd.h"
 #include "Utils.h"
 #include "QWavePlotWithLegendWidget.h"
-
+#include "CustomDelegate.h"
 #include <QDebug>
 #include <iostream>
 #include <QThread>
@@ -462,24 +462,22 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
         // CAN_EXEC_CMD(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD);
     }
 
-    StartLoopCycle();
+    if (!StartLoopCycle()) {
+        // 启动失败，将按钮恢复为未选中，避免状态误导
+        cycle_btn_->setChecked(false);
+    }
 }
 
 bool CalibrationPage::StartLoopCycle() {
 
     // 已经在运行，禁止重复启动
-    if(is_open_running_.load()){
+    if (is_open_running_.load() || open_loop_thread_ != nullptr) {
         return false;
     }
     is_open_running_.store(true);
-    if(open_loop_thread_ != nullptr){
-        return false; //已经启动，防止重复创建
-    }
-    // is_on_cycle_ = true;
     open_loop_thread_ = QThread::create([this]() {
         ExecuteLoopCycle();
     });
-    CAN_CLEAR_BUFF
     open_loop_thread_->start();
 
     return true;
@@ -487,9 +485,6 @@ bool CalibrationPage::StartLoopCycle() {
 
 void CalibrationPage::StopLoopCycle() {
     if (is_stopping_.exchange(true)) return;
-    if(open_loop_thread_ == nullptr){
-        return;
-    }
     {
         std::lock_guard<std::mutex> lock(cv_mtx_);
         stop_requested_ = true;
@@ -504,9 +499,11 @@ void CalibrationPage::StopLoopCycle() {
         StopControl2Loop();
     }
 
-    open_loop_thread_->wait();   // 无限等待，确保完成清理
-    delete open_loop_thread_;
-    open_loop_thread_ = nullptr;
+    if (open_loop_thread_ != nullptr) {
+        open_loop_thread_->wait();
+        delete open_loop_thread_;
+        open_loop_thread_ = nullptr;
+    }
 
     {
         std::lock_guard<std::mutex> lock(cv_mtx_);
@@ -515,7 +512,6 @@ void CalibrationPage::StopLoopCycle() {
     // OnControl1BtnClicked(false);
     // OnControl2BtnClicked(false);
     is_stopping_.store(false);
-    CAN_CLEAR_BUFF
 }
 
 void CalibrationPage::ExecuteLoopCycle() {
@@ -633,6 +629,8 @@ void CalibrationPage::ExecuteLoopCycle() {
     if (is_open_running_.load()) {   // 正常完成
         emit SendOpenLoopFinished();
     }
+    // CAN_CLEAR_BUFF
+    CanDriver::GetInstance()->FlushRxBuffer();
 }
 
 // Implementation for creating PID setting area
@@ -871,9 +869,14 @@ void CalibrationPage::OnPIDSaveBtnClicked() {
     QString p_sub_idx = IsOnSideControl1() ? "0x02" : "0x06";
     QString i_sub_idx = IsOnSideControl1() ? "0x03" : "0x07";
     QString d_sub_idx = IsOnSideControl1() ? "0x04" : "0x08";
-    emit SendRowValue(p_edit_->text(), "0x2020", p_sub_idx);
-    emit SendRowValue(i_edit_->text(), "0x2020", i_sub_idx);
-    emit SendRowValue(d_edit_->text(), "0x2020", d_sub_idx);
+
+    QString p_v = QString::number(static_cast<int>(p_edit_->text().toDouble() * 1000));
+    QString i_v = QString::number(static_cast<int>(i_edit_->text().toDouble() * 1000));
+    QString d_v = QString::number(static_cast<int>(d_edit_->text().toDouble() * 1000));
+
+    emit SendRowValue(p_v, "0x2020", p_sub_idx);
+    emit SendRowValue(i_v, "0x2020", i_sub_idx);
+    emit SendRowValue(d_v, "0x2020", d_sub_idx);
 }
 
 // Implementation for creating displacement area
@@ -1473,7 +1476,7 @@ void CalibrationPage::StartControl1Loop() {
     if(stay_thread_1_ != nullptr){
         return; //已经启动，防止重复创建
     }
-    CAN_CLEAR_BUFF
+    
     curr_side_ = kSideOne;
     stay_1_running_.store(true);
     if(!stay_2_running_.load()) m_time_ = QDateTime::currentDateTime();
@@ -1484,6 +1487,8 @@ void CalibrationPage::StartControl1Loop() {
             OnDrawStayFa1(); //执行你的业务函数
             QThread::msleep(kSleepTimeOut);
         }
+        // CAN_CLEAR_BUFF
+        CanDriver::GetInstance()->FlushRxBuffer();
     });
     stay_thread_1_->start();
 }
@@ -1492,7 +1497,7 @@ void CalibrationPage::StartControl2Loop() {
     if(stay_thread_2_ != nullptr){
         return; //已经启动，防止重复创建
     }
-    CAN_CLEAR_BUFF
+
     curr_side_ = kSideTwo;
     stay_2_running_.store(true);
     if(!stay_1_running_.load()) m_time_ = QDateTime::currentDateTime();
@@ -1503,6 +1508,8 @@ void CalibrationPage::StartControl2Loop() {
             OnDrawStayFa2(); //执行你的业务函数
             QThread::msleep(kSleepTimeOut);
         }
+        // CAN_CLEAR_BUFF
+        CanDriver::GetInstance()->FlushRxBuffer();
     });
     stay_thread_2_->start();
 }
@@ -1511,26 +1518,26 @@ void CalibrationPage::StopControl1Loop() {
     if(stay_thread_1_ == nullptr) {
         return;
     }
-
+    CAN_CLEAR_BUFF
     stay_1_running_.store(false); //退出循环条件
     // stay_thread_1_->quit();
     stay_thread_1_->wait(); 
     delete stay_thread_1_;
     stay_thread_1_ = nullptr;
-    CAN_CLEAR_BUFF
+    CanDriver::GetInstance()->FlushRxBuffer();  
 }
 
 void CalibrationPage::StopControl2Loop() {
     if(stay_thread_2_ == nullptr) {
         return;
     }
-
+    CAN_CLEAR_BUFF
     stay_2_running_.store(false);//退出循环条件
     // stay_thread_2_->quit();
     stay_thread_2_->wait();
     delete stay_thread_2_;
     stay_thread_2_ = nullptr;
-    CAN_CLEAR_BUFF
+    CanDriver::GetInstance()->FlushRxBuffer();  
 }
 
 // double sineVal_1 = 10 * sin(2*M_PI*0.5*m_time);

@@ -3,6 +3,11 @@
 #include <QEvent>
 #include <QFocusEvent>
 #include <QKeyEvent>
+#include <QPainter>
+#include <QStyle>
+#include <QStyleOptionButton>
+#include <QApplication>
+#include <QMouseEvent>
 
 CustomDelegate::CustomDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
@@ -85,4 +90,51 @@ bool CustomDelegate::eventFilter(QObject *obj, QEvent *event)
         }
     }
     return QStyledItemDelegate::eventFilter(obj, event);
+}
+
+
+ButtonDelegate::ButtonDelegate(QObject *parent)
+    : QStyledItemDelegate(parent)
+{
+}
+
+void ButtonDelegate::setButtonColumns(const QList<int> &columns)
+{
+    m_buttonColumns = columns;
+}
+
+void ButtonDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
+                           const QModelIndex &index) const
+{
+    if (!m_buttonColumns.contains(index.column())) {
+        QStyledItemDelegate::paint(painter, option, index);
+        return;
+    }
+
+    QStyleOptionButton btnOpt;
+    btnOpt.rect = option.rect;
+    btnOpt.text = index.data(Qt::DisplayRole).toString();
+    btnOpt.state = QStyle::State_Enabled;
+    if (option.state & QStyle::State_Selected)
+        btnOpt.state |= QStyle::State_Selected;
+
+    QApplication::style()->drawControl(QStyle::CE_PushButton, &btnOpt, painter);
+}
+
+bool ButtonDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,
+                                 const QStyleOptionViewItem &option,
+                                 const QModelIndex &index)
+{
+    Q_UNUSED(model);
+    if (!m_buttonColumns.contains(index.column()))
+        return QStyledItemDelegate::editorEvent(event, model, option, index);
+
+    if (event->type() == QEvent::MouseButtonRelease) {
+        QMouseEvent *me = static_cast<QMouseEvent*>(event);
+        if (option.rect.contains(me->pos())) {
+            emit buttonClicked(index.row(), index.column());
+            return true;   // 阻止表格默认行为（滚动/选中）
+        }
+    }
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
 }

@@ -56,14 +56,8 @@ public:
     bool send(const can_frame& frame);
     bool receive(can_frame& frame, int timeout_ms = -1);
 
-    // 【可选】CAN FD扩展接口（新款硬件必备）
-    bool initFD(TPCANHandle channelHandle, const char* fdBitrateStr);
-    bool sendFD(TPCANMsgFD& fdMsg);
-    bool receiveFD(TPCANMsgFD& fdMsg, TPCANTimestampFD* ts = nullptr);
-
     bool CRCCheck(const can_frame& frame);
     void FlushRxBuffer();
-    // 【新增】清空驱动层收发FIFO（对应 PCAN 的 CAN_Reset）
     bool FlushBuffers();
     // 【新增】彻底复位通道：连"已进入硬件缓冲区、正在重发的帧"也一并清掉
     bool HardReset();
@@ -72,7 +66,16 @@ private:
     CanDriver();
     ~CanDriver();
 
-    std::recursive_mutex m_io_mtx_;
+    bool SendCmd_NoLock(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms);
+    void close_NoLock();
+    bool init_NoLock(TPCANHandle channelHandle, uint32_t baudrate);
+    bool send_NoLock(const can_frame& frame); 
+    // std::recursive_mutex m_io_mtx_;
+    // std::recursive_mutex m_io_mtx_;
+
+    std::mutex m_tx_mtx_;   //发送锁，优先上锁！！！全局顺序：先tx，后rx
+    std::mutex m_rx_mtx_;   //接收锁，后上锁
+
     void* handle_;
     bool isInitialized_;
 
@@ -80,7 +83,7 @@ private:
 };
 
 struct CanQueueCleanGuard {
-    ~CanQueueCleanGuard() { CanDriver::GetInstance()->FlushBuffers(); }
+    ~CanQueueCleanGuard() { CanDriver::GetInstance()->FlushRxBuffer(); }
 };
 
 #endif // CAN_DRIVER_HPP

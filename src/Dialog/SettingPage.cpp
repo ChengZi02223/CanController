@@ -291,13 +291,14 @@ void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx
         return;
     }
     // qDebug() << "OnSetRowValue: " << value << " " << idx << " " << sub_idx;
-    QString targetIndex = idx.toUpper();
+    QString targetIndex = idx.trimmed().toUpper();
+    QString targetSubIndex = sub_idx.trimmed().toUpper();
     for(int row = 0; row < rowCount(); row++) {
         QTableWidgetItem* objItem = item(row, INFO_TABLE_OBJ_COLUMN);
         if(!objItem) continue;
 
         // 表格单元格文本统一大写，比对
-        QString tableIndex = objItem->text().toUpper();
+        QString tableIndex = objItem->text().trimmed().toUpper();
         if(tableIndex != targetIndex)
             continue;
 
@@ -306,18 +307,19 @@ void SettingInfoTable::OnSetRowValue(QString value, QString idx, QString sub_idx
         if(!sub_idx_item) continue;
 
         // 表格单元格文本统一大写，比对
-        QString sub_index = sub_idx_item->text().toUpper();
+        QString sub_index = sub_idx_item->text().trimmed().toUpper();
         if(sub_index == "——") {
             sub_index = "0X00";
         } 
         
-        if(sub_index != sub_idx && !sub_idx.contains(sub_index)){
+        if(sub_index != targetSubIndex && !targetSubIndex.contains(sub_index)){
             continue;
         }
 
         // 匹配成功，更新修改值
         QTableWidgetItem* modify_item = item(row, INFO_TABLE_MODIFY_COLUMN);
         if(!modify_item) continue;
+        value = value == "0" ? "00" : value;
         modify_item->setText(value);
         // qDebug() << "成功更新行: "<<row << value << " " << idx << " " << sub_idx  <<" == " <<sub_index ;
     }
@@ -361,10 +363,6 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
     auto type = GetRowParamType(item->row());
     bool ok = false;
     auto item_text = item->text();
-    if(IsPIDParam(item)){
-        double value = item_text.toDouble();
-        item_text = QString::number(value *1000);
-    }
     qulonglong val = item_text.toULongLong(&ok);
     qulonglong paramMax = static_cast<qulonglong>(GetParamTypeMaxValue(type));
 
@@ -379,7 +377,7 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
 
     if(outOfRange) {
         QTimer::singleShot(0, this, [=](){
-            auto msg = item_text.isEmpty() ? QString("第 %1 行数据为空！").arg(item->row() + 1) : QString("修改值 %1 超出允许范围!").arg(item_text);
+            auto msg = item_text.isEmpty() ? QString("第 %1 行数据为空！").arg(item->row() + 1) : QString("第 %1 行修改值 %2 超出允许范围!").arg(item->row() + 1).arg(item_text);
             MsgBox::warning(msg);
         });
         if(!on_Save_eeprom_){
