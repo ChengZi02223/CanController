@@ -493,6 +493,7 @@ QTableWidget#DisplaceTable::item:alternate {
 /* 选中行（高亮为淡蓝，文字保持黑色） */
 QTableWidget#DisplaceTable::item:selected {
     background-color: #bfdbfe;
+    color:black;
 }
 /* ----- 表头（水平）保留黄色风格 ----- */
 QTableWidget#DisplaceTable QHeaderView::section:horizontal {

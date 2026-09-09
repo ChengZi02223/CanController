@@ -111,14 +111,63 @@ void ButtonDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
         return;
     }
 
-    QStyleOptionButton btnOpt;
-    btnOpt.rect = option.rect;
-    btnOpt.text = index.data(Qt::DisplayRole).toString();
-    btnOpt.state = QStyle::State_Enabled;
-    if (option.state & QStyle::State_Selected)
-        btnOpt.state |= QStyle::State_Selected;
+    // 获取按钮文字，用于判断 checked 状态
+    QString text = index.data(Qt::DisplayRole).toString();
+    bool isChecked = (text == "结束标定" || text == "验证中");   // 与业务逻辑匹配
 
-    QApplication::style()->drawControl(QStyle::CE_PushButton, &btnOpt, painter);
+    // 确定当前状态
+    bool isEnabled = (option.state & QStyle::State_Enabled);
+    bool isHover = (option.state & QStyle::State_MouseOver);
+    bool isPressed = (option.state & QStyle::State_Sunken);
+
+    // 选择背景颜色或渐变
+    QBrush background;
+    QColor textColor = Qt::white;
+
+    if (!isEnabled) {
+        // 禁用：灰底灰字
+        background = QBrush(QColor(253, 186, 116));   // #fdba74
+        textColor = QColor(160, 122, 74);            // #a07a4a
+    } else if (isPressed) {
+        // pressed：纯色深橙
+        background = QBrush(QColor(194, 65, 12));     // #c2410c
+    } else if (isChecked) {
+        // checked：蓝色渐变
+        QLinearGradient grad(option.rect.topLeft(), option.rect.bottomLeft());
+        grad.setColorAt(0, QColor(37, 99, 235));      // #2563eb
+        grad.setColorAt(1, QColor(29, 78, 216));      // #1d4ed8
+        background = grad;
+    } else if (isHover) {
+        // hover：亮橙色渐变
+        QLinearGradient grad(option.rect.topLeft(), option.rect.bottomLeft());
+        grad.setColorAt(0, QColor(251, 146, 60));     // #fb923c
+        grad.setColorAt(1, QColor(249, 115, 22));     // #f97316
+        background = grad;
+    } else {
+        // 正常：橙色渐变
+        QLinearGradient grad(option.rect.topLeft(), option.rect.bottomLeft());
+        grad.setColorAt(0, QColor(249, 115, 22));     // #f97316
+        grad.setColorAt(1, QColor(234, 88, 12));      // #ea580c
+        background = grad;
+    }
+
+    painter->save();
+
+    // 绘制圆角背景（圆角半径12px）
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(background);
+    painter->drawRoundedRect(option.rect, 12, 12);
+
+    // 绘制文字（加 padding：左右16px，上下6px）
+    QRect textRect = option.rect.adjusted(30, 15, -30, -15);
+    // 如果矩形太小，取消 padding 以防文字被裁切
+    if (textRect.width() < 20 || textRect.height() < 10) {
+        textRect = option.rect;
+    }
+    painter->setPen(textColor);
+    painter->drawText(textRect, Qt::AlignCenter, text);
+
+    painter->restore();
 }
 
 bool ButtonDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,

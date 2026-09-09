@@ -629,8 +629,8 @@ void CalibrationPage::ExecuteLoopCycle() {
     if (is_open_running_.load()) {   // 正常完成
         emit SendOpenLoopFinished();
     }
-    // CAN_CLEAR_BUFF
-    CanDriver::GetInstance()->FlushRxBuffer();
+    CAN_CLEAR_BUFF
+    // CanDriver::GetInstance()->FlushRxBuffer();
 }
 
 // Implementation for creating PID setting area
@@ -913,99 +913,23 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         displace_table_->setItem(i, 2, control_value_item);
 
         // 标定 
-        auto calib_btn = new QPushButton("开始标定");
-        calib_btn->setMinimumWidth(90);
-        calib_btn->setObjectName("CalibBtn");
-        calib_btn->setCheckable(true);
-        displace_table_->setCellWidget(i, 3, calib_btn);
-        calib_btns_.push_back(calib_btn);
-        connect(calib_btn, &QPushButton::clicked, this, [this, i, calib_btn](){
-            select_calib_ = i;
-            InitCalibState(calib_btn);
-            switch(calib_state_) {
-                case kEnd:
-                    calib_btn->setText("结束标定");
-                    calib_state_ = kStart;
-                    break;
-                case kStart:
-                    calib_btn->setText("开始标定");
-                    calib_state_ = kEnd;
-                    SetRowCalib(i, false);
-                    break;
-                default:
-                    break;
-            }
-            on_calibrat_ = (calib_state_ == kStart);
-            UpdateCalibInfo();
-            for(int c = 0; c < 3; c++) {
-                QTableWidgetItem* item = displace_table_->item(i, c);
-                if(item){
-                    item->setSelected(on_calibrat_);
-                }
-            }
-            if(on_calibrat_) {
-                InitCalibValues(i);
-                target_flow_edit_->setText(QString::number(GetTargetFlow(i)));
-                CAN_EXEC_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
-                int value = GetCalibratValue(i);
-                if(i < 6) {
-                    cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, value);
-                    StartControl1Loop();
-                }else {
-                    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, value);
-                    StartControl2Loop();
-                }
-            } else {
-                if(!already_on_calib_) {
-                    if(i < 6) {
-                        CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
-                        StopControl1Loop();
-                    }else {
-                        CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
-                        StopControl2Loop();
-                    }
-                    CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);                    
-                }
-            }
-        });
-
-        auto verify_btn = new QPushButton("验证标定");
-        verify_btn->setMinimumWidth(40);
-        verify_btn->setObjectName("CalibBtn");
-        verify_btn->setCheckable(true);
-        displace_table_->setCellWidget(i, 4, verify_btn);
-        verify_btns_.push_back(verify_btn);
-        connect(verify_btn, &QPushButton::clicked, this, [this, i, verify_btn](bool checked){
-            if(checked) {
-                auto v = displace_table_->item(i, 2)->text().toInt();
-                int yugu_v = CalcDisplacement(v, i);
-                CAN_EXEC_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
-                if(i < 6) {
-                    cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, yugu_v);
-                    StartControl1Loop();
-                }else {
-                    cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, yugu_v);
-                    StartControl2Loop();
-                }
-            } else {
-                if(i < 6) {
-                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
-                    StopControl1Loop();
-                }else {
-                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
-                    StopControl2Loop();
-                }
-                CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);   
-            }
-            for(auto &btn: verify_btns_) {
-                if(btn != verify_btn) {
-                    btn->setChecked(false);
-                }
-            }
-
-        });
-
+        auto calibItem = new QTableWidgetItem("开始标定");
+        calibItem->setTextAlignment(Qt::AlignCenter);
+        displace_table_->setItem(i, 3, calibItem);
+        // 验证标定
+        auto verifyItem = new QTableWidgetItem("验证标定");
+        verifyItem->setTextAlignment(Qt::AlignCenter);
+        displace_table_->setItem(i, 4, verifyItem);
     }
+
+    ButtonDelegate *btnDelegate = new ButtonDelegate(this);
+    btnDelegate->setButtonColumns({3, 4});    // 第3、4列为按钮列
+    displace_table_->setItemDelegateForColumn(3, btnDelegate);
+    displace_table_->setItemDelegateForColumn(4, btnDelegate);
+
+    connect(btnDelegate, &ButtonDelegate::buttonClicked,
+            this, &CalibrationPage::OnCalibButtonClicked);
+
     displace_table_->setVerticalHeaderLabels(h_headers);
     displace_table_->setHorizontalHeaderLabels({"位移标定值", "电流标定值", "标定预估值", "标定", "验证"});
 
@@ -1025,31 +949,6 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     auto target_flow_label = new QLabel("目标流量:");
     target_flow_edit_ = new QLineEdit();
     target_flow_edit_->setAlignment(Qt::AlignCenter);
-
-#if 0
-    auto state_btn = new QPushButton("标定终止");
-    state_btn->setObjectName("StateBtn");
-    state_btn->setFixedHeight(30);
-    state_btn->setMinimumWidth(100);
-    connect(state_btn, &QPushButton::clicked, this, [this, state_btn](){
-        switch(calib_status_) {
-            case kStopCalib:
-                state_btn->setText("标定进行中");
-                calib_status_ = kOnCalib;
-                break;            
-            case kOnCalib:
-                state_btn->setText("验证标定值");
-                calib_status_ = kConfirmCalib;
-                break;
-            case kConfirmCalib:
-                state_btn->setText("标定终止");
-                calib_status_ = kStopCalib;
-                break;
-            default:
-                break;
-        }
-    });
-#endif
 
     auto save_btn = new QPushButton("保存标定值");
     save_btn->setObjectName("StateBtn");
@@ -1119,6 +1018,97 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     return displacement_group_;
 }
 
+void CalibrationPage::OnCalibButtonClicked(int row, int column) {
+    if (column == 3) {   // 标定列
+        // 原 lambda 逻辑，但将 calib_btn 操作替换为表格项操作
+        select_calib_ = row;
+        InitCalibState(row);   // 改为行索引
+
+        // 获取当前标定状态（通过表格项文本判断）
+        QTableWidgetItem *item = displace_table_->item(row, 3);
+        bool isCalibrating = (item->text() == "结束标定");
+
+        if (!isCalibrating) {
+            // 开始标定
+            item->setText("结束标定");
+            calib_state_ = kStart;
+            on_calibrat_ = true;
+            // ... 原有开始标定逻辑
+            InitCalibValues(row);
+            target_flow_edit_->setText(QString::number(GetTargetFlow(row)));
+            CAN_EXEC_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
+            int value = GetCalibratValue(row);
+            if (row < 6) {
+                cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, value);
+                StartControl1Loop();
+            } else {
+                cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, value);
+                StartControl2Loop();
+            }
+        } else {
+            // 结束标定
+            item->setText("开始标定");
+            calib_state_ = kEnd;
+            on_calibrat_ = false;
+            SetRowCalib(row, false);
+            if (!already_on_calib_) {
+                if (row < 6) {
+                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                    StopControl1Loop();
+                } else {
+                    CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                    StopControl2Loop();
+                }
+                CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+            }
+        }
+        // 更新高亮（选中前三列）
+        for (int c = 0; c < 3; ++c) {
+            QTableWidgetItem *it = displace_table_->item(row, c);
+            if (it) it->setSelected(on_calibrat_);
+        }
+        UpdateCalibInfo();  // 需修改此函数以适应新状态
+
+    } else if (column == 4) {  // 验证列
+        // 验证按钮逻辑
+        QTableWidgetItem *item = displace_table_->item(row, 4);
+        // 判断当前是否正在验证（通过文本或额外标志，此处用文本）
+        bool isVerifying = (item->text() == "验证中");  // 可自行定义
+        if (!isVerifying) {
+            item->setText("验证中");
+            // 执行启动验证代码（原 checked==true 分支）
+            int yugu_v = CalcDisplacement(displace_table_->item(row, 2)->text().toInt(), row);
+            CAN_EXEC_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
+            if (row < 6) {
+                cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_1_VALUE_CMD, yugu_v);
+                StartControl1Loop();
+            } else {
+                cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_PWM_OPEN_2_VALUE_CMD, yugu_v);
+                StartControl2Loop();
+            }
+            // 将其他验证按钮置为“验证标定”
+            for (int r = 0; r < displace_table_->rowCount(); ++r) {
+                if (r != row) {
+                    auto otherItem = displace_table_->item(r, 4);
+                    if (otherItem && otherItem->text() == "验证中")
+                        otherItem->setText("验证标定");
+                }
+            }
+        } else {
+            // 停止验证
+            item->setText("验证标定");
+            if (row < 6) {
+                CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                StopControl1Loop();
+            } else {
+                CAN_EXEC_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                StopControl2Loop();
+            }
+            CAN_EXEC_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+        }
+    }
+}
+
 void CalibrationPage::UpdateCalibInfo() {
     auto side = select_calib_ < 6 ? "1侧" : "2侧";
     side = select_calib_ == 5 ? "中位" : side;
@@ -1139,9 +1129,22 @@ void CalibrationPage::OnSaveCalibValueBtnCLicked() {
             StopControl2Loop();
         }
     }
-    for(auto btn : calib_btns_) {
-        btn->setText("开始标定");
-        btn->setChecked(false);
+    for (int r = 0; r < displace_table_->rowCount(); ++r) {
+        auto item = displace_table_->item(r, 3);
+        if (item) {
+            item->setText("开始标定");
+            // 取消选中
+            item->setSelected(false);
+        }
+        // 同时清除验证按钮状态
+        auto vItem = displace_table_->item(r, 4);
+        if (vItem) vItem->setText("验证标定");
+        // 取消高亮前三列
+        for (int c = 0; c < 3; ++c) {
+            auto it = displace_table_->item(r, c);
+            if (it) it->setSelected(false);
+        }
+        SetRowCalib(r, false);
     }
     on_calibrat_ = false;
     calib_state_ = kEnd;
@@ -1161,25 +1164,26 @@ void CalibrationPage::OnSaveCalibValueBtnCLicked() {
     }
 }
 
-void CalibrationPage::InitCalibState(QPushButton *calib_btn) {
-    if(calib_btns_.empty()) {
-        return;
-    }
-    int not_on_end = 0;
-    for(auto btn : calib_btns_) {
-        if(btn == calib_btn) {
-            continue;
+void CalibrationPage::InitCalibState(int row) {
+   int not_on_end = 0;
+    for (int r = 0; r < displace_table_->rowCount(); ++r) {
+        if (r == row) continue;
+        QTableWidgetItem *item = displace_table_->item(r, 3);
+        if (item && item->text() != "开始标定") {
+            not_on_end++;
         }
-        if(btn->text() != "开始标定") {
-            not_on_end ++;
+        // 将其他行的标定按钮文本重置为"开始标定"（并清除选中状态）
+        if (item) {
+            item->setText("开始标定");
         }
-        btn->setChecked(false);
-        btn->setText("开始标定");
+        // 同时取消高亮
+        for (int c = 0; c < 3; ++c) {
+            QTableWidgetItem *it = displace_table_->item(r, c);
+            if (it) it->setSelected(false);
+        }
+        SetRowCalib(r, false);
     }
-    if(not_on_end > 0) {
-        calib_state_ = kEnd;
-    }
-    already_on_calib_ = not_on_end > 0;
+    already_on_calib_ = (not_on_end > 0);
 }
 
 
@@ -1487,8 +1491,8 @@ void CalibrationPage::StartControl1Loop() {
             OnDrawStayFa1(); //执行你的业务函数
             QThread::msleep(kSleepTimeOut);
         }
-        // CAN_CLEAR_BUFF
-        CanDriver::GetInstance()->FlushRxBuffer();
+        CAN_CLEAR_BUFF
+        // CanDriver::GetInstance()->FlushRxBuffer();
     });
     stay_thread_1_->start();
 }
@@ -1508,8 +1512,8 @@ void CalibrationPage::StartControl2Loop() {
             OnDrawStayFa2(); //执行你的业务函数
             QThread::msleep(kSleepTimeOut);
         }
-        // CAN_CLEAR_BUFF
-        CanDriver::GetInstance()->FlushRxBuffer();
+        CAN_CLEAR_BUFF
+        // CanDriver::GetInstance()->FlushRxBuffer();
     });
     stay_thread_2_->start();
 }
@@ -1518,26 +1522,26 @@ void CalibrationPage::StopControl1Loop() {
     if(stay_thread_1_ == nullptr) {
         return;
     }
-    CAN_CLEAR_BUFF
+    
     stay_1_running_.store(false); //退出循环条件
     // stay_thread_1_->quit();
     stay_thread_1_->wait(); 
     delete stay_thread_1_;
     stay_thread_1_ = nullptr;
-    CanDriver::GetInstance()->FlushRxBuffer();  
+    CAN_CLEAR_BUFF 
 }
 
 void CalibrationPage::StopControl2Loop() {
     if(stay_thread_2_ == nullptr) {
         return;
     }
-    CAN_CLEAR_BUFF
+    // CAN_CLEAR_BUFF
     stay_2_running_.store(false);//退出循环条件
     // stay_thread_2_->quit();
     stay_thread_2_->wait();
     delete stay_thread_2_;
     stay_thread_2_ = nullptr;
-    CanDriver::GetInstance()->FlushRxBuffer();  
+    CAN_CLEAR_BUFF
 }
 
 // double sineVal_1 = 10 * sin(2*M_PI*0.5*m_time);
@@ -1640,10 +1644,10 @@ Tpdo2PositionInfo CalibrationPage::ReadTpdo2Position(int side) const {
 // 位移曲线绘制
 void CalibrationPage::OnDrawStayFa1() {
     
-    if(curr_side_ == kSideTwo) {
-        return;
+    if(curr_side_ == kSideOne) {
+        CAN_EXEC_CMD(SEND_COB_ID, cur_fa_val_1_cmd_);
     }
-    CAN_EXEC_CMD(SEND_COB_ID, cur_fa_val_1_cmd_);
+    
     std::lock_guard<std::mutex> lk(m_time_mtx_);
     DrawCurveInfo info;
     info.side = 1;
@@ -1678,10 +1682,9 @@ void CalibrationPage::OnDrawStayFa1() {
 }
 
 void CalibrationPage::OnDrawStayFa2() {
-    if(curr_side_ == kSideOne) {
-        return;
+    if(curr_side_ == kSideTwo) {
+        CAN_EXEC_CMD(SEND_COB_ID, cur_fa_val_2_cmd_);
     }
-    CAN_EXEC_CMD(SEND_COB_ID, cur_fa_val_2_cmd_);
     std::lock_guard<std::mutex> lk(m_time_mtx_);
     DrawCurveInfo info;
     info.side = 2;

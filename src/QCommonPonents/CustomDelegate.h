@@ -28,14 +28,11 @@ class ButtonDelegate : public QStyledItemDelegate
     Q_OBJECT
 public:
     explicit ButtonDelegate(QObject *parent = nullptr);
-
-    // 设置哪些列作为按钮列（可多列）
     void setButtonColumns(const QList<int> &columns);
 
 protected:
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
-
     bool editorEvent(QEvent *event, QAbstractItemModel *model,
                      const QStyleOptionViewItem &option,
                      const QModelIndex &index) override;

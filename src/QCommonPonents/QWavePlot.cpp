@@ -113,12 +113,13 @@ void QWavePlotWidget::appendData(int curveIndex, double time, double value)
 }
 
 void QWavePlotWidget::appendData(int side, WaveCurveType type, double time, double value) {
-    for(auto& curr_c : m_curves) {
+    for(int idx=0; idx<m_curves.size(); idx++) {
+        auto& curr_c = m_curves[idx];
         if(curr_c.side == side && curr_c.type == type){
             bool wasEmpty = curr_c.points.isEmpty();
             curr_c.points.push_back(WaveDataPoint(time, value));
             if (wasEmpty && !curr_c.points.isEmpty()) {
-                emit sigCurveFirstData(1);
+                emit sigCurveFirstData(idx); //正确：发射当前曲线idx
             }
         }
     }
@@ -382,39 +383,87 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     }
 
     // 绘制曲线（只渲染 [viewMin, viewMax] 区间内的点）
-    for(auto& crv : m_curves)
-    {
-        if(!crv.visible || crv.points.size() <2) continue;
+    for(auto& crv : m_curves) {
+        if(!crv.visible || crv.points.size() <2)
+            continue;
         painter.setPen(crv.pen);
-        QPointF prevPt;
-        bool first = true;
-        double dp_v, y;
-        for(auto& dp : crv.points)
-        {
-            // 过滤不在当前可视窗口的点
-            if(dp.t < viewMin || dp.t > viewMax)
-                continue;
 
-            double x = timeToX(dp.t, viewMin, viewMax, plotW);
-            dp_v = dp.val;
-            if(crv.useRightY) {
-                y = valueToY(dp_v, m_rightYMin, m_rightYMax, plotH);
-            } else {
-                y = valueToY(dp_v, m_leftYMin, m_leftYMax, plotH);
+        const auto& pts = crv.points;
+        for(int i = 0; i < pts.size()-1; ++i)
+        {
+            const WaveDataPoint& p0 = pts[i];
+            const WaveDataPoint& p1 = pts[i+1];
+
+            bool p0In = (p0.t >= viewMin - 1e-12) && (p0.t <= viewMax + 1e-12);
+            bool p1In = (p1.t >= viewMin - 1e-12) && (p1.t <= viewMax + 1e-12);
+
+            auto getPixel = [&](const WaveDataPoint& dp)->QPointF{
+                double x = timeToX(dp.t, viewMin, viewMax, plotW);
+                double y;
+                if(crv.useRightY) {
+                    y = valueToY(dp.val, m_rightYMin, m_rightYMax, plotH);
+                } else {
+                    y = valueToY(dp.val, m_leftYMin, m_leftYMax, plotH);
+                }
+                return QPointF(x,y);
+            };
+
+            // 线性插值求t=clipT处的val
+            auto interpVal = [](double t0,double v0,double t1,double v1,double clipT)->double{
+                double alpha = (clipT - t0)/(t1 - t0);
+                return v0 + alpha*(v1-v0);
+            };
+
+            QPointF sPt,ePt;
+            bool doDraw = false;
+
+            if(p0In && p1In)
+            {
+                // 两点都在窗口内，直接绘制
+                sPt = getPixel(p0);
+                ePt = getPixel(p1);
+                doDraw = true;
             }
-            QPointF curr(x,y);
-            if(!first)
-                painter.drawLine(prevPt, curr);
-            prevPt = curr;
-            first = false;
+            else if(p0In && !p1In)
+            {
+                // p0在窗口内，p1超出右边界viewMax，求与viewMax交点
+                double clipT = viewMax;
+                double clipVal = interpVal(p0.t,p0.val,p1.t,p1.val,clipT);
+                WaveDataPoint clipPt(clipT, clipVal);
+                sPt = getPixel(p0);
+                ePt = getPixel(clipPt);
+                doDraw = true;
+            }
+            else if(!p0In && p1In)
+            {
+                // p0在窗口左边外，p1进入窗口，求viewMin交点
+                double clipT = viewMin;
+                double clipVal = interpVal(p0.t,p0.val,p1.t,p1.val,clipT);
+                WaveDataPoint clipPt(clipT, clipVal);
+                sPt = getPixel(clipPt);
+                ePt = getPixel(p1);
+                doDraw = true;
+            }
+            // 两个都在外，doDraw=false，跳过
+
+            if(doDraw){
+                painter.drawLine(sPt, ePt);
+            }
         }
+
+        // --- 原代码末尾的“在最后一个点旁边输出数值”保留，逻辑不变 ---
+        const WaveDataPoint& lastDp = crv.points.back();
+        double dp_v = lastDp.val;
+        double y;
         if(crv.useRightY) {
+            y = valueToY(dp_v, m_rightYMin, m_rightYMax, plotH);
             painter.drawLine(QPointF(m_marginLeft+plotW,y), QPointF(m_marginLeft+plotW + 5, y));
             painter.drawText(QRectF(w-m_marginRight+8, y, m_marginRight-10,20), Qt::AlignLeft|Qt::AlignVCenter, QString::number(dp_v, 'f',2));
         } else {
+            y = valueToY(dp_v, m_leftYMin, m_leftYMax, plotH);
             painter.drawLine(QPointF(m_marginLeft - 5 ,y), QPointF(m_marginLeft, y));
             painter.drawText(QRectF(0, y - 10, m_marginLeft-8,20), Qt::AlignRight|Qt::AlignVCenter, QString::number(dp_v, 'f',2));
-        }        
+        }
     }
 }
 

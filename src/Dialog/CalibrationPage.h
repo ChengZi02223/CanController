@@ -91,7 +91,7 @@ private:
     QWidget* CreateControlArea();
     QWidget* CreatePIDSettingArea();
     QWidget* CreateDisplacementArea();
-    void InitCalibState(QPushButton *calib_btn);
+    void InitCalibState(int row);
     void InitCalibValues(int row);
     void SetRowCalib(int row, bool calib);
     void UpdateCalibInfo();
@@ -139,6 +139,7 @@ private slots:
     void OnPIDMotionBtnClicked(bool checked);
     void OnPIDSaveBtnClicked();
 
+    void OnCalibButtonClicked(int row, int column);
     void OnSaveCalibValueBtnCLicked();
 
     void OnSineWaveBtnClicked();
