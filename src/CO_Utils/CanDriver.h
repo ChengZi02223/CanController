@@ -31,6 +31,9 @@ struct CanCmdItem
 {
     uint32_t cobId;
     std::vector<uint8_t> cmd;
+
+    CanCmdItem() : cobId(0) {}
+    CanCmdItem(uint32_t id, const std::vector<uint8_t>& c) : cobId(id), cmd(c) {}
 };
 
 class CanDriver {

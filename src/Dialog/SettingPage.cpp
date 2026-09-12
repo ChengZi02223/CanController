@@ -9,6 +9,7 @@
 #include "CustomDelegate.h"
 #include "CanConfig.h"
 #include "MessageBox.h"
+#include <QTimer>
 
 #define INFO_TABLE_PARAM_COLUMN 0
 #define INFO_TABLE_OBJ_COLUMN 1
@@ -26,7 +27,8 @@
 #define TEST_CONFIG_FILE "D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明V1.xlsx"
 
 static int info_table_count = 0;
-
+static bool on_Save_default_ = false;
+static bool on_Save_eeprom_ = false;
 // enum ParamType {kNone, kUINT8, kUINT16, kUINT32, kSTRING};
 inline ParamType GetParamType(const QString &text) {
     QString s = text.trimmed();
@@ -519,11 +521,11 @@ void SettingInfoTable::ReloadDefaultValue() {
 }
 
 void SettingInfoTable::OnSaveDafaultSuccess() {
-    emit SendReadFinished();
+    // emit SendReadFinished(QString("参数保存默认参数完成！"));
 }
 
 void SettingInfoTable::OnSaveEEPROMSuccess() {
-    emit SendReadFinished();
+    // emit SendReadFinished(QString("参数保存到EEPROM完成"));
 }
 
 void SettingInfoTable::OnSaveDefaultValue() {
@@ -573,6 +575,8 @@ void SettingInfoTable::UpdateParams() {
             changed_num ++;
         }
         if(changed_num == 0) {
+            save_progress_dialog_->setTitleText("当前无参数修改！");
+            save_progress_dialog_->Exec(true);
             return;
         }        
     }
@@ -590,12 +594,14 @@ void SettingInfoTable::UpdateParams() {
             change_item->setForeground(QBrush(Qt::black));
             QThread::msleep(200); 
         }
-        // emit SendReadFinished();
+        // 
         if(on_Save_default_) {
             CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD);
+            emit SendReadFinished(QString("保存默认参数完成！"));
         }
         if(on_Save_eeprom_) {
             CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_EEPROM_CMD);
+            emit SendReadFinished(QString("保存到EEPROM完成"));
         }
     });
     save_thread_->start();
@@ -670,9 +676,16 @@ void FunctionBtnArea::ConnectSignles() {
     connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
     connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
     connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
+        read_req_pending_ = false;
         start_read_eprom_ = false;
         parse_count_ = 0;
         ClearStringFragmentCache();
+    });
+
+    // 读取参数请求应答超时：超时后允许重新点击重发
+    read_req_timer_ = new QTimer(this);
+    connect(read_req_timer_, &QTimer::timeout, this, [this](){
+        CanDriver::GetInstance()->SendCmd(NMT_COB_ID, PUSH_BUSH_CMD, kCmdTimeOut);
     });
 }
 
@@ -716,57 +729,54 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
     if (info_table_count == 0) {
         return;
     }
-    CanManager::GetInstance()->ClearCommands();
-    CanDriver::GetInstance()->HardReset();
-    // qDebug() << "读取参数到表格";
+    // 一次读取进行中，忽略点击，避免打断/叠加读取
+    if (progress_dialog_->isVisible()) {
+        return;
+    }
+
+    if (read_req_pending_) {
+        return;
+    }
+    qDebug()<<"OnLoadToTableBtnClicked read_req_pending_: "<< read_req_pending_;
+    // 兜底：若校准页的周期 02 40 还在发送（心跳丢失时标志不会自动清除），
+    // 先停掉，避免它中断本次表格读取
+    // CanManager::GetInstance()->StopNmtCloseRepeat();
+    // CanManager::GetInstance()->ClearCommands();
+    // CanDriver::GetInstance()->HardReset();
+    // 队列是后进先出：先压读取请求、再压 02 40，
+    // 设备会先收到 02 40 结束残留的位移读取状态，再收到读取参数请求
     CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE);
-//     // ========== 循环重试，直到发送成功或用户取消 ==========
-//     const int MAX_RETRIES = 10;          // 最多重试50次
-//     const int RETRY_INTERVAL_MS = 100;   // 每次重试间隔100ms
-//     bool success = false;
-
-//     for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
-//         can_frame frame{};               // 每次重新定义，避免旧数据干扰
-//         bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
-
-// #ifndef ON_TEST_MODE
-//         if (ret && frame.can_id == 0x5C0) {
-//             success = true;
-//             break;
-//         }
-// #else
-//         // 测试模式下，直接认为成功（若您保留测试宏）
-//         success = true;
-//         break;
-// #endif
-
-//         // 发送失败，稍等再重试
-//         QThread::msleep(RETRY_INTERVAL_MS);
-//         // 可选：每10次打印一次日志
-//         if (attempt % 10 == 0) {
-//             qDebug() << "重试读取参数... 第" << attempt << "次";
-//         }
-//     }
-
-//     if (!success) {
-//         QMessageBox::warning(this, "警告", "读取参数到表格失败，已重试" + QString::number(MAX_RETRIES) + "次，请检查CAN通信！");
-//         return;
-//     }
-
-//     // 成功后的逻辑
-//     start_read_eprom_ = true;
-//     progress_dialog_->setTitleText("正在读取参数，请稍候...");
-//     progress_dialog_->Exec();
+    // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+    read_req_pending_ = true;
+    read_req_timer_->start(500);   // 2s 内没等到设备应答则允许重试
+    start_read_eprom_ = true;
+    progress_dialog_->setTitleText("正在读取参数，请稍候...");
+    progress_dialog_->Exec();
 }
 
 void FunctionBtnArea::OnLoadToTabled(can_frame frame) {
     // if (frame.can_id == 0x5C0 || !CheckAnswerHead(frame.data, RESPONSE_READ_TO_TABLE)) {
     //     return;
     // }
+    if(!isVisible()) {
+        return;
+    }
+
+    if(on_Save_eeprom_ || on_Save_default_){
+        return;
+    }
+
+    // 收到设备应答，本次读取请求完成，解除去重
+    read_req_pending_ = false;
+    if (read_req_timer_) {
+        read_req_timer_->stop();
+        qDebug() << "read_req_timer_ stoped";
+    }
+
+    // 忽略重复/迟到的应答：读取进行中又收到 60 10 10 03，
+    // 通常是设备在补处理之前排队的读取请求，直接丢弃，避免重复弹窗重复读取
+
     
-    start_read_eprom_ = true;
-    progress_dialog_->setTitleText("正在读取参数，请稍候...");
-    progress_dialog_->Exec();
 }
 
 bool FunctionBtnArea::TestEPROMSenCmd(can_frame &frame) {
@@ -808,7 +818,7 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
             return;
         }
         if(frame.data[0] == 0xFF) {
-            emit SendReadFinished();
+            emit SendReadFinished(QString("读取参数完成！"));
             return;
         }
 

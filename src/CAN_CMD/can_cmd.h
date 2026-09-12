@@ -97,6 +97,8 @@ extern const std::array<uint8_t, 8> SDO_SET_RAMP_RETRACT_TIME_CMD; //缩回激�
 extern const std::vector<uint8_t> NMT_READ_VALUE_CMD;     //读取位移
 extern const std::vector<uint8_t> NMT_CLOSE_READ_CMD;      //关阀
 
+extern const std::vector<uint8_t> PUSH_BUSH_CMD;
+
 /************************************************************* 单片机回复帧 *********************************************************************************/
 // 回复信息
 extern const std::vector<uint8_t> SDO_READ_TYPE_CMD_RPS;            //设备类型

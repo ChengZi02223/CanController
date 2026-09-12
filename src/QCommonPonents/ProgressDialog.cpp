@@ -31,9 +31,9 @@ ProgressDialog::ProgressDialog(QWidget *parent)
     });
 }
 
-void ProgressDialog::OnEndProgress() {
+void ProgressDialog::OnEndProgress(QString text) {
     m_btnOperate->setVisible(true);
-    setTitleText("参数读取完成！");
+    setTitleText(text);
 }
 
 void ProgressDialog::setTitleText(const QString &text)
@@ -41,8 +41,10 @@ void ProgressDialog::setTitleText(const QString &text)
     m_labelTitle->setText(text);
 }
 
-void ProgressDialog::Exec() {
-    m_btnOperate->setVisible(false);
+void ProgressDialog::Exec(bool as_msg) {
+    m_progressBar->setValue(0);
+    m_btnOperate->setVisible(as_msg);
+    m_progressBar->setVisible(!as_msg);
     exec();
 }
 

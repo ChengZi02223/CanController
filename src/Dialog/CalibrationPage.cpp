@@ -570,12 +570,9 @@ bool CalibrationPage::RunOpenLoopSide(LoopSide side, int percent,
     qDebug() << tag << " 中位停留： " << neutral_ms / 1000 << "s";
     if (!WaitAndResend(neutral_ms, side, target_cmd, 0, factor)) return false;
 
-    emit SendMarkGapAllCurves(); 
-
     qDebug() << tag << " 工作位停留： " << work_ms / 1000 << "s";
     if (!WaitAndResend(work_ms, side, target_cmd, percent, factor)) return false;
 
-    emit SendMarkGapAllCurves(); 
 
     qDebug() << tag << " 中位停留： " << neutral_ms / 1000 << "s";
     if (!WaitAndResend(neutral_ms, side, target_cmd, 0, factor)) return false;

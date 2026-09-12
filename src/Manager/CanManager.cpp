@@ -2,6 +2,23 @@
 #include "Utils.h"
 #include "can_cmd.h"
 
+namespace {
+// 命令队列长度上限：TX 满、发送停滞时防止队列无限膨胀（丢最旧的）
+constexpr size_t kMaxQueueLen = 100;
+// TX 满时退避重发的间隔上限（5ms 起步指数翻倍，封顶到此值）
+constexpr int kMaxSendBackoffMs = 100;
+// TX 满时单条命令的总等待耐心：超过该时长仍发不出去，判定设备掉线/不应答，
+// 清队列+复位PCAN恢复，避免发送线程被单条命令永久卡死
+constexpr long long kSendPatienceMs = 3000;
+// 周期 02 40 的兜底时长：心跳丢失时最多重发这么久，防止无限占用总线
+constexpr long long kNmtRepeatMaxMs = 1500;
+
+long long SteadyNowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+} // namespace
+
 CanManager::CanManager(QObject *parent)
     : QObject(parent), m_running(false) {}
 
@@ -67,7 +84,10 @@ void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd) {
     }
     {
         std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
-        m_cmdQueue.push_front(CanCmdItem{cobId, cmd});
+        if (m_cmdQueue.size() >= kMaxQueueLen) {
+            m_cmdQueue.pop_back();   // 防止队列无限膨胀，丢最旧的
+        }
+        m_cmdQueue.push_front(CanCmdItem(cobId, cmd));
     }
     m_cmdCv.notify_one();   // 唤醒发送线程，立即出栈发送
 }
@@ -78,6 +98,9 @@ void CanManager::PushCommand(const CanCmdItem& item) {
     }
     {
         std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+        if (m_cmdQueue.size() >= kMaxQueueLen) {
+            m_cmdQueue.pop_back();
+        }
         m_cmdQueue.push_front(item);
     }
     m_cmdCv.notify_one();
@@ -89,6 +112,9 @@ void CanManager::PushCommands(const std::vector<CanCmdItem>& items) {
     }
     for(auto &item: items) {
         std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+        if (m_cmdQueue.size() >= kMaxQueueLen) {
+            m_cmdQueue.pop_back();
+        }
         m_cmdQueue.push_front(item);
     }
     m_cmdCv.notify_one();
@@ -201,15 +227,78 @@ void CanManager::SenderLoop() {
                 m_cmdQueue.push_front(item);
                 continue;
             }
-            // 真正发送（CanDriver 内部有 tx 锁，和其它调用者互斥安全）
-            CanDriver::GetInstance()->SendCmd(item.cobId, item.cmd, kCmdTimeOut);
+
+            // ===== TX 满：指数退避重发，保证这条命令最终发出去 =====
+            // CAN_Write 在 TX 队列满时立即失败，说明总线暂时拥塞/设备忙；
+            // 此时对同一条命令按 5ms→10ms→20ms→...→100ms 退避持续重试，
+            // 发出去之前不碰后续命令（保序），不丢命令、不积压到硬件。
+            // 命令始终留在发送线程手里，PCAN 驱动队列里最多只有当前这一条，
+            // 设备恢复后收到的是最新意图，不会冒出一串"缓存"旧命令。
+            bool sent = false;
+            long long first_fail_ms = 0;
+            int backoff_ms = 5;
+            while (m_running) {
+                if (!CanDriver::GetInstance()->IsInitialized()) {
+                    break;   // 驱动被关闭，交还给外层处理
+                }
+                if (CanDriver::GetInstance()->SendCmd(item.cobId, item.cmd, kCmdTimeOut)) {
+                    sent = true;
+                    break;
+                }
+                if (first_fail_ms == 0) {
+                    first_fail_ms = SteadyNowMs();
+                } else if (SteadyNowMs() - first_fail_ms >= kSendPatienceMs) {
+                    break;   // 超出耐心阈值，总线大概率异常（设备不应答）
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms));
+                if (backoff_ms < kMaxSendBackoffMs) {
+                    backoff_ms *= 2;
+                }
+            }
+
+            if (!m_running || !CanDriver::GetInstance()->IsInitialized()) {
+                // 线程停止或驱动关闭：命令塞回队首，等恢复后继续
+                std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+                m_cmdQueue.push_front(item);
+                continue;
+            }
+
+            if (sent) {
+                continue;   // 发送成功，立刻处理下一条
+            }
+
+            // 耐心耗尽：设备长时间不应答，卡死在这一条上会永久堵塞发送线程。
+            // 清空队列并复位 PCAN（清掉卡在硬件里无限重发的帧），让新命令重新开始
+            std::cerr << "[CanManager] TX blocked over " << kSendPatienceMs
+                      << "ms (device not ACKing?), purge queue and reset PCAN" << std::endl;
+            ClearCommands();
+            CanDriver::GetInstance()->HardReset();
         }
 
         if (stop_nmt_read_.load()) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastNmtCloseSend) >= nmtSendInterval) {
-                PushCommand(NMT_COB_ID, NMT_CLOSE_READ_CMD);
                 lastNmtCloseSend = now;
+                // 兜底超时：心跳丢失时最多重发 kNmtRepeatMaxMs，防止 02 40 无限占用总线
+                if (SteadyNowMs() - nmt_repeat_start_ms_.load() >= kNmtRepeatMaxMs) {
+                    stop_nmt_read_ = false;
+                } else {
+                    // 合并入队：队列里最多保留一条 02 40 —— 既不会残留堆积，
+                    // 也保证每轮循环仍只发一帧，不额外拖慢其它命令
+                    bool exists = false;
+                    {
+                        std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+                        for (const auto& it : m_cmdQueue) {
+                            if (it.cobId == NMT_COB_ID && it.cmd == NMT_CLOSE_READ_CMD) {
+                                exists = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!exists) {
+                        PushCommand(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+                    }
+                }
             }
         }
     }
@@ -238,6 +327,7 @@ void CanManager::OnStopNMTRead() {
     if(!CanDriver::GetInstance()->IsInitialized()){
         return;
     }
+    nmt_repeat_start_ms_ = SteadyNowMs();
     stop_nmt_read_ = true;
 }
 

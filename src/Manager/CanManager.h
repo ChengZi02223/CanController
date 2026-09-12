@@ -89,6 +89,12 @@ signals:
 public slots:
     void OnStopNMTRead();
 
+public:
+    // 主动停止周期性发送 NMT_CLOSE_READ_CMD
+    // （收到0x04心跳会自动停；此接口供其它页面在发起新命令前兜底调用，
+    //   防止心跳丢失导致周期 02 40 一直占用总线、干扰后续命令）
+    void StopNmtCloseRepeat() { stop_nmt_read_ = false; }
+
 private:
     explicit CanManager(QObject *parent = nullptr);
     ~CanManager();
@@ -128,6 +134,8 @@ private:
     std::chrono::steady_clock::time_point m_lastTpdo3Emit_{};
 
     std::atomic<bool> stop_nmt_read_{false};
+    // 本轮周期 02 40 的起始时间（ms, steady_clock），用于兜底超时自动停止
+    std::atomic<long long> nmt_repeat_start_ms_{0};
 };
 
 #endif // _CAN_MANAGER_H_

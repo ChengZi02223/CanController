@@ -79,7 +79,7 @@ const std::array<uint8_t, 8> SDO_SET_RAMP_RETRACT_TIME_CMD = {0x2B, 0x06, 0x63, 
 /// NMT状态
 const std::vector<uint8_t> NMT_READ_VALUE_CMD = {0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};     //接收0x1c0和0x2c0的Byte2-3代表位移（形成位移曲线）
 const std::vector<uint8_t> NMT_CLOSE_READ_CMD = {0x02, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};     //停止接收位移（关阀的时候使用）// 02 40 00 00 00 00 00 00
-
+const std::vector<uint8_t> PUSH_BUSH_CMD = {0x00};
 /************************************************************* 单片机回复帧 *********************************************************************************/
 
 // 回复信息

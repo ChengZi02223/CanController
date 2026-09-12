@@ -144,7 +144,7 @@ bool CanDriver::SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd
 
 bool CanDriver::SendCmd_NoLock(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms)
 {
-    // PrintCmd(cobId, cmd);
+    PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
     return true;
 #endif
@@ -197,7 +197,7 @@ bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
         const std::vector<uint8_t>& cmd = item.cmd;
 
         // 打印指令，复用原有打印逻辑
-        // PrintCmd(cobId, cmd, "ExecCmds: ");
+        PrintCmd(cobId, cmd, "ExecCmds: ");
 #ifndef ON_TEST_MODE
         can_frame frame{};
         frame.can_id = cobId;
@@ -244,6 +244,11 @@ bool CanDriver::send_NoLock(const can_frame& frame) {
 
     TPCANStatus status = CAN_Write(pcanHandle, &msg);
     if (status != PCAN_ERROR_OK) {
+        // TX 缓冲/队列满：立即返回失败，由上层（发送线程）重试；
+        // 这里不能打印日志也不能等待，否则会卡住发送线程、拖慢所有命令
+        if (status == PCAN_ERROR_XMTFULL || status == PCAN_ERROR_QXMTFULL) {
+            return false;
+        }
         std::cerr << "发送失败，错误码: 0x" << std::hex << status << std::endl;
         return false;
     }

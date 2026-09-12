@@ -64,7 +64,7 @@ protected:
 
 signals:    
     void updateProgress(int percent);
-    void SendReadFinished();
+    void SendReadFinished(QString text);
 
 public slots:
     void OnLoadSettings();
@@ -101,8 +101,7 @@ private:
     std::mutex s_mtx_;
 
     QString last_value_;
-    bool on_Save_default_ = false;
-    bool on_Save_eeprom_ = false;
+
 };
 
 class FunctionBtnArea : public QGroupBox {
@@ -134,7 +133,7 @@ signals:
     void SendReadValue(QString value, QString idx, QString sub_idx);
     // void SendConfirmValues();
     void updateProgress(int percent);
-    void SendReadFinished();
+    void SendReadFinished(QString text);
 
 public slots:
     void OnReadFromEPROM(can_frame frame);
@@ -170,6 +169,11 @@ private:
     bool start_read_eprom_ = false;
     int read_index_ = 0;
     int parse_count_ = 0;
+
+    // 读取参数请求的去重：请求已发出、尚未收到设备应答期间忽略重复点击，
+    // 防止设备把多余的读取请求排队，之后每条命令都触发一次补发的读取
+    bool read_req_pending_ = false;
+    QTimer* read_req_timer_ = nullptr;   // 应答超时定时器，超时后允许重新点击
 
     std::map<QString,QString> str_fragment_cache_;
 };

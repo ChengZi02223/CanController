@@ -17,14 +17,14 @@ public:
     void setTitleText(const QString& text);
     // 设置按钮文字
     void setButtonText(const QString& text);
-    void Exec();
+    void Exec(bool as_msg = false);
 
 signals:
     // 按钮被点击信号
     void SendClose();
 public slots:
     void setProgressValue(int value);
-    void OnEndProgress();
+    void OnEndProgress(QString text);
 
 protected:
     void closeEvent(QCloseEvent *event) override {
