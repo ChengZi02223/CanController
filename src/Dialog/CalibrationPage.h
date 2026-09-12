@@ -9,12 +9,27 @@
 #include <iostream>
 #include <QDateTime>
 #include "BasicInfoBar.h"
+#include "CanDriver.h"
+#include <QTimer>
+
 enum CalibState {kEnd, kStart, kConfirm};
 enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 enum LoopMode { kOpenLoop, kClosedLoop };
 
-enum LoopSide { kSideOne, kSideTwo};
+enum LoopSide { kSideNone, kSideOne, kSideTwo};
+
+struct ControlContext {
+    LoopSide side = kSideNone;
+    int value = 0;                             // 已解析好的目标值
+    std::array<uint8_t, 8> target_cmd{};       // SDO_PWM_OPEN_1 / SDO_CUR_OPEN_1 / SDO_SEND_TARGET_1 ...
+    std::vector<uint8_t> close_cmd;
+    int factor = 1;                            // 10=开环位移，1=电流/闭环
+    LoopMode loop_mode = kOpenLoop;            // kOpenLoop / kClosedLoop
+    bool need_set_pid = false;                 // 闭环时下发 PID
+    bool need_ramp = false;                    // 斜坡响应才需要
+};
+
 struct DrawCurveInfo {
     int side; // 1 | 2 侧
     double time = 0.0; // 时间
@@ -72,6 +87,7 @@ struct Tpdo3CurrentInfo {
 
 Q_DECLARE_METATYPE(DrawCurveInfo)
 struct BasicInfo;
+struct can_frame;
 class BasicInfoBar;
 class QWavePlotWithLegendWidget;
 class CalibrationPage : public QWidget {
@@ -87,7 +103,10 @@ protected:
 
 private:
     void InitPage();
-    void InitPageValue();
+    void InitPageTimer();
+    void OpenTimer(LoopSide side);
+    void CloseTimer(LoopSide side);
+
     QWidget* CreateControlArea();
     QWidget* CreatePIDSettingArea();
     QWidget* CreateDisplacementArea();
@@ -103,19 +122,29 @@ private:
 
     void ChangeLoopMode(LoopMode mode);
 
-    // 开环
-    void StartControl1Loop();
-    void StartControl2Loop();
-    void StopControl1Loop();
-    void StopControl2Loop();
+    void HandleControlEvent(bool checked, const ControlContext& ctx);
+
+    void StartDrawThread();
+    void StopDrawThread();
     void DrawStay(const DrawCurveInfo &info);
 
     bool StartLoopCycle();
     void StopLoopCycle();
     void ExecuteLoopCycle();
-    Tpdo2PositionInfo ReadTpdo2Position(int side) const;
-    Tpdo3CurrentInfo ReadTpdo3Current(int side) const;
+    // 发送一帧开环指令：更新对应侧的 cur_fa_val_X_cmd_ 并推入 CAN
+    void PushOpenLoopCmd(LoopSide side,
+                         const std::array<uint8_t, 8>& target_cmd,
+                         int percent, int factor);
+    // 边等待、边重发：total_ms 内按 resend_interval_ms_ 周期重发；
+    // 返回 false 表示被中断（stop_requested_ 或 is_open_running_ 变化）
+    bool WaitAndResend(int total_ms, LoopSide side,
+                       const std::array<uint8_t, 8>& target_cmd,
+                       int percent, int factor);
 
+    // 单侧完整时序：中位 → 工作位 → 中位；返回 false 表示被中断
+    bool RunOpenLoopSide(LoopSide side, int percent,
+                         const std::array<uint8_t, 8>& target_cmd,
+                         int neutral_ms, int work_ms, int factor);
     // PID
     void SetPIDParam();
 
@@ -125,6 +154,8 @@ signals:
     void SendInfoChanged(InfoType type, QString value);
     void SendRowValue(QString value, QString idx, QString sub_idx);
     void SendCalibCurrentValue(double value);
+    void SendStopReadNMTCmd();
+     void SendMarkGapAllCurves(); 
 
 private slots:
     void OnControl1BtnClicked(bool checked);
@@ -146,10 +177,21 @@ private slots:
     void OnSawtoothWaveBtnClicked();
 
     // 位移曲线绘制
-    void OnDrawStayFa1();
-    void OnDrawStayFa2();
+    void OnTimePushCmd();
+    void OnReadTpdo2Position(can_frame frame);
+    void OnReadTpdo3Current(can_frame frame);
+
+    void OnDrawStayFa();
 
 private:
+    QTimer *stay_timer_1_ = nullptr;
+    QTimer *stay_timer_2_ = nullptr;
+    mutable std::mutex tpdo_mtx_;
+    Tpdo2PositionInfo tpdo_2_info_{};
+    Tpdo3CurrentInfo tpdo_3_info_{};
+
+    std::atomic<bool> draw_curve_running_{false};
+    QThread *draw_curve_thread_ = nullptr;
 
     std::vector<uint8_t> cur_fa_val_1_cmd_; //当前开阀1 cmd
     std::vector<uint8_t> cur_fa_val_2_cmd_;    
@@ -164,16 +206,11 @@ private:
     QLineEdit* work_time_edit_ = nullptr;
 
     LoopMode cur_loop_mode_ = kOpenLoop; // 当前模式： 开环 | 闭环
-    // 开环循环动作线程 //位移
-    std::atomic<bool> stay_1_running_{false};
-    QThread *stay_thread_1_ = nullptr;
-    std::atomic<bool> stay_2_running_{false};
-    QThread *stay_thread_2_ = nullptr;
 
     std::atomic<bool> is_open_running_{false};
     QThread *open_loop_thread_ = nullptr;
     bool is_on_cycle_ = false;
-    LoopSide curr_side_ = kSideOne;
+    LoopSide curr_side_ = kSideNone;
 
     QPushButton* control_1_btn_ = nullptr;
     QPushButton* control_2_btn_ = nullptr;
@@ -227,7 +264,7 @@ private:
     // 左侧
     std::condition_variable cv_;
     std::mutex cv_mtx_;
-    bool stop_requested_{false};
+    std::atomic<bool> stop_requested_{false};
     std::atomic<bool> is_stopping_{false};
     std::mutex m_time_mtx_;
     double m_time = 0.0;

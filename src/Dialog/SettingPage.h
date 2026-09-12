@@ -76,6 +76,9 @@ public slots:
     void OnSaveToEPROM();
     void OnSetRowValue(QString value, QString idx, QString sub_idx = "");
 
+    void OnSaveDafaultSuccess();
+    void OnSaveEEPROMSuccess();
+
 private:
     void InsterRow(ParaItem item);
     std::vector<uint8_t> CreateRowCmd(ParaItem item);
@@ -143,6 +146,8 @@ private slots:
     // void OnSaveDefaultBtnClicked();
     // void OnSaveEepromBtnClicked();
     void OnLoadToTableBtnClicked();
+
+    void OnLoadToTabled(can_frame frame);
 
 private:
     QPushButton* load_setting_btn_ = nullptr;   //读取配置参数文件

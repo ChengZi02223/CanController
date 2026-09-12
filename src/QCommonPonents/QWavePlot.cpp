@@ -275,7 +275,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     QFont font = painter.font();
-    font.setPointSize(10);
+    font.setPointSize(8);
     painter.setFont(font);
     int w = width();
     int h = height();
@@ -296,12 +296,28 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         if(leftMin < leftMax)
         {
             m_leftYMin = leftMin;
-            m_leftYMax = leftMax;
+
+            // 数据最大值和 floor 取大者
+            double wanted = std::max(leftMax, m_leftYMaxFloor);
+            if (wanted > m_leftYMaxFloor + 1e-9)
+            {
+                // 数据超过初始下限：抬升 floor，并通知外部同步 UI
+                m_leftYMaxFloor = wanted;
+                emit sigLeftYMaxChanged(wanted);
+            }
+            m_leftYMax = wanted;
         }
         if(rightMin < rightMax)
         {
             m_rightYMin = rightMin;
-            m_rightYMax = rightMax;
+
+            double wanted = std::max(rightMax, m_rightYMaxFloor);
+            if (wanted > m_rightYMaxFloor + 1e-9)
+            {
+                m_rightYMaxFloor = wanted;
+                emit sigRightYMaxChanged(wanted);
+            }
+            m_rightYMax = wanted;
         }
     }
 
@@ -393,7 +409,7 @@ void QWavePlotWidget::paintEvent(QPaintEvent *event)
         {
             const WaveDataPoint& p0 = pts[i];
             const WaveDataPoint& p1 = pts[i+1];
-
+            if (p0.isGap) continue;
             bool p0In = (p0.t >= viewMin - 1e-12) && (p0.t <= viewMax + 1e-12);
             bool p1In = (p1.t >= viewMin - 1e-12) && (p1.t <= viewMax + 1e-12);
 
@@ -475,6 +491,17 @@ void QWavePlotWidget::resetViewFollowLatest()
     update();
 }
 
+void QWavePlotWidget::markGapAllCurves()
+{
+    for (auto& crv : m_curves)
+    {
+        if (!crv.points.isEmpty())
+        {
+            crv.points.back().isGap = true;
+        }
+    }
+    update();
+}
 
 void QWavePlotWidget::getViewTimeRange(double tLatest, double &viewMin, double &viewMax)
 {
@@ -500,32 +527,53 @@ void QWavePlotWidget::getViewTimeRange(double tLatest, double &viewMin, double &
 
 void QWavePlotWidget::wheelEvent(QWheelEvent *event)
 {
-    // delta>0 滚轮向上(往左翻历史)；delta<0 滚轮向下(往右回最新)
     int delta = event->angleDelta().y();
     if (delta == 0)
     {
         QWidget::wheelEvent(event);
         return;
     }
-    // 只要滚动，关闭自动跟随
+
+    // 先拿到当前最新时间，用于计算可滚动的上限
+    double tLatest, lMin, lMax, rMin, rMax;
+    calcDataRange(tLatest, lMin, lMax, rMin, rMax);
+
+    // 允许的最大偏移：使得 viewMin = tLatest - offset - window >= 0
+    double maxOffset = std::max(0.0, tLatest - m_timeWindow);
+
     m_followLatest = false;
 
     if (delta > 0)
     {
-        // 上滚：向左查看更早数据，偏移增加
         m_viewTimeOffset += m_scrollStepSec;
+        // 关键：到达最左侧后不再继续累加
+        if (m_viewTimeOffset > maxOffset)
+        {
+            m_viewTimeOffset = maxOffset;
+        }
     }
     else
     {
-        // 下滚：向右靠近最新，偏移减少
         m_viewTimeOffset -= m_scrollStepSec;
-        // 偏移不能小于0，小于0说明已经回到最新区间
         if (m_viewTimeOffset <= 0.0)
         {
             m_viewTimeOffset = 0.0;
-            m_followLatest = true; // 回到末尾恢复自动跟随
+            m_followLatest = true;
         }
     }
+
     update();
     event->accept();
+}
+
+void QWavePlotWidget::setLeftYMaxFloor(double v)
+{
+    m_leftYMaxFloor = v;
+    update();
+}
+
+void QWavePlotWidget::setRightYMaxFloor(double v)
+{
+    m_rightYMaxFloor = v;
+    update();
 }

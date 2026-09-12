@@ -12,7 +12,7 @@ QWavePlotWithLegendWidget::QWavePlotWithLegendWidget(QWidget *parent)
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(2);
 
-    m_left_max_y = new QLineEdit("1.00", this);
+    m_left_max_y = new QLineEdit("10000.00", this);
     m_left_max_y->setFixedWidth(100);
     QDoubleValidator* val = new QDoubleValidator(m_left_max_y);
     val->setRange(-100000.0, 100000.0);   
@@ -22,7 +22,7 @@ QWavePlotWithLegendWidget::QWavePlotWithLegendWidget(QWidget *parent)
     m_left_max_y->setValidator(val);
     m_left_max_y->setAlignment(Qt::AlignCenter);
 
-    m_right_max_y = new QLineEdit("1.00", this);
+    m_right_max_y = new QLineEdit("1000.00", this);
     m_right_max_y->setFixedWidth(100);
     QDoubleValidator* val2 = new QDoubleValidator(m_right_max_y);
     val2->setRange(-100000.0,100000.0);
@@ -52,14 +52,33 @@ QWavePlotWithLegendWidget::QWavePlotWithLegendWidget(QWidget *parent)
     connect(m_plot, &QWavePlotWidget::sigCurveFirstData,
             this, &QWavePlotWithLegendWidget::refreshLegend);
         
-    connect(m_left_max_y, &QLineEdit::textChanged, this, [this](QString text){
-
-        setLeftYRange(0, text.toDouble());
+    // 用户手动改 QLineEdit → 更新 floor
+    connect(m_left_max_y, &QLineEdit::textChanged, this, [this](const QString& text){
+        double v = text.toDouble();
+        if (v > 0.0)
+            m_plot->setLeftYMaxFloor(v);
+    });
+    connect(m_right_max_y, &QLineEdit::textChanged, this, [this](const QString& text){
+        double v = text.toDouble();
+        if (v > 0.0)
+            m_plot->setRightYMaxFloor(v);
     });
 
-    connect(m_right_max_y, &QLineEdit::textChanged, this, [this](QString text){
-        setRightYRange(0, text.toDouble());
+    // 数据超限 → 自动回填 QLineEdit，用 QSignalBlocker 避免再次触发 textChanged
+    connect(m_plot, &QWavePlotWidget::sigLeftYMaxChanged, this, [this](double v){
+        QSignalBlocker blocker(m_left_max_y);
+        m_left_max_y->setText(QString::number(v, 'f', 2));
     });
+    connect(m_plot, &QWavePlotWidget::sigRightYMaxChanged, this, [this](double v){
+        QSignalBlocker blocker(m_right_max_y);
+        m_right_max_y->setText(QString::number(v, 'f', 2));
+    });
+    setLeftYRange(0, 10000.00);
+    setRightYRange(0, 1000.00);
+    // 初始值（= 初始 floor）
+    m_plot->setLeftYMaxFloor(10000.00);
+    m_plot->setRightYMaxFloor(1000.00);
+    m_plot->setAutoY(true);
 }
 
 void QWavePlotWithLegendWidget::clearAllLegendItems()
@@ -226,4 +245,30 @@ void QWavePlotWithLegendWidget::showCurveType(bool use_right, WaveCurveType type
 void QWavePlotWithLegendWidget::tryRefreshLegend()
 {
     refreshLegend();
+}
+
+void QWavePlotWithLegendWidget::markGapAllCurves() {
+    m_plot->markGapAllCurves();
+}
+
+void QWavePlotWithLegendWidget::setLeftYMaxFloor(double maxClamp)
+{
+    m_plot->setLeftYMaxFloor(maxClamp);
+    if (m_left_max_y)
+    {
+        m_left_max_y->blockSignals(true);
+        m_left_max_y->setText(QString::number(maxClamp, 'f', 2));
+        m_left_max_y->blockSignals(false);
+    }
+}
+
+void QWavePlotWithLegendWidget::setRightYMaxFloor(double maxClamp)
+{
+    m_plot->setRightYMaxFloor(maxClamp);
+    if (m_right_max_y)
+    {
+        m_right_max_y->blockSignals(true);
+        m_right_max_y->setText(QString::number(maxClamp, 'f', 2));
+        m_right_max_y->blockSignals(false);
+    }
 }

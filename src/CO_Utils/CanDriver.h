@@ -6,8 +6,9 @@
 #include <windows.h>
 #include <PCANBasic.h>
 #include <mutex>
+#include <atomic>
 
-#define kCmdTimeOut 400
+#define kCmdTimeOut 20
 
 // 自定义 CAN 帧结构 (兼容 Linux can_frame 格式)
 struct can_frame {
@@ -77,7 +78,7 @@ private:
     std::mutex m_rx_mtx_;   //接收锁，后上锁
 
     void* handle_;
-    bool isInitialized_;
+    std::atomic<bool> isInitialized_{false};
 
     uint32_t baudrate_;
 };

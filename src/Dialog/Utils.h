@@ -5,10 +5,140 @@
 #include <cstdint>
 #include <QDebug>
 #include <iostream>
+#include <cstring>
+#include "CanDriver.h"
 #define kSleepTimeOut 300
 #define kReadTPDOTimeOut 200
+#define kFaMaxFlow 80 // L/Min
+#define kThreadWaitTime 200
 
+#define kCloseCycleWaitTime 5 //s
 // #define ON_TEST_MODE
+
+static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
+static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
+static const std::vector<int> flow_yugu_values = {154, 132, 115, 110, 99, 0, 68, 62, 53, 39, 23};  //预估值
+static const std::vector<int> flow_yugu_value_subidxs = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E};  //预估值
+static const std::vector<int> flow_curr_value_subidxs = {0x12, 0x13, 0x14, 0x15, 0x16, 0xFF, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E};  //预估值
+
+// #define CAN_MGR_PUSH_CMD(id, cmd)  CanDriver::GetInstance()->SendCmd(id, cmd, kCmdTimeOut);
+// #define CAN_EXEC_CMD_WITH_RETRY(id, cmd)  CanDriver::GetInstance()->SendCmdWithRetry(id, cmd, 3, 10);
+
+// #define CAN_CLEAR_BUFF CanDriver::GetInstance()->FlushBuffers(); \
+//                        CanDriver::GetInstance()->FlushRxBuffer();  
+
+// #define CAN_QUEUE_CLEAN_GUARD CanQueueCleanGuard guard;
+
+inline int32_t GetTargetFlow(int i) {
+    if(i >= 0 || i < flow_table.size()) {
+        return flow_table[i] * kFaMaxFlow;
+    }
+    return 0;
+} 
+
+inline int32_t GetYuGuValueSubIdx(int i) {
+    if(i >= 0 || i < flow_yugu_value_subidxs.size()) {
+        return flow_yugu_value_subidxs[i];
+    }
+    return 0xFF;
+} 
+
+inline int32_t GetCurrValueSubIdx(int i) {
+    if(i >= 0 || i < flow_curr_value_subidxs.size()) {
+        return flow_curr_value_subidxs[i];
+    }
+    return 0xFF;
+} 
+
+inline int GetCalibratValue(int i) {
+    if(i >= 0 || i < Calibrat_list.size()) {
+        return Calibrat_list[i];
+    }
+    return 0;
+}
+
+inline int GetCalibratYuGuValue(int i) {
+    if(i >= 0 || i < flow_yugu_values.size()) {
+        return flow_yugu_values[i];
+    }
+    return 0;
+}
+
+inline double CalcDisplacement(double y, int i)
+{
+    // tableA i<6   pair:{y输入, x输出}
+    static const std::vector<std::pair<int, int>> tableA = {
+        {99,   0},
+        {110,  10},
+        {132,  50},
+        {150,  90},
+        {154, 100}
+    };
+    // tableB i>=6  pair:{y输入, x输出}
+    static const std::vector<std::pair<int, int>> tableB = {
+        {68,   0},
+        {62,  10},
+        {39,  50},
+        {22,  90},
+        {23, 100}
+    };
+
+    const std::vector<std::pair<int, int>>* table;
+    if (i < 6)
+        table = &tableA;
+    else
+        table = &tableB;
+
+    // -------- 限幅 --------
+    if(i < 6)
+    {
+        // tableA y升序
+        if(y <= table->at(0).first)
+            return static_cast<double>(table->at(0).second);
+        if(y >= table->back().first)
+            return static_cast<double>(table->back().second);
+    }
+    else
+    {
+        // tableB：大于第一个点y=68 →输出x=0；小于y=22输出x=90；大于23输出x=100
+        if(y >= table->at(0).first)
+            return static_cast<double>(table->at(0).second);
+        if(y <= table->at(3).first) // y <=22
+            return static_cast<double>(table->at(3).second);
+        // 22~23区间
+        if(y >= table->at(4).first)
+            return static_cast<double>(table->at(4).second);
+    }
+
+    // 遍历查找所在区间
+    for(int idx = 0; idx < static_cast<int>(table->size()) - 1; ++idx)
+    {
+        int y0 = table->at(idx).first;
+        int x0 = table->at(idx).second;
+        int y1 = table->at(idx+1).first;
+        int x1 = table->at(idx+1).second;
+
+        bool inRange;
+        if(y0 < y1)
+        {
+            inRange = (y >= y0 && y <= y1);
+        }
+        else
+        {
+            inRange = (y <= y0 && y >= y1);
+        }
+
+        if(inRange)
+        {
+            double k = static_cast<double>(x1 - x0) / (y1 - y0);
+            double x = x0 + k * (y - y0);
+            return x;
+        }
+    }
+
+    return static_cast<double>(table->at(0).second);
+}
+
 // 提取响应中指定字节数据
 inline uint16_t ExtractFromVectorData(const std::vector<uint8_t>& data, int byte1, int byte2) {
     // 小端序：前字节为低字节，后字节为高字节
@@ -167,11 +297,40 @@ static void PrintCmd(const uint32_t cobId, const std::vector<uint8_t> &cmd, QStr
     qDebug().noquote() << prefix << "(0x" <<QString("%1):").arg(cobId,4,16,QLatin1Char('0')).toUpper() << hexPayload;
 }
 
+static void PrintCanFrame(const can_frame &frame, QString prefix = "can_frame")
+{
+    QString hexPayload;
+    for (int i = 0; i < frame.can_dlc; ++i)
+    {
+        hexPayload += QString("%1 ").arg(frame.data[i], 2, 16, QLatin1Char('0')).toUpper();
+    }
+    qDebug().noquote() << prefix << "(0x"
+                       << QString("%1):").arg(frame.can_id,4,16,QLatin1Char('0')).toUpper()
+                       << " dlc:" << frame.can_dlc
+                       << hexPayload;
+}
+
+inline can_frame MakeCanFrame(const uint32_t cobId, const std::vector<uint8_t> &cmd)
+{
+    can_frame frame{}; // 全部初始化为0
+    frame.can_id = cobId;
+
+    // 最多拷贝8字节，CAN2.0帧最大8字节
+    const size_t copyLen = std::min(cmd.size(), (size_t)8);
+    std::memcpy(frame.data, cmd.data(), copyLen);
+
+    frame.can_dlc = static_cast<uint8_t>(copyLen);
+    return frame;
+}
 static bool CheckAnswerHead(const uint8_t data[8], const std::vector<uint8_t> &head) {
-    if(head.size() !=4U) return false;
-    return std::equal(head.begin(),
-                      head.end(),
-                      data);
+    if(head.size() !=8U) return false;
+    return std::equal(head.begin(), head.end(), data);
+}
+
+static bool CheckResponseData(const std::vector<uint8_t> &data, const std::vector<uint8_t> &answer) {
+    if(data.size() != answer.size())
+        return false;
+    return std::equal(data.begin(), data.end(), answer.begin());
 }
 
 struct TestFrame {
@@ -181,7 +340,7 @@ struct TestFrame {
 
 static std::vector<TestFrame> kBatchReadTestFrames = {
     //1)应答帧
-    {0x5C0, {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}},
+    {0x5C0, {0x60, 0x10, 0x10, 0x03, 0x00, 0x00, 0x00, 0x00}},
 
     //========业务数据帧 共61帧，全部来自你的OD日志[]内8字节========
     {0x4C0, {0x03,0x0E,0x10,0x00,0x40,0x07,0x00,0x00}},  //UP01 NUM 0x100E:00 =1856

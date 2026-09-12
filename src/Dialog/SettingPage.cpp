@@ -1,7 +1,7 @@
 #include "SettingPage.h"
 
 #include "QFileOperator.h"
-#include "CanDriver.h"
+#include "MgrUtil.h"
 #include "can_cmd.h"
 #include "Utils.h"
 #include "CanManager.h"
@@ -213,7 +213,8 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
             save_thread_ = nullptr;
         }
     });
-
+    connect(CanManager::GetInstance(), &CanManager::SendSaveToEEPROMDone, this, &SettingInfoTable::OnSaveEEPROMSuccess);
+    connect(CanManager::GetInstance(), &CanManager::SendSaveToDefaultDone, this, &SettingInfoTable::OnSaveDafaultSuccess);
     qRegisterMetaType<QVector<int>>("QVector<int>");
 }
 
@@ -394,7 +395,8 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
         Fill32ValueToCmd(QStringToUint32Dec(item_text), cmd, 4);
     } 
 
-    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
+    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
+    CAN_MGR_PUSH_CMD(SDO_COB_ID, cmd);
 }
 
 bool SettingInfoTable::IsItemReadOnly(QTableWidgetItem *item) {
@@ -516,6 +518,14 @@ void SettingInfoTable::ReloadDefaultValue() {
     }
 }
 
+void SettingInfoTable::OnSaveDafaultSuccess() {
+    emit SendReadFinished();
+}
+
+void SettingInfoTable::OnSaveEEPROMSuccess() {
+    emit SendReadFinished();
+}
+
 void SettingInfoTable::OnSaveDefaultValue() {
     if(info_table_count == 0) {
         return;
@@ -523,7 +533,8 @@ void SettingInfoTable::OnSaveDefaultValue() {
     qDebug()<< "保存到默认参数";
     on_Save_default_ = true;
     UpdateParams();
-    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
+    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
+    
     OnConfirmAllValues();
     update();
     on_Save_default_ = false;
@@ -535,7 +546,8 @@ void SettingInfoTable::OnSaveToEPROM() {
     }
     on_Save_eeprom_ = true;
     UpdateParams();
-    CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_EEPROM_CMD, kCmdTimeOut);
+    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_EEPROM_CMD, kCmdTimeOut);
+    
 
     for(int i = 0; i < rowCount(); ++i) {
         user_values_[i] = item(i, INFO_TABLE_MODIFY_COLUMN)->text();
@@ -578,7 +590,13 @@ void SettingInfoTable::UpdateParams() {
             change_item->setForeground(QBrush(Qt::black));
             QThread::msleep(200); 
         }
-        emit SendReadFinished();
+        // emit SendReadFinished();
+        if(on_Save_default_) {
+            CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD);
+        }
+        if(on_Save_eeprom_) {
+            CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_EEPROM_CMD);
+        }
     });
     save_thread_->start();
     save_progress_dialog_->setTitleText("正在保存参数到EPROM，请稍候...");
@@ -646,7 +664,9 @@ void FunctionBtnArea::ConnectSignles() {
     connect(clear_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendClearModifyValue);
     // connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
 
-    connect(CanConfigWin::GetInstance(), &CanConfigWin::SendReadFromEPROM, this, &FunctionBtnArea::OnReadFromEPROM);
+    connect(CanManager::GetInstance(), &CanManager::SendStartLoadToTable, this, &FunctionBtnArea::OnLoadToTabled);
+
+    connect(CanManager::GetInstance(), &CanManager::SendReadFromEPROM, this, &FunctionBtnArea::OnReadFromEPROM);
     connect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
     connect(this, &FunctionBtnArea::SendReadFinished, progress_dialog_, &ProgressDialog::OnEndProgress);
     connect(progress_dialog_, &ProgressDialog::SendClose, this, [this](){
@@ -696,42 +716,54 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
     if (info_table_count == 0) {
         return;
     }
-    qDebug() << "读取参数到表格";
+    CanManager::GetInstance()->ClearCommands();
+    CanDriver::GetInstance()->HardReset();
+    // qDebug() << "读取参数到表格";
+    CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE);
+//     // ========== 循环重试，直到发送成功或用户取消 ==========
+//     const int MAX_RETRIES = 10;          // 最多重试50次
+//     const int RETRY_INTERVAL_MS = 100;   // 每次重试间隔100ms
+//     bool success = false;
 
-    // ========== 循环重试，直到发送成功或用户取消 ==========
-    const int MAX_RETRIES = 10;          // 最多重试50次
-    const int RETRY_INTERVAL_MS = 100;   // 每次重试间隔100ms
-    bool success = false;
+//     for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
+//         can_frame frame{};               // 每次重新定义，避免旧数据干扰
+//         bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
 
-    for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
-        can_frame frame{};               // 每次重新定义，避免旧数据干扰
-        bool ret = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE, frame, kCmdTimeOut);
+// #ifndef ON_TEST_MODE
+//         if (ret && frame.can_id == 0x5C0) {
+//             success = true;
+//             break;
+//         }
+// #else
+//         // 测试模式下，直接认为成功（若您保留测试宏）
+//         success = true;
+//         break;
+// #endif
 
-#ifndef ON_TEST_MODE
-        if (ret && frame.can_id == 0x5C0) {
-            success = true;
-            break;
-        }
-#else
-        // 测试模式下，直接认为成功（若您保留测试宏）
-        success = true;
-        break;
-#endif
+//         // 发送失败，稍等再重试
+//         QThread::msleep(RETRY_INTERVAL_MS);
+//         // 可选：每10次打印一次日志
+//         if (attempt % 10 == 0) {
+//             qDebug() << "重试读取参数... 第" << attempt << "次";
+//         }
+//     }
 
-        // 发送失败，稍等再重试
-        QThread::msleep(RETRY_INTERVAL_MS);
-        // 可选：每10次打印一次日志
-        if (attempt % 10 == 0) {
-            qDebug() << "重试读取参数... 第" << attempt << "次";
-        }
-    }
+//     if (!success) {
+//         QMessageBox::warning(this, "警告", "读取参数到表格失败，已重试" + QString::number(MAX_RETRIES) + "次，请检查CAN通信！");
+//         return;
+//     }
 
-    if (!success) {
-        QMessageBox::warning(this, "警告", "读取参数到表格失败，已重试" + QString::number(MAX_RETRIES) + "次，请检查CAN通信！");
-        return;
-    }
+//     // 成功后的逻辑
+//     start_read_eprom_ = true;
+//     progress_dialog_->setTitleText("正在读取参数，请稍候...");
+//     progress_dialog_->Exec();
+}
 
-    // 成功后的逻辑
+void FunctionBtnArea::OnLoadToTabled(can_frame frame) {
+    // if (frame.can_id == 0x5C0 || !CheckAnswerHead(frame.data, RESPONSE_READ_TO_TABLE)) {
+    //     return;
+    // }
+    
     start_read_eprom_ = true;
     progress_dialog_->setTitleText("正在读取参数，请稍候...");
     progress_dialog_->Exec();
@@ -749,50 +781,6 @@ bool FunctionBtnArea::TestEPROMSenCmd(can_frame &frame) {
     read_index_ ++;
     return true;
 }
-
-#ifdef tt
-bool FunctionBtnArea::StartReadFromEPROM() {
-    if(parser_thread_ != nullptr){
-        return false; 
-    }
-    parse_count_ = 0;
-    read_index_ = 0;
-    parser_running_.store(true);
-    parser_thread_ = QThread::create([this](){
-        while(parser_running_.load()) {
-            can_frame frame{};
-#ifdef ON_TEST_MODE
-            if (TestEPROMSenCmd(frame)) {
-                ParseEPROMFrame(frame);
-            }
-#else
-            if (CanDriver::GetInstance()->receive(frame, kCmdTimeOut)) {
-                ParseEPROMFrame(frame);
-            }
-#endif
-            QThread::msleep(kSleepTimeOut);
-        }
-    });
-    parser_thread_->start();
-    qDebug()<< "读取线程开始";
-}
-
-void FunctionBtnArea::StopReadFromEPROM() {
-    if(parser_thread_ == nullptr) {
-        return;
-    }
-    
-    parser_running_.store(false); //退出循环条件
-    parser_thread_->quit();
-    parser_thread_->wait(); //阻塞等待线程安全结束
-    delete parser_thread_;
-    parser_thread_ = nullptr;
-    parse_count_ = 0;
-    disconnect(this, &FunctionBtnArea::updateProgress, progress_dialog_, &ProgressDialog::setProgressValue);
-    ClearStringFragmentCache();
-    qDebug()<< "读取线程已结束";
-}
-#endif
 
 void FunctionBtnArea::ClearStringFragmentCache() {
     // std::lock_guard<std::mutex> lk(m_mtx_);

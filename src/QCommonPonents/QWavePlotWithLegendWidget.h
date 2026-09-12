@@ -43,7 +43,9 @@ public:
     void setAllCurveVisible(bool visible);
     void showCurveType(bool use_right, WaveCurveType type);
     void tryRefreshLegend();
-
+    void markGapAllCurves();
+    void setLeftYMaxFloor(double maxClamp);
+    void setRightYMaxFloor(double maxClamp);
 private:
     // 刷新图例：只保留有数据的曲线图例，无数据则销毁
     void refreshLegend();
@@ -60,6 +62,7 @@ private:
     QWidget* m_legendContainer;
     FlowLayout* m_legendFlowLayout;
     QList<LegendItem> m_legendItems;
+
 };
 
 #endif // QWAVEPLOTWITHLEGENDWIDGET_H

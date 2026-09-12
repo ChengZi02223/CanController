@@ -88,6 +88,7 @@ bool CanDriver::init(TPCANHandle channelHandle, uint32_t baudrate)
 // 内部无锁，调用者已经持有tx+rx锁
 bool CanDriver::init_NoLock(TPCANHandle channelHandle, uint32_t baudrate)
 {
+    qDebug() << "init_NoLock";
     TPCANBaudrate pcanBaud;
     switch (baudrate) {
         case 125000: pcanBaud = PCAN_BAUD_125K; break;
@@ -120,6 +121,7 @@ void CanDriver::close()
 void CanDriver::close_NoLock()
 {
     if (isInitialized_ && handle_) {
+        qDebug() << "close_NoLock";
         TPCANHandle pcanHandle = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
         CAN_Uninitialize(pcanHandle);
         handle_ = nullptr;
@@ -142,7 +144,7 @@ bool CanDriver::SendCmdWithRetry(uint32_t cobId, const std::vector<uint8_t>& cmd
 
 bool CanDriver::SendCmd_NoLock(const uint32_t cobId, const std::vector<uint8_t>& cmd, int timeout_ms)
 {
-    PrintCmd(cobId, cmd);
+    // PrintCmd(cobId, cmd);
 #ifdef ON_TEST_MODE
     return true;
 #endif
@@ -195,7 +197,7 @@ bool CanDriver::ExecCmds(const std::vector<CanCmdItem>& cmdList)
         const std::vector<uint8_t>& cmd = item.cmd;
 
         // 打印指令，复用原有打印逻辑
-        PrintCmd(cobId, cmd, "ExecCmds: ");
+        // PrintCmd(cobId, cmd, "ExecCmds: ");
 #ifndef ON_TEST_MODE
         can_frame frame{};
         frame.can_id = cobId;
@@ -339,6 +341,17 @@ bool CanDriver::HardReset() {
     if (!isInitialized_ || !handle_) return false;
 
     TPCANHandle h = static_cast<TPCANHandle>(reinterpret_cast<uintptr_t>(handle_));
-    close_NoLock();                        // CAN_Uninitialize 复位CAN控制器硬件
-    return init_NoLock(h, baudrate_);    // 重新初始化，TX队列彻底清空
+
+    // 开启"硬复位"模式：此后 CAN_Reset 会真正复位 CAN 控制器硬件
+    BYTE on = PCAN_PARAMETER_ON;
+    TPCANStatus st = CAN_SetValue(h, PCAN_HARD_RESET_STATUS, &on, sizeof(on));
+    if (st == PCAN_ERROR_OK) {
+        qDebug() <<" CAN RESET";
+        st = CAN_Reset(h);   // 硬件级复位，硬件TX缓冲里的 02 04 被清掉
+        return st == PCAN_ERROR_OK;
+    }
+
+    // 老设备/老驱动不支持该参数，退回原来的 Uninitialize+Initialize
+    close_NoLock();
+    return init_NoLock(h, baudrate_);
 }

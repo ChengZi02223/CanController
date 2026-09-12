@@ -29,9 +29,6 @@ public:
         return &instance;
     }
 
-signals:
-    void SendReadFromEPROM(can_frame frame);
-
 private slots:
     void onRefreshDevices();
     void onInit();
@@ -40,10 +37,12 @@ private slots:
     void onSend();
     void onAddCmd();
     void onDeleteCmd();
-    void onReceiveTimer();
     void onChangeMode();
 
     void onExportTxt();
+
+    // void OnReceiveCmd(can_frame frame);
+    void OnReceiveBatchFlush();
 
 private:
     explicit CanConfigWin(QWidget *parent = nullptr);
@@ -54,6 +53,8 @@ private:
     void updateCanStatus(bool initialized);
     TPCANHandle GetSelectedChannelHandle() const; 
     void SendData(uint32_t id, uint8_t dlc, QString data);
+
+    void AppendReceiveRow(const can_frame& frame);   // 新增
 
     ControlMode control_mode_ = kMode_J1939;  // 默认使用J1939模式
     bool on_set_one_ = true;
@@ -76,7 +77,12 @@ private:
     QTableWidget *twReceive;
     QTableWidget *moreCmdTable_ = nullptr;
 
-    QTimer      *receiveTimer;
+    // ========== 批量刷新相关 ==========
+    QTimer *rxFlushTimer_ = nullptr;
+    static constexpr int kRxFlushIntervalMs = 50;    // 刷新周期
+    static constexpr int kRxBatchSize      = 1024;   // 单次最多取出多少帧
+    static constexpr int kRxMaxRows        = 5000;   // 表格最多保留多少行
+
     bool        canReady;
     std::vector<CanChannelInfo> channelList;
     bool on_test_ = false;

@@ -4,6 +4,7 @@
 #include "CO_CMD.h"
 #include "Utils.h"
 #include "can_cmd.h"
+#include "MgrUtil.h"
 
 #include <iomanip>
 #include <sstream>
@@ -14,16 +15,21 @@ CanConfigWin::CanConfigWin(QWidget *parent)
     : QMainWindow(parent), canReady(false)
 {
     setupUI();
-    receiveTimer = new QTimer(this);
-    connect(receiveTimer, &QTimer::timeout, this, &CanConfigWin::onReceiveTimer);
     setWindowIcon(QIcon(":/icons/HZLK.png"));
-#ifndef ON_TEST_MODE
-    receiveTimer->start(50);
-#endif
+
+    // connect(CanManager::GetInstance(), &CanManager::SendReceiveFrame, this, &CanConfigWin::OnReceiveCmd);
+    rxFlushTimer_ = new QTimer(this);
+    rxFlushTimer_->setInterval(kRxFlushIntervalMs);
+    connect(rxFlushTimer_, &QTimer::timeout,
+            this, &CanConfigWin::OnReceiveBatchFlush);
+    rxFlushTimer_->start();
 }
 
 CanConfigWin::~CanConfigWin()
 {
+    if (rxFlushTimer_) {
+        rxFlushTimer_->stop();
+    }
     if (canReady) onRelease();
 }
 
@@ -210,13 +216,10 @@ void CanConfigWin::setupUI()
     connect(stop_btn, &QPushButton::clicked, this, [this, save_btn](bool checked) {
         on_test_ = checked;
         save_btn->setEnabled(checked);
-#ifdef ON_TEST_MODE
-        if(!on_test_) {
-            receiveTimer->start(50);
-        } else {
-            receiveTimer->stop();
+        if (on_test_) {
+            // 停止接收时，丢弃缓冲区，避免继续追加
+            CanManager::GetInstance()->ClearReceiveBuffer();
         }
-#endif
     });
 
     connect(sendOneCmdGroup, &QGroupBox::toggled, this, [=](bool checked){
@@ -271,6 +274,11 @@ void CanConfigWin::onInit()
         logMessage("Already initialized, release first.", true);
         return;
     }
+
+#ifdef ON_TEST_MODE
+    canReady = true;
+    return;
+#endif
     QString device = cbDevice->currentData().toString();
     if (device.isEmpty()) {
         logMessage("No device selected.", true);
@@ -303,6 +311,7 @@ void CanConfigWin::onRelease()
     if (!canReady) return;
     CanDriver::GetInstance()->close();
     canReady = false;
+    CanManager::GetInstance()->ClearReceiveBuffer();   // 新增
     logMessage("CAN released.");
     btnInit->setEnabled(true);
     btnRelease->setEnabled(false);
@@ -314,21 +323,14 @@ void CanConfigWin::onRelease()
 
 void CanConfigWin::onChangeMode() {
     if (!canReady) return;
-    can_frame frame;
-    bool res = false;
+
     if(control_mode_ == kMode_J1939) {
         // 切换成CANOpen模式
-        res = CanDriver::GetInstance()->ExecCmd(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD, frame, 200);
+        CAN_MGR_PUSH_CMD(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD);
     } else {
         // 切换成J1939模式
-        res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, CHANGE_TO_J1939_CMD, frame, 200);
+        CAN_MGR_PUSH_CMD(SDO_COB_ID, CHANGE_TO_J1939_CMD);
     }
-    if(!res) {
-        logMessage("Mode change command failed!", true);
-        return;
-    }
-    auto responseId = frame.can_id;
-    auto response = frame.data;
     if(control_mode_ == kMode_J1939) {
         control_mode_ = kMode_PCAN;
         btnChange->setText("CANOpen");
@@ -438,73 +440,84 @@ void CanConfigWin::SendData(uint32_t id, uint8_t dlc, QString data) {
     }
 
     // 发送CAN帧
-    if (CanDriver::GetInstance()->send(frame)) {
-        QString dataStr;
-        for (int i = 0; i < frame.can_dlc; ++i) {
-            dataStr += QString("%1 ").arg(frame.data[i], 2, 16, QChar('0'));
-        }
-        logMessage(QString("Sent: ID=0x%1 DLC=%2 Data=[%3]")
-                   .arg(frame.can_id & CAN_EFF_MASK, 0, 16)
-                   .arg(frame.can_dlc)
-                   .arg(dataStr.trimmed()));
-    } else {
-        logMessage("Send failed", true);
+    CAN_MGR_PUSH_CMD(frame.can_id, frame.data);
+    QString dataStr;
+    for (int i = 0; i < frame.can_dlc; ++i) {
+        dataStr += QString("%1 ").arg(frame.data[i], 2, 16, QChar('0'));
     }
+    logMessage(QString("Sent: ID=0x%1 DLC=%2 Data=[%3]")
+                .arg(frame.can_id & CAN_EFF_MASK, 0, 16)
+                .arg(frame.can_dlc)
+                .arg(dataStr.trimmed()));
+
 }
 
-static int read_index_ = 0;
-static bool TestEPROMSenCmd(can_frame &frame) {
-    if(read_index_ >= kBatchReadTestFrames.size()){
-        read_index_ = 0;
-        return false;
-    }
-    auto test_frame = kBatchReadTestFrames[read_index_];
-    frame.can_id = test_frame.cobId;
-    frame.can_dlc = 8;
-    std::copy(test_frame.data, test_frame.data + 8, frame.data);
-    // PrintCmd(frame.can_id, std::vector<uint8_t>(frame.data, frame.data + frame.can_dlc), "Receive: ");
-    read_index_ ++;
-    return true;
-}
-
-void CanConfigWin::onReceiveTimer()
+// static int read_index_ = 0;
+// static bool TestEPROMSenCmd(can_frame &frame) {
+//     if(read_index_ >= kBatchReadTestFrames.size()){
+//         read_index_ = 0;
+//         return false;
+//     }
+//     auto test_frame = kBatchReadTestFrames[read_index_];
+//     frame.can_id = test_frame.cobId;
+//     frame.can_dlc = 8;
+//     std::copy(test_frame.data, test_frame.data + 8, frame.data);
+//     // PrintCmd(frame.can_id, std::vector<uint8_t>(frame.data, frame.data + frame.can_dlc), "Receive: ");
+//     read_index_ ++;
+//     return true;
+// }
+void CanConfigWin::OnReceiveBatchFlush()
 {
-#ifdef ON_TEST_MODE
-    // can_frame frame = {
-    //     0x123,          // can_id
-    //     8,              // can_dlc，实际使用4个字节
-    //     {0x11,0x22,0x33,0x44,0x09,0x92,0x00,0x00}  // data[8]，必须写满8个或者用{}
-    // };
-    can_frame frame;
-    if(!TestEPROMSenCmd(frame)){
+    if (!canReady || on_test_) {
+        CanManager::GetInstance()->ClearReceiveBuffer();
         return;
     }
-#else
-    if (!canReady) return;
-    can_frame frame;
-#endif
+
+    std::vector<can_frame> batch;
+    CanManager::GetInstance()->TakeReceiveBuffer(batch, kRxBatchSize);
+    if (batch.empty()) return;
+
     QScrollBar* vBar = twReceive->verticalScrollBar();
     bool needAutoScroll = (vBar->value() >= vBar->maximum() - 2);
-#ifndef ON_TEST_MODE
-    while (CanDriver::GetInstance()->receive(frame, 0)) {
-#endif
-        emit SendReadFromEPROM(frame);
-        int row = twReceive->rowCount();
-        twReceive->insertRow(row);
-        QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
-        twReceive->setItem(row, 0, new QTableWidgetItem(timestamp));
-        twReceive->setItem(row, 1, new QTableWidgetItem(QString("0x%1").arg(frame.can_id, 0, 16)));
-        twReceive->setItem(row, 2, new QTableWidgetItem(QString::number(frame.can_dlc)));
-        QString dataStr;
-        for (int i = 0; i < frame.can_dlc; ++i) {
-            dataStr += QString("%1 ").arg(frame.data[i], 2, 16, QChar('0'));
-        }
-        twReceive->setItem(row, 3, new QTableWidgetItem(dataStr.trimmed()));
-        twReceive->setItem(row, 4, new QTableWidgetItem("STD"));
-#ifndef ON_TEST_MODE
+
+    // 关闭重绘，批量写完再统一刷新
+    twReceive->setUpdatesEnabled(false);
+
+    for (const auto& frame : batch) {
+        AppendReceiveRow(frame);
     }
-#endif
-    if(needAutoScroll) twReceive->scrollToBottom();
+
+    // 行数上限，防止越跑越卡
+    int overflow = twReceive->rowCount() - kRxMaxRows;
+    for (int i = 0; i < overflow; ++i) {
+        twReceive->removeRow(0);
+    }
+
+    twReceive->setUpdatesEnabled(true);
+    twReceive->viewport()->update();
+
+    if (needAutoScroll) twReceive->scrollToBottom();
+}
+
+void CanConfigWin::AppendReceiveRow(const can_frame& frame)
+{
+    int row = twReceive->rowCount();
+    twReceive->insertRow(row);
+
+    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
+    twReceive->setItem(row, 0, new QTableWidgetItem(timestamp));
+    twReceive->setItem(row, 1, new QTableWidgetItem(
+        QString("0x%1").arg(frame.can_id, 0, 16)));
+    twReceive->setItem(row, 2, new QTableWidgetItem(
+        QString::number(frame.can_dlc)));
+
+    QString dataStr;
+    dataStr.reserve(frame.can_dlc * 3);
+    for (int i = 0; i < frame.can_dlc; ++i) {
+        dataStr += QString("%1 ").arg(frame.data[i], 2, 16, QChar('0'));
+    }
+    twReceive->setItem(row, 3, new QTableWidgetItem(dataStr.trimmed()));
+    twReceive->setItem(row, 4, new QTableWidgetItem("STD"));
 }
 
 void CanConfigWin::logMessage(const QString &msg, bool isError)

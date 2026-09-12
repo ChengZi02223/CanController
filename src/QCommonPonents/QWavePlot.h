@@ -8,6 +8,8 @@ struct WaveDataPoint
 {
     double t = 0.0;
     double val = 0.0;
+    bool   isGap = false;
+
     WaveDataPoint() = default;
     WaveDataPoint(double t_, double v_) : t(t_), val(v_) {}
 };
@@ -67,10 +69,17 @@ public:
     QPen curvePen(int idx) const;
     // 新增：重置视图到跟随最新
     void resetViewFollowLatest();
+    void markGapAllCurves();
+    void setLeftYMaxFloor(double v);
+    void setRightYMaxFloor(double v);
+    double leftYMaxFloor()  const { return m_leftYMaxFloor; }
+    double rightYMaxFloor() const { return m_rightYMaxFloor; }
 signals:
     // 当某条曲线第一次写入数据时触发
     void sigCurveFirstData(int curveIdx);
-    
+    void sigLeftYMaxChanged(double newMax);
+    void sigRightYMaxChanged(double newMax);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     // 重写鼠标滚轮事件
@@ -87,7 +96,8 @@ private:
     const int m_marginRight = 70;
     const int m_marginTop = 30;
     const int m_marginBottom = 45;
-
+    double m_leftYMaxFloor  = 0.0;
+    double m_rightYMaxFloor = 0.0;
     // ============ 新增滚动交互变量 ============
     // 时间偏移：可视窗口整体向左偏移多少秒
     double m_viewTimeOffset = 0.0;

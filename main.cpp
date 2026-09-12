@@ -1,5 +1,6 @@
 #include "CanController.h"
 #include "CanConfig.h"
+#include "MgrUtil.h"
 
 #include <QApplication>
 #include <QFile>
@@ -14,6 +15,9 @@ int main(int argc, char *argv[])
     file.close();
     a.setStyleSheet(qss);
 
+    qRegisterMetaType<can_frame>("can_frame");
+
+    CAN_MGR_START;
     // CanController *w  = new CanController();
     CanController::GetInstance()->show();
     // CanConfigWin::GetInstance()->show();
