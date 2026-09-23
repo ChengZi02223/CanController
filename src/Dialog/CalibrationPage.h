@@ -27,7 +27,8 @@ struct ControlContext {
     int factor = 1;                            // 10=开环位移，1=电流/闭环
     LoopMode loop_mode = kOpenLoop;            // kOpenLoop / kClosedLoop
     bool need_set_pid = false;                 // 闭环时下发 PID
-    bool need_ramp = false;                    // 斜坡响应才需要
+    std::vector<uint8_t> rpdo2_cfg_cmd;        // 非空：启动时先下发一帧RPDO2配置（斜坡类型）
+    bool need_ramp_close = false;              // 取消时按0%目标缓降，位移到位后才停止发送（闭环斜坡）
 };
 
 struct DrawCurveInfo {
@@ -147,6 +148,18 @@ private:
                          int neutral_ms, int work_ms, int factor);
     // PID
     void SetPIDParam();
+    // 按指定侧下发PID参数（标定/验证按表格行分侧，不走侧切换按钮）
+    void SetPIDParamForSide(bool side_one);
+    // 闭环斜坡响应的控制上下文（1/2侧共用）
+    ControlContext MakeRampContext();
+    // 停止闭环斜坡：ramp_close=true 缓降回0%后再停止；false 立即停止（切换到阶跃时用）
+    void StopRampResponse(bool ramp_close);
+    // 取消斜坡后的缓降流程：周期下发0%目标，位移到达标定0%开度后停止
+    void StartRampClose(LoopSide side, const std::vector<uint8_t>& zero_cmd);
+    void FinishRampClose();
+    // 缓降期间禁止其他操作
+    void SetRampClosingUI(bool closing);
+    bool IsRampClosing() const { return ramp_closing_.load(); }
 
 signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);
@@ -180,6 +193,8 @@ private slots:
     void OnTimePushCmd();
     void OnReadTpdo2Position(can_frame frame);
     void OnReadTpdo3Current(can_frame frame);
+    // 斜坡缓降到位检测
+    void OnRampCloseCheck();
 
     void OnDrawStayFa();
 
@@ -192,6 +207,13 @@ private:
 
     std::atomic<bool> draw_curve_running_{false};
     QThread *draw_curve_thread_ = nullptr;
+
+    // 闭环斜坡取消后的缓降状态
+    QTimer* ramp_close_timer_ = nullptr;
+    std::atomic<bool> ramp_closing_{false};
+    LoopSide ramp_close_side_ = kSideNone;
+    qint64 ramp_close_start_ms_ = 0;
+    bool ramp_response_running_ = false;   // 斜坡响应是否在运行（区分"取消"与"未启动时误点"）
 
     std::vector<uint8_t> cur_fa_val_1_cmd_; //当前开阀1 cmd
     std::vector<uint8_t> cur_fa_val_2_cmd_;    

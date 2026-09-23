@@ -136,6 +136,11 @@ private:
     std::atomic<bool> stop_nmt_read_{false};
     // 本轮周期 02 40 的起始时间（ms, steady_clock），用于兜底超时自动停止
     std::atomic<long long> nmt_repeat_start_ms_{0};
+
+    // ===== TX 满/设备未应答时的发送轮转状态（仅发送线程访问） =====
+    int tx_backoff_ms_ = 5;                  // 当前退避间隔
+    long long tx_first_fail_ms_ = 0;         // 本轮连续失败起点
+    bool tx_stall_logged_ = false;           // 本轮是否已打过停顿日志
 };
 
 #endif // _CAN_MANAGER_H_

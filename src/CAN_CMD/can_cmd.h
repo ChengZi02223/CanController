@@ -92,6 +92,18 @@ extern const std::array<uint8_t, 8> SDO_SET_RAMP_EXTEND_TIME_CMD; //伸出激活
 extern const std::vector<uint8_t> SDO_RAMP_RETRACT_TIME_CMD;
 extern const std::array<uint8_t, 8> SDO_SET_RAMP_RETRACT_TIME_CMD; //缩回激活： 斜坡时间
 
+//清除斜坡指令
+extern const std::vector<uint8_t> SDO_RPDO2_CLEAN_RAMP_CMD;
+
+// 斜坡类型：直坡（位移标定用，不带斜坡时间） RPDO2 0x340  01 FA FA 00 00 00 00 00
+extern const std::vector<uint8_t> SDO_RPDO2_RAMP_TYPE_CMD;
+// 斜坡类型：斜率限制型斜坡（闭环斜坡响应用，斜坡时间10000，只下发一次） RPDO2 0x340  02 FA FA 00 10 27 10 27
+extern const std::vector<uint8_t> SDO_RPDO2_SLOPE_RAMP_CMD;
+
+// 位移标定目标值（0~1000，50%对应500）
+extern const std::array<uint8_t, 8> SDO_CALIB_TARGET_1_VALUE_CMD; // B4=0x21(标定模式+1侧)
+extern const std::array<uint8_t, 8> SDO_CALIB_TARGET_2_VALUE_CMD; // B4=0x22(标定模式+2侧)
+
 /// NMT状态
 #define NMT_COB_ID  0x000
 extern const std::vector<uint8_t> NMT_READ_VALUE_CMD;     //读取位移
