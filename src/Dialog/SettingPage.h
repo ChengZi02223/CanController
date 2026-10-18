@@ -36,6 +36,7 @@ public slots:
 
 private:
     void InitPage();
+    void CheckCobIdChanged(QTableWidgetItem *item);
 
 private:
     QVBoxLayout* main_layout_ = nullptr;

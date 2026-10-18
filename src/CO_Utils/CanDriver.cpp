@@ -300,7 +300,7 @@ bool CanDriver::receive(can_frame& frame, int timeout_ms)
 
 bool CanDriver::CRCCheck(const can_frame& frame) {
     // 只检测 0x240
-    if(frame.can_id != SEND_COB_ID) {
+    if(frame.can_id != GetSendCobId()) {
         return true;
     }
     if(frame.can_dlc < 8) {

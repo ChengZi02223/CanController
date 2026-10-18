@@ -79,6 +79,7 @@ void CanManager::SetHeartbeatTimeout(uint8_t nodeId, uint32_t timeoutMs) {
 
 // ========== 【新增】命令栈接口 ==========
 void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd) {
+    PrintCmd(cobId, cmd, "PushCommand");
     if(!CanDriver::GetInstance()->IsInitialized()){
         return;
     }
@@ -108,12 +109,16 @@ void CanManager::PushCommand(const CanCmdItem& item) {
         if (m_cmdQueue.size() >= kMaxQueueLen) {
             m_cmdQueue.pop_back();
         }
+        PrintCmd(item.cobId, item.cmd, "PushCommand");
         m_cmdQueue.push_front(item);
     }
     m_cmdCv.notify_one();
 }
 
 void CanManager::PushCommands(const std::vector<CanCmdItem>& items) {
+    for(auto &item: items) {
+        PrintCmd(item.cobId, item.cmd, "PushCommands");
+    }
     if(items.empty() || !CanDriver::GetInstance()->IsInitialized()) {
         return;
     }
@@ -122,6 +127,7 @@ void CanManager::PushCommands(const std::vector<CanCmdItem>& items) {
         if (m_cmdQueue.size() >= kMaxQueueLen) {
             m_cmdQueue.pop_back();
         }
+        PrintCmd(item.cobId, item.cmd, "PushCommands");
         m_cmdQueue.push_front(item);
     }
     m_cmdCv.notify_one();

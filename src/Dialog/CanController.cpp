@@ -40,7 +40,13 @@ void CanController::InitWindow() {
             stacked_widget_->setCurrentIndex(1);
         }
     });
-    connect(setting_page_, &SettingPage::SendInfoChanged, calibration_page_, &CalibrationPage::SendInfoChanged);
+    // connect(setting_page_, &SettingPage::SendInfoChanged, calibration_page_, &CalibrationPage::SendInfoChanged);
+    connect(setting_page_, &SettingPage::SendInfoChanged, calibration_page_,[this](InfoType type, QString value){
+        if(type == InfoType::kChannelCount) {
+            calibration_page_->SetChannelCount(value);
+        }
+        emit calibration_page_->SendInfoChanged(type, value);
+    });
     connect(calibration_page_, &CalibrationPage::SendRowValue, setting_page_, &SettingPage::SendRowValue);
     InitData();
 }
@@ -49,9 +55,13 @@ void CanController::InitData() {
     InitBasicInfo();
 }
 
+void CanController::SetChannelCount(const QString& channel_count) {
+    calibration_page_->SetChannelCount(channel_count);
+}
+
 void CanController::InitBasicInfo() {
     can_frame frame;
-    bool res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_TYPE_CMD, frame, 200);
+    bool res = CanDriver::GetInstance()->ExecCmd(GetSDOCobId(), SDO_READ_TYPE_CMD, frame, 200);
     //设备（型号）
     BasicInfo info;
     if(!res) {
@@ -68,7 +78,7 @@ void CanController::InitBasicInfo() {
     }
     // 协议
     frame = {};
-    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_PROTOCOL_CMD, frame, 200);
+    res = CanDriver::GetInstance()->ExecCmd(GetSDOCobId(), SDO_READ_PROTOCOL_CMD, frame, 200);
     if (!res) {
         std::cout << "Failed to read protocol type!" << std::endl;
         return;
@@ -90,7 +100,7 @@ void CanController::InitBasicInfo() {
     }
     // 厂商
     frame = {};
-    res = CanDriver::GetInstance()->ExecCmd(SDO_COB_ID, SDO_READ_MANUFACTURER_ID_CMD, frame, 200);
+    res = CanDriver::GetInstance()->ExecCmd(GetSDOCobId(), SDO_READ_MANUFACTURER_ID_CMD, frame, 200);
     if (!res) {
         std::cout << "Failed to read manufacturer ID!" << std::endl;
         return;

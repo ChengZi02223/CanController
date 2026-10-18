@@ -153,6 +153,7 @@ void SettingPage::InitPage() {
         function_btn_area_->setEnabled(state == kTestStart);
     });
     connect(basic_info_bar_, &BasicInfoBar::SendInfoChanged, this, &SettingPage::SendInfoChanged);
+
     // connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
     connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
     CustomDelegate* m_delegate = new CustomDelegate(this);
@@ -165,8 +166,31 @@ void SettingPage::InitPage() {
             old_item_value_ = item->text();
             item->setText(newText);
             OnValueChanged(item);
+            CheckCobIdChanged(item);
         }
     });
+}
+
+void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        if(obj_str == "0x2002" && idx_str == "0x02"){
+            // 发送修改的值
+            auto new_value = item->text().trimmed();
+            bool ok;
+            int node_id = new_value.toInt(&ok, 16);
+            if(ok) {
+                qDebug() << "SettingPage::CheckCobIdChanged: Node ID changed to " << node_id;
+                SetNodeId(static_cast<uint8_t>(node_id));
+                basic_info_bar_->SetChannelCount(QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
+                emit basic_info_bar_->SendInfoChanged(InfoType::kChannelCount, QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
+            } 
+        }
+    }
 }
 
 void SettingPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
@@ -342,7 +366,7 @@ std::vector<uint8_t> SettingInfoTable::CreateRowCmd(ParaItem item) {
 
     std::vector<uint8_t> vec_cmd(command.begin(), command.end());
 
-    // PrintCmd(SDO_COB_ID, vec_cmd, "Create Row CMD: ");
+    // PrintCmd(GetSDOCobId(), vec_cmd, "Create Row CMD: ");
 
     return vec_cmd;
 }
@@ -397,8 +421,8 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
         Fill32ValueToCmd(QStringToUint32Dec(item_text), cmd, 4);
     } 
 
-    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, cmd, kCmdTimeOut);
-    CAN_MGR_PUSH_CMD(SDO_COB_ID, cmd);
+    // CanDriver::GetInstance()->SendCmd(GetSDOCobId(), cmd, kCmdTimeOut);
+    CAN_MGR_PUSH_CMD(GetSDOCobId(), cmd);
 }
 
 bool SettingInfoTable::IsItemReadOnly(QTableWidgetItem *item) {
@@ -450,7 +474,18 @@ void SettingInfoTable::OnSaveSettings() {
     if(info_table_count == 0) {
         return;
     }
-    // qDebug() << "OnSaveSettings";
+
+    auto file_name = QString("CANopen对象字典功能说明_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+
+    QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", file_name, "(xlsx *.xlsx)");
+    qDebug() << "Save File:" << save_path;
+    if(save_path.isEmpty()) {
+        return;
+    }
+    // emit SendSaveSettings();
+    QFileOperator::GetInstance()->saveFile(save_path);
+
+    // // qDebug() << "OnSaveSettings";
     QList<QString> para_list;
     for(int i = 0; i < rowCount(); ++i) {
         auto modify_item = item(i, INFO_TABLE_MODIFY_COLUMN);
@@ -460,9 +495,9 @@ void SettingInfoTable::OnSaveSettings() {
         return;
     }
     auto file_op = QFileOperator::GetInstance();
-    bool res = file_op->SaveModifyValueToLastFile(para_list);
+    bool res = file_op->SaveModifyValueToLastFile(para_list, save_path);
     if(res) {
-        MsgBox::info(tr("修改值已经成功保存到配置文件中：%1").arg(file_op->GetLastLoadFile()));
+        MsgBox::info(tr("修改值已经成功保存到配置文件中：%1").arg(save_path));
     }
     OnConfirmAllValues();
 }
@@ -535,7 +570,6 @@ void SettingInfoTable::OnSaveDefaultValue() {
     qDebug()<< "保存到默认参数";
     on_Save_default_ = true;
     UpdateParams();
-    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD, kCmdTimeOut);
     
     OnConfirmAllValues();
     update();
@@ -548,7 +582,6 @@ void SettingInfoTable::OnSaveToEPROM() {
     }
     on_Save_eeprom_ = true;
     UpdateParams();
-    // CanDriver::GetInstance()->SendCmd(SDO_COB_ID, SDO_SAVE_EEPROM_CMD, kCmdTimeOut);
     
 
     for(int i = 0; i < rowCount(); ++i) {
@@ -596,11 +629,11 @@ void SettingInfoTable::UpdateParams() {
         }
         // 
         if(on_Save_default_) {
-            CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_DEFAULT_CMD);
+            CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_SAVE_DEFAULT_CMD);
             emit SendReadFinished(QString("保存默认参数完成！"));
         }
         if(on_Save_eeprom_) {
-            CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_SAVE_EEPROM_CMD);
+            CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_SAVE_EEPROM_CMD);
             emit SendReadFinished(QString("保存到EEPROM完成"));
         }
     });
@@ -704,9 +737,10 @@ void FunctionBtnArea::OnLoadSettingBtnClicked() {
 }
 
 void FunctionBtnArea::OnSaveSettingBtnClicked() {
-    // QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
-    // qDebug() << "Save File:" << save_path;
-    emit SendSaveSettings();
+    QString save_path = QFileDialog::getSaveFileName(nullptr, "Save File", "", "(*)");
+    qDebug() << "Save File:" << save_path;
+    // emit SendSaveSettings();
+    QFileOperator::GetInstance()->saveFile(save_path);
 }
 
 void FunctionBtnArea::OnModeChangeBtnClicked() {
@@ -726,6 +760,15 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
 }
 
 void FunctionBtnArea::OnLoadToTableBtnClicked() {
+    // can_frame frame;
+    // frame.can_id = GetSDOCobId();
+    // frame.can_dlc = 8;
+    // std::vector<uint8_t> cmd = {0x01, 0x00, 0x20, 0x02, 0x11, 0x00, 0x00, 0x00};
+    // std::copy(cmd.begin(), cmd.end(), frame.data);
+    // ParseEPROMFrame(frame);
+    // return;
+
+
     if (info_table_count == 0) {
         return;
     }
@@ -745,7 +788,7 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
     // CanDriver::GetInstance()->HardReset();
     // 队列是后进先出：先压读取请求、再压 02 40，
     // 设备会先收到 02 40 结束残留的位移读取状态，再收到读取参数请求
-    CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_READ_PARAM_TO_TABLE);
+    CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_READ_PARAM_TO_TABLE);
     // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
     read_req_pending_ = true;
     read_req_timer_->start(500);   // 2s 内没等到设备应答则允许重试
@@ -881,7 +924,12 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
     } //锁释放
 
     //========锁外面发送信号，避免锁内emit死锁风险========
+    if(final_index == "0X2000" && final_subindex == "0X02") {
+        bool ok;
+        final_str_value = QString("0x%1").arg(final_str_value.toInt(&ok,10),2,16,QLatin1Char('0')).toLower();
+    }
     emit SendReadValue(final_str_value, final_index, final_subindex);
+    // qDebug() << "ParseEPROMFrame: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
 
     int percent = 0;
     if(info_table_count > 0) {

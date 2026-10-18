@@ -4,12 +4,20 @@
 #include <cstdint>
 #include <vector>
 #include <array>
+#include <QDebug>
 
 #define CAN_EFF_FLAG    0x80000000U  // 扩展帧标记位（最高bit）
 #define CAN_RTR_FLAG    0x40000000U  // 远程帧
 #define CAN_ERR_FLAG    0x20000000U
 #define CAN_EFF_MASK    0x1FFFFFFFU  // 29位ID掩码（清除标志位，取出原始ID）
 #define CAN_SFF_MASK    0x000007FFU  // 11位标准ID掩码
+
+extern uint8_t g_kNodeId;
+extern void SetNodeId(uint8_t nodeId);
+
+extern uint16_t GetSendCobId();
+extern uint16_t GetSDOCobId();
+extern uint16_t GetRPDO2obId();
 
 /// 切换CANopen
 #define CHANGE_TO_CANOPEN_COB_ID  0x18EF8122
@@ -22,7 +30,7 @@ extern const std::vector<uint8_t> CHANGE_TO_J1939_CMD;
 extern const std::vector<uint8_t> CHANGE_TO_J1939_CMD_RPS;
 
 /// SDO读写测试
-#define SDO_COB_ID  0x640
+// #define GetSDOCobId()  0x640
 
 // 参数配置
 extern const std::vector<uint8_t> SDO_SAVE_DEFAULT_CMD; // 保存默认参数
@@ -43,7 +51,6 @@ extern const std::vector<uint8_t> SDO_OPEN_LOOP_MODE_CMD;
 // 闭环模式
 extern const std::vector<uint8_t> SDO_CLOSE_LOOP_MODE_CMD;
 
-#define SEND_COB_ID  0x240
 // SDO写测试
 extern const std::array<uint8_t, 8> SDO_PWM_OPEN_1_VALUE_CMD; //阀1PWM开环
 extern const std::array<uint8_t, 8> SDO_PWM_OPEN_2_VALUE_CMD; //阀2PWM开环
@@ -98,7 +105,7 @@ extern const std::vector<uint8_t> SDO_RPDO2_CLEAN_RAMP_CMD;
 // 斜坡类型：直坡（位移标定用，不带斜坡时间） RPDO2 0x340  01 FA FA 00 00 00 00 00
 extern const std::vector<uint8_t> SDO_RPDO2_RAMP_TYPE_CMD;
 // 斜坡类型：斜率限制型斜坡（闭环斜坡响应用，斜坡时间10000，只下发一次） RPDO2 0x340  02 FA FA 00 10 27 10 27
-extern const std::vector<uint8_t> SDO_RPDO2_SLOPE_RAMP_CMD;
+extern const std::array<uint8_t, 8> SDO_RPDO2_SLOPE_RAMP_CMD;
 
 // 位移标定目标值（0~1000，50%对应500）
 extern const std::array<uint8_t, 8> SDO_CALIB_TARGET_1_VALUE_CMD; // B4=0x21(标定模式+1侧)

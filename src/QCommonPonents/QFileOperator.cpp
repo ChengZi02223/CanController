@@ -353,20 +353,21 @@ bool QFileOperator::saveExcel(const QString &filePath)
 #endif
 }
 
-bool QFileOperator::SaveModifyValueToLastFile(const QList<QString> &paraList) {
+bool QFileOperator::SaveModifyValueToLastFile(const QList<QString> &paraList, QString file_path) {
 #ifdef USE_QXLSX
-    if(m_last_load_file.isEmpty()) {
+    file_path = file_path.isEmpty() ? m_last_load_file : file_path;
+    if(file_path.isEmpty()) {
         return false;
     }
 
-    QXlsx::Document doc(m_last_load_file);
+    QXlsx::Document doc(file_path);
     if(!doc.load())
     {
-        qWarning()<<"打开原文件失败："<<m_last_load_file;
+        qWarning()<<"打开原文件失败："<<file_path;
         return false;
     }
 
-    int startExcelRow = 3;
+    int startExcelRow = 2;
     for(int i = 0; i < paraList.size(); i++) {
         int excelRow = startExcelRow + i;
         QString modifyVal = paraList.at(i);
@@ -375,9 +376,9 @@ bool QFileOperator::SaveModifyValueToLastFile(const QList<QString> &paraList) {
     }
 
     //保存覆盖原文件
-    bool ok = doc.saveAs(m_last_load_file);
+    bool ok = doc.saveAs(file_path);
     if(!ok) {
-        qWarning()<<"保存回写文件失败！文件被占用？"<<m_last_load_file;
+        qWarning()<<"保存回写文件失败！文件被占用？"<<file_path;
     }
     return ok;
 #else

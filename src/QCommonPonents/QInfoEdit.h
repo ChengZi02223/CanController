@@ -17,6 +17,9 @@ public:
     // 设置版本号（自动添加前缀）
     void setInfor(const QString &infor);
     void setPrefix(const QString &prefix);
+    QString GetText() {
+        return m_infor_;
+    }
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

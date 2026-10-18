@@ -1,4 +1,5 @@
 #include "BasicInfoBar.h"
+#include "can_cmd.h"
 
 BasicInfoBar::BasicInfoBar(LayoutStyle style, QWidget* parent) 
     : QGroupBox(parent) {
@@ -54,7 +55,11 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
 
     connect(serial_num_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kSerialNum, text); });
     connect(model_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kModel, text); });
-    connect(channel_count_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kChannelCount, text);});
+    connect(channel_count_edit_, &QLineEdit::textChanged, this, [this](QString text){ 
+        emit SendInfoChanged(InfoType::kChannelCount, text);
+        auto node_id = static_cast<uint8_t>(channel_count_edit_->GetText().toUInt(nullptr, 16));
+        SetNodeId(node_id);
+    });
     connect(manufacturer_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kManufacturer, text);});
     connect(version_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kVersion, text);});
     connect(baud_rate_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kBaudRate, text);});
@@ -118,6 +123,7 @@ void BasicInfoBar::OnChangeInfo(InfoType type, QString value) {
         default:
         break;
     }
+    update();
 }
 
 void BasicInfoBar::SetSerialNum(const QString& serial_num) {
@@ -146,6 +152,7 @@ QString BasicInfoBar::GetModel() const {
 
 void BasicInfoBar::SetChannelCount(const QString& channel_count) {
     channel_count_edit_->setInfor(channel_count);
+    emit SendInfoChanged(InfoType::kChannelCount, channel_count);
 }
 
 QString BasicInfoBar::GetChannelCount() const {
@@ -190,7 +197,7 @@ void BasicInfoBar::InitData(BasicInfo info) {
     if(memcmp(&info, &tem_info, sizeof(BasicInfo)) == 0) {
         info.serial_num = "TEST-001";
         info.model = "液压设备";
-        info.channel_count = "2";
+        info.channel_count = "40";
         info.manufacturer = "0x51";
         info.version = "V1.2";
         info.baud_rate = "2500000";
@@ -199,7 +206,7 @@ void BasicInfoBar::InitData(BasicInfo info) {
     SetSerialNum("TEST-001");
     SetDate(QDate::currentDate().toString("yyyy-MM-dd"));
     SetModel(info.model);
-    SetChannelCount("2");
+    SetChannelCount("40");
     SetManufacturer(info.manufacturer);
     SetVersion("V1.2");
     SetBaudRate("2500000");

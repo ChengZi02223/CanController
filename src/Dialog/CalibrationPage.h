@@ -98,6 +98,7 @@ public:
     CalibrationPage(QWidget* parent = nullptr);
     ~CalibrationPage(){}
     void InitBasicInfo(BasicInfo info);
+    void SetChannelCount(const QString& channel_count);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -160,6 +161,8 @@ private:
     // 缓降期间禁止其他操作
     void SetRampClosingUI(bool closing);
     bool IsRampClosing() const { return ramp_closing_.load(); }
+
+   int GetRampTime() const;
 
 signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);
@@ -294,6 +297,9 @@ private:
     // WavePlotTool* m_waveTool{nullptr};
     // QCPGraph* m_graphSine{nullptr};    // 正弦波 绑定左Y（流量）
     // QCPGraph* m_graphSaw{nullptr};     // 锯齿波 绑定右Y（位移）
+
+   QMap<int, int> calib_row_value_;
+   int ramp_check_min_ = 10000000;
 };
 
 

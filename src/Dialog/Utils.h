@@ -17,7 +17,8 @@
 
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
-static const std::vector<int> flow_yugu_values = {154, 132, 115, 110, 99, 0, 68, 62, 53, 39, 23};  //预估值
+// static const std::vector<int> flow_yugu_values = {154, 132, 115, 110, 99, 0, 68, 62, 53, 39, 23};  //预估值 10月13日前
+static const std::vector<int> flow_yugu_values = {159, 132, 115, 111, 99, 0, 65, 59, 49, 34, 7};  //预估值
 static const std::vector<int> flow_yugu_value_subidxs = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E};  //预估值
 static const std::vector<int> flow_curr_value_subidxs = {0x12, 0x13, 0x14, 0x15, 0x16, 0xFF, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E};  //预估值
 

@@ -13,6 +13,7 @@ public:
         static CanController instance(parent);
         return &instance;
     }
+    void SetChannelCount(const QString& channel_count);
 
 private:
     CanController(QWidget* parent = nullptr);

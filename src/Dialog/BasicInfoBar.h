@@ -49,8 +49,6 @@ signals:
 
 public slots:
     void OnChangeInfo(InfoType type, QString value);
-
-private slots:
     void SetModel(const QString& model);
     void SetChannelCount(const QString& channel_count);
     void SetManufacturer(const QString& manufacturer);

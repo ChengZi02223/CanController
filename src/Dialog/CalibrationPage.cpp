@@ -21,7 +21,7 @@
 // 取消闭环斜坡后的缓降兜底超时：位移一直到不了0%标定值（如反馈丢失/机械死区卡住）时强制停止
 static constexpr int kRampCloseTimeoutMs = 60 * 1000;
 // 判定到达0%开度的位置容差（0x6301原始位置刻度0~1000）
-static constexpr int kZeroPosTolerance = 5;
+static constexpr int kZeroPosTolerance = 2;
 
 CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
@@ -70,6 +70,10 @@ void CalibrationPage::InitPage() {
 
 void CalibrationPage::InitBasicInfo(BasicInfo info) { basic_info_bar_->InitData(info); }
 
+void CalibrationPage::SetChannelCount(const QString& channel_count) {
+    basic_info_bar_->SetChannelCount(channel_count);
+}
+
 void CalibrationPage::InitPageTimer() {
     stay_timer_1_ = new QTimer();
     stay_timer_2_ = new QTimer();
@@ -87,10 +91,10 @@ void CalibrationPage::OnTimePushCmd() {
     }
     switch (curr_side_) {
     case kSideOne:
-        CAN_MGR_PUSH_CMD(SEND_COB_ID, cur_fa_val_1_cmd_);
+        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_1_cmd_);
         break;
     case kSideTwo:
-        CAN_MGR_PUSH_CMD(SEND_COB_ID, cur_fa_val_2_cmd_);
+        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_2_cmd_);
         break;
     break;    
     default:
@@ -268,7 +272,7 @@ void CalibrationPage::ChangeLoopMode(LoopMode mode) {
     } else {
         cmd = SDO_CLOSE_LOOP_MODE_CMD;
     }
-    CAN_MGR_PUSH_CMD(SDO_COB_ID, cmd);
+    CAN_MGR_PUSH_CMD(GetSDOCobId(), cmd);
     cur_loop_mode_ = mode;
 }
 
@@ -296,7 +300,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
             cur_fa_val_2_cmd_ = ctx.close_cmd;
         }
 
-        CAN_MGR_PUSH_CMD(SEND_COB_ID, ctx.close_cmd);
+        CAN_MGR_PUSH_CMD(GetSendCobId(), ctx.close_cmd);
         QThread::msleep(200);
         // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         emit SendStopReadNMTCmd();
@@ -315,7 +319,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
 
     // 斜坡响应：先下发RPDO2斜坡类型（只发一次），再周期发RPDO1目标值
     if (!ctx.rpdo2_cfg_cmd.empty()) {
-        CAN_MGR_PUSH_CMD(RPDO2_COB_ID, ctx.rpdo2_cfg_cmd);
+        CAN_MGR_PUSH_CMD(GetRPDO2obId(), ctx.rpdo2_cfg_cmd);
     }
 
     // 保存命令帧
@@ -443,7 +447,7 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
         return;
     } else {
         // ChangeLoopMode(kOpenLoop);
-        // CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_OPEN_LOOP_MODE_CMD);
+        // CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_OPEN_LOOP_MODE_CMD);
     }
 
     if (!StartLoopCycle()) {
@@ -554,10 +558,10 @@ void CalibrationPage::PushOpenLoopCmd(LoopSide side,
 {
     if (side == kSideOne) {
         cur_fa_val_1_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(SEND_COB_ID, cur_fa_val_1_cmd_);
+        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_1_cmd_);
     } else if (side == kSideTwo) {
         cur_fa_val_2_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(SEND_COB_ID, cur_fa_val_2_cmd_);
+        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_2_cmd_);
     }
 }
 
@@ -645,7 +649,7 @@ QWidget* CalibrationPage::CreatePIDSettingArea() {
     d_edit_->setAlignment(Qt::AlignCenter);
     target_edit_ = new QLineEdit("100");
     target_edit_->setAlignment(Qt::AlignCenter);
-    ramp_edit_ = new QLineEdit("500");
+    ramp_edit_ = new QLineEdit("8000");
     ramp_edit_->setAlignment(Qt::AlignCenter);
 
     side_btn_ = new QPushButton("1 侧");
@@ -717,20 +721,21 @@ void CalibrationPage::SetPIDParamForSide(bool side_one) {
     std::vector<CanCmdItem> cmds;
     if(side_one) {
         cmds = {
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_1_P_CMD, p_v)},
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_1_I_CMD, i_v)},
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_1_D_CMD, d_v)}
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_P_CMD, p_v)},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_I_CMD, i_v)},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_D_CMD, d_v)}
         };
     } else {
         cmds = {
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_2_P_CMD, p_v)},
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_2_I_CMD, i_v)},
-            {SDO_COB_ID, SetPIDCMDValue(SDO_WRITE_PID_2_D_CMD, d_v)}
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_P_CMD, p_v)},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_I_CMD, i_v)},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_D_CMD, d_v)}
         };
     }
+    qDebug() << "SetPIDParamForSide: "<<cmds.size();
     CAN_MGR_PUSH_CMDS(cmds);
 }
-
+// 闭环阶跃
 void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     qDebug() << "OnPIDStepBtnClicked: "<<checked;
     if (IsRampClosing()) {
@@ -746,7 +751,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
 
     if (checked) {
         // 每次阶跃前先清除斜坡，防止仍按斜坡形式到达目标值
-        CAN_MGR_PUSH_CMD(RPDO2_COB_ID, SDO_RPDO2_CLEAN_RAMP_CMD);
+        CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_CLEAN_RAMP_CMD);
     }
 
     ControlContext ctx;
@@ -763,6 +768,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     HandleControlEvent(checked, ctx);
 }
 
+// 闭环斜坡
 void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
     qDebug() << "OnPIDRampBtnClicked: "<<checked;
     if (IsRampClosing()) {
@@ -795,8 +801,9 @@ ControlContext CalibrationPage::MakeRampContext() {
     ctx.factor      = 1;
     ctx.loop_mode   = kClosedLoop;
     ctx.need_set_pid = true;
-    // 斜率限制型斜坡（缩放比FA FA，斜坡时间10000），启动时只下发一次
-    ctx.rpdo2_cfg_cmd = SDO_RPDO2_SLOPE_RAMP_CMD;
+    // 斜率限制型斜坡（缩放比FA FA，斜坡时间），启动时只下发一次
+    ctx.rpdo2_cfg_cmd = RampTimeCMDConfig(SDO_RPDO2_SLOPE_RAMP_CMD, (double)GetRampTime());
+    PrintCmd(GetRPDO2obId(), ctx.rpdo2_cfg_cmd, "rrrr xxx: ");
     ctx.need_ramp_close = true;
     return ctx;
 }
@@ -825,7 +832,7 @@ void CalibrationPage::StartRampClose(LoopSide side, const std::vector<uint8_t>& 
         cur_fa_val_2_cmd_ = zero_cmd;
     }
     // 立即下发一帧，后续由stay_timer_按500ms周期保活
-    CAN_MGR_PUSH_CMD(SEND_COB_ID, zero_cmd);
+    CAN_MGR_PUSH_CMD(GetSendCobId(), zero_cmd);
 
     SetRampClosingUI(true);
     ramp_close_start_ms_ = QDateTime::currentMSecsSinceEpoch();
@@ -843,6 +850,7 @@ void CalibrationPage::FinishRampClose() {
     ramp_closing_.store(false);
 }
 
+
 void CalibrationPage::OnRampCloseCheck() {
     if (!ramp_closing_.load()) {
         ramp_close_timer_->stop();
@@ -852,8 +860,8 @@ void CalibrationPage::OnRampCloseCheck() {
     // 0%开度标定的位移值：1侧0%为第5行(row 4)，2侧0%为第7行(row 6)，取位移标定值
     const int zero_row = (ramp_close_side_ == kSideTwo) ? 6 : 4;
     int calib_zero = 0;
-    if (displace_table_ && displace_table_->item(zero_row, 0)) {
-        calib_zero = displace_table_->item(zero_row, 0)->text().toInt();
+    if (displace_table_ && displace_table_->item(zero_row, 2)) {
+        calib_zero = displace_table_->item(zero_row, 2)->text().toInt();
     }
 
     int raw_pos = 0;
@@ -861,7 +869,7 @@ void CalibrationPage::OnRampCloseCheck() {
     {
         std::lock_guard<std::mutex> lk(tpdo_mtx_);
         valid = tpdo_2_info_.valid;
-        raw_pos = tpdo_2_info_.rawPosition;
+        raw_pos = tpdo_2_info_.posMm;
     }
 
     bool reached = false;
@@ -873,6 +881,10 @@ void CalibrationPage::OnRampCloseCheck() {
             // 1侧：开度越大位移越大，回0%时位移减小
             reached = (raw_pos <= calib_zero + kZeroPosTolerance);
         }
+        // if(ramp_check_min_ == raw_pos) {
+        //     reached = (raw_pos <= calib_zero + kZeroPosTolerance);
+        // }
+        ramp_check_min_ = raw_pos < ramp_check_min_ ? raw_pos : ramp_check_min_;
     }
 
     const bool timeout =
@@ -882,6 +894,7 @@ void CalibrationPage::OnRampCloseCheck() {
             qDebug() << "RampClose: wait 0% position timeout, force stop";
         }
         FinishRampClose();
+        ramp_check_min_ = 10000000;
     }
 }
 
@@ -910,20 +923,18 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
         StopLoopCycle();
         return;
     } else {
-        // CAN_MGR_PUSH_CMD(SDO_COB_ID, SDO_RAMP_MODE_CMD);
+        // CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_RAMP_MODE_CMD);
         SetPIDParam();
     }
 
-    bool ok = false;
-    int ramp_time = ramp_edit_->text().toInt(&ok);
-    if(!ok) {
-        std::cout << "输入数值非法"<<std::endl;
-        return;
-    }
-
-    CAN_MGR_PUSH_CMD(RPDO2_COB_ID, RampTimeCMDConfig(SDO_RPDO2_RAMP_TIME_CMD, ramp_time));
-
+    auto ramp_time_cmd = RampTimeCMDConfig(SDO_RPDO2_RAMP_TIME_CMD, 5000);
+    CAN_MGR_PUSH_CMD(GetRPDO2obId(), ramp_time_cmd);
+    
     StartLoopCycle();
+}
+
+int CalibrationPage::GetRampTime() const {
+    return ramp_edit_->text().toInt();
 }
 
 void CalibrationPage::OnPIDSaveBtnClicked() {
@@ -959,7 +970,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         displace_table_->setRowHeight(i, 40);
 
         //位移标定值（初始为标称目标值，标定过程中实时记录实际位移）
-        auto calib_stay_item = new QTableWidgetItem(QString::number(GetCalibratValue(i) * 10));
+        auto calib_stay_item = new QTableWidgetItem(QString::number(GetCalibratYuGuValue(i)));
         calib_stay_item->setTextAlignment(Qt::AlignCenter);
         displace_table_->setItem(i, 0, calib_stay_item);
 
@@ -969,7 +980,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         displace_table_->setItem(i, 1, calib_current_item);
 
         //标定预估值（下发目标值，0~1000，50%对应500）
-        auto control_value_item = new QTableWidgetItem(QString::number(GetCalibratValue(i) * 10));
+        auto control_value_item = new QTableWidgetItem(QString::number(GetCalibratYuGuValue(i)));
         control_value_item->setTextAlignment(Qt::AlignCenter);
         displace_table_->setItem(i, 2, control_value_item);
 
@@ -997,7 +1008,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     info_label_ = new QLabel("当前标定：");
 
     auto sub_layout = new QHBoxLayout();
-    auto displace_target_label = new QLabel("位移目标值:");
+    auto displace_target_label = new QLabel("目标值:");
     displace_target_edit_ = new QLineEdit();
     displace_target_edit_->setAlignment(Qt::AlignCenter);
     auto actual_value_label = new QLabel("位移实际值:");
@@ -1039,30 +1050,31 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
     main_layout->addLayout(sub_layout);
 
     range_slider_ = new QRangeSlider(this);
-    range_slider_->SetRange(0, 1000);   // 目标值刻度0~1000，50%对应500，加/减1步进1
+    range_slider_->SetRange(0, 1500);   // 目标值刻度0~1500，50%对应750，加/减1步进1
     main_layout->addWidget(range_slider_);
 
     connect(range_slider_, &QRangeSlider::valueChanged, [=](int value){
         if(!on_calibrat_) {
             return;
         }
+
         displace_target_edit_->setText(QString::number(value));
-        auto selected_calib_item = displace_table_->item(select_calib_, 2);
-        selected_calib_item->setText(QString::number(value));
+        // auto selected_calib_item = displace_table_->item(select_calib_, 2);
+        // selected_calib_item->setText(QString::number(value));
         // 闭环标定：直接下发0~1000目标值（模式0x21/0x22），滑块/加号动1对应目标值动1
         if(select_calib_ < 6) {
             cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_1_VALUE_CMD, value, 1);
         }else {
             cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_2_VALUE_CMD, value, 1);
         }
-
+        // PrintCmd(GetSendCobId(), cur_fa_val_1_cmd_);
         UpdateCalibInfo();
     });
     connect(displace_table_, &QTableWidget::cellClicked, [this](int row, int col){
         select_calib_ = row;
         if(!on_calibrat_) return;
-        auto control_item = displace_table_->item(row, 2); 
-        range_slider_->setValue(control_item->text().toInt());
+        // auto control_item = displace_table_->item(row, 2); 
+        range_slider_->setValue(GetCalibratValue(row) * 10);
     });
     connect(save_btn, &QPushButton::clicked , this, CalibrationPage::OnSaveCalibValueBtnCLicked);
 
@@ -1101,7 +1113,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             // 然后周期下发RPDO1目标值（模式0x21/0x22，目标值跟随滑块改变）
             CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
             SetPIDParamForSide(row < 6);
-            CAN_MGR_PUSH_CMD(RPDO2_COB_ID, SDO_RPDO2_RAMP_TYPE_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_RAMP_TYPE_CMD);
             int value = GetCalibratValue(row) * 10;   // 50%对应500
             if (row < 6) {
                 cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_1_VALUE_CMD, value, 1);
@@ -1119,9 +1131,9 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             SetRowCalib(row, false);
             if (!already_on_calib_) {
                 if (row < 6) {
-                    CAN_MGR_PUSH_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                    CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
                 } else {
-                    CAN_MGR_PUSH_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                    CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
                 }
                 LoopSide side = row < 6 ? kSideOne : kSideTwo;
                 StopDrawThread();
@@ -1129,6 +1141,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
                 // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
                 emit SendStopReadNMTCmd();
             }
+            calib_row_value_[row] = range_slider_->value();
         }
         // 更新高亮（选中前三列）
         for (int c = 0; c < 3; ++c) {
@@ -1139,6 +1152,11 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
 
     } else if (column == 4) {  // 验证列
         // 验证按钮逻辑
+        if(calib_row_value_.find(row) == calib_row_value_.end()) {
+            // 如果该行没有标定值，提示用户先标定
+            QMessageBox::warning(this, "提示", "请先进行标定，再进行验证！");
+            return;
+        }
         QTableWidgetItem *item = displace_table_->item(row, 4);
         // 判断当前是否正在验证（通过文本或额外标志，此处用文本）
         bool isVerifying = (item->text() == "验证中");  // 可自行定义
@@ -1146,10 +1164,12 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             item->setText("验证中");
             // 执行启动验证代码（原 checked==true 分支）
             // 闭环验证：下发标定预估值作为RPDO1目标值（模式0x21/0x22）
-            int target_v = displace_table_->item(row, 2)->text().toInt();
+            // TODO: 发上次标定的结束值
+            int target_v = calib_row_value_[row];
+            // int target_v = displace_table_->item(row, 2)->text().toInt();
             CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
             SetPIDParamForSide(row < 6);
-            CAN_MGR_PUSH_CMD(RPDO2_COB_ID, SDO_RPDO2_RAMP_TYPE_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_RAMP_TYPE_CMD);
             if (row < 6) {
                 cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_1_VALUE_CMD, target_v, 1);
             } else {
@@ -1170,9 +1190,9 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             // 停止验证
             item->setText("验证标定");
             if (row < 6) {
-                CAN_MGR_PUSH_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_1_CMD);
+                CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
             } else {
-                CAN_MGR_PUSH_CMD(SEND_COB_ID, SDO_WRITE_CLOSE_2_CMD);
+                CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
             }
             LoopSide side = row < 6 ? kSideOne : kSideTwo;
             StopDrawThread();
@@ -1266,7 +1286,8 @@ void CalibrationPage::InitCalibValues(int row) {
     for(int i = 0; i < displace_table_->rowCount(); i++) {
         auto control_item = displace_table_->item(i, 2); 
         if(i == row) {
-            auto value = control_item->text().toInt();
+            // auto value = control_item->text().toInt();
+            auto value = GetCalibratValue(row) * 10;
             range_slider_->setValue(value);
             displace_target_edit_->setText(QString::number(value));
         }
@@ -1702,14 +1723,15 @@ void CalibrationPage::DrawStay(const DrawCurveInfo &info) {
         actual_value_edit_->setText(QString::number(info.pos_mm));
         // 位移标定值实时记录当前实际位置（0x6301原始刻度0~1000），
         // 取消闭环斜坡时用0%行的该值判断是否到位
-        int raw_pos = 0;
-        {
-            std::lock_guard<std::mutex> lk(tpdo_mtx_);
-            raw_pos = tpdo_2_info_.rawPosition;
-        }
+        // int raw_pos = 0;
+        // {
+        //     std::lock_guard<std::mutex> lk(tpdo_mtx_);
+        //     raw_pos = tpdo_2_info_.rawPosition;
+
+        // }
         auto calib_pos_item = displace_table_->item(select_calib_, 0);
         if(calib_pos_item) {
-            calib_pos_item->setText(QString::number(raw_pos));
+            calib_pos_item->setText(QString::number(info.pos_mm));
         }
     }
 }

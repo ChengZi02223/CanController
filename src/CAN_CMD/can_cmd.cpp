@@ -1,5 +1,23 @@
 #include "can_cmd.h"
 
+uint8_t g_kNodeId = 0x40;
+
+void SetNodeId(uint8_t nodeId) {
+    g_kNodeId = nodeId;
+}
+
+uint16_t GetSendCobId() {
+    return 0x200u + g_kNodeId;
+}
+
+uint16_t GetSDOCobId() {
+    return 0x600u + g_kNodeId;
+}
+
+uint16_t GetRPDO2obId() {
+    return 0x300u + g_kNodeId;
+}
+
 //切换CANopen
 
 const std::vector<uint8_t> CHANGE_TO_CANOPEN_CMD = {0x75, 0x61, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -82,7 +100,7 @@ const std::vector<uint8_t> SDO_RPDO2_CLEAN_RAMP_CMD = {0x00, 0xFA, 0xFA, 0x00, 0
 // 斜坡类型：直坡（位移标定用，不带斜坡时间） 01 FA FA 00 00 00 00 00
 const std::vector<uint8_t> SDO_RPDO2_RAMP_TYPE_CMD = {0x01, 0xFA, 0xFA, 0x00, 0x00, 0x00, 0x00, 0x00};
 // 斜坡类型：斜率限制型斜坡（闭环斜坡响应用） 02 FA FA 00 10 27 10 27  斜坡时间=10000
-const std::vector<uint8_t> SDO_RPDO2_SLOPE_RAMP_CMD = {0x02, 0xFA, 0xFA, 0x00, 0x10, 0x27, 0x10, 0x27};
+const std::array<uint8_t, 8> SDO_RPDO2_SLOPE_RAMP_CMD = {0x02, 0xFA, 0xFA, 0x00, 0x10, 0x27, 0x10, 0x27};
 
 // 位移标定目标值
 const std::array<uint8_t, 8> SDO_CALIB_TARGET_1_VALUE_CMD = {0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x00, 0x00}; // B4=0x21(标定模式+1侧)

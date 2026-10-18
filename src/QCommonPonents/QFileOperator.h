@@ -50,7 +50,7 @@ public:
     bool openExcel(const QString &filePath);
     bool ParseExcel(const QString &filePath);
     bool saveExcel(const QString &filePath);
-    bool SaveModifyValueToLastFile(const QList<QString> &paraList);
+    bool SaveModifyValueToLastFile(const QList<QString> &paraList, QString file_path = "");
     QString GetLastLoadFile() {return m_last_load_file; }
 
     // 获取全部表格数据转为结构体数组

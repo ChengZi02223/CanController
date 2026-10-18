@@ -329,7 +329,7 @@ void CanConfigWin::onChangeMode() {
         CAN_MGR_PUSH_CMD(CHANGE_TO_CANOPEN_COB_ID, CHANGE_TO_CANOPEN_CMD);
     } else {
         // 切换成J1939模式
-        CAN_MGR_PUSH_CMD(SDO_COB_ID, CHANGE_TO_J1939_CMD);
+        CAN_MGR_PUSH_CMD(GetSDOCobId(), CHANGE_TO_J1939_CMD);
     }
     if(control_mode_ == kMode_J1939) {
         control_mode_ = kMode_PCAN;
