@@ -18,6 +18,10 @@ uint16_t GetRPDO2obId() {
     return 0x300u + g_kNodeId;
 }
 
+uint16_t GetWarningCobId() {
+    return 0x80u + g_kNodeId;
+}
+
 //切换CANopen
 
 const std::vector<uint8_t> CHANGE_TO_CANOPEN_CMD = {0x75, 0x61, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};

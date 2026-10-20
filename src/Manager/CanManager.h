@@ -19,6 +19,7 @@
 
 #include "CanDriver.h"
 #include "CO_CMD.h"
+#include "Utils.h"
 
 enum BatchReadState
 {
@@ -74,6 +75,8 @@ public:
     void SetTpdoEmitIntervalMs(int ms) { m_tpdoEmitIntervalMs_.store(ms); }
     int  TpdoEmitIntervalMs() const    { return m_tpdoEmitIntervalMs_.load(); }
 
+    void HandleWarningFrame(const uint8_t data[8]);
+
 signals:
     void SendRowValue(QString value, QString idx, QString sub_idx);
 
@@ -85,9 +88,13 @@ signals:
 
     void SendTpdo2Position(can_frame frame);
     void SendTpdo3Current(can_frame frame);
+    void warningFrameReceived(const QByteArray &data);
 
 public slots:
     void OnStopNMTRead();
+#ifdef ON_TEST_MODE
+    void OnStartReciveTest();
+#endif
 
 public:
     // 主动停止周期性发送 NMT_CLOSE_READ_CMD
@@ -108,6 +115,9 @@ private:
     void EnqueueReceiveFrame(const can_frame& frame);
 
 private:
+#ifdef ON_TEST_MODE
+    bool onTestMode_ = false;
+#endif
     std::atomic<bool> m_running;
     std::thread m_receiverThread;
     std::thread m_senderThread;

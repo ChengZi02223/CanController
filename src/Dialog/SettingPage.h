@@ -3,6 +3,7 @@
 
 #include "QtWidgets.h"
 #include "BasicInfoBar.h"
+#include "Utils.h"
 #include <map>
 
 class BasicInfoBar;
@@ -148,6 +149,9 @@ private slots:
     void OnLoadToTableBtnClicked();
 
     void OnLoadToTabled(can_frame frame);
+#ifdef ON_TEST_MODE
+    void OnTestWarning();
+#endif
 
 private:
     QPushButton* load_setting_btn_ = nullptr;   //读取配置参数文件

@@ -18,6 +18,7 @@ extern void SetNodeId(uint8_t nodeId);
 extern uint16_t GetSendCobId();
 extern uint16_t GetSDOCobId();
 extern uint16_t GetRPDO2obId();
+extern uint16_t GetWarningCobId();
 
 /// 切换CANopen
 #define CHANGE_TO_CANOPEN_COB_ID  0x18EF8122

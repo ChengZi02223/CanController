@@ -6,7 +6,12 @@
 #include "can_cmd.h"
 #include "BasicInfoBar.h"
 #include "Utils.h"
+#include "CanManager.h"
 
+#include <QMessageBox>
+#include <QString>
+#include <QStringList>
+#include <QDebug>
 #include <iostream>
 
 CanController::CanController(QWidget* parent)
@@ -48,7 +53,111 @@ void CanController::InitWindow() {
         emit calibration_page_->SendInfoChanged(type, value);
     });
     connect(calibration_page_, &CalibrationPage::SendRowValue, setting_page_, &SettingPage::SendRowValue);
+    connect(CanManager::GetInstance(), &CanManager::warningFrameReceived,  this, &CanController::OnWarningFrame, Qt::QueuedConnection);
     InitData();
+}
+
+void CanController::OnWarningFrame(const QByteArray &data) {
+    if (data.size() < 8) {
+        qWarning() << "[CAN] 报警帧长度不足 8 字节:" << data.size();
+        return;
+    }
+    const uint8_t *d = reinterpret_cast<const uint8_t*>(data.constData());
+
+    // ================= 1. 按协议解析 =================
+    const quint16 faultCode  = quint16(d[0]) | quint16(d[1]) << 8;  // Byte0~1 故障码(小端)
+    const quint8  errorReg   = d[2];                                // Byte2 0x1001 当前值
+    const quint8  channel    = d[3];                                // Byte3 通道/对象号
+    const quint16 eventCount = quint16(d[4]) | quint16(d[5]) << 8;  // Byte4~5 事件计数
+    const quint8  severity   = d[6];                                // Byte6 严重度/状态
+    const quint8  levelBits  = severity & 0x03;
+    const bool    stillActive = (severity & 0x04) != 0;
+    const bool    derating    = (severity & 0x08) != 0;
+
+    // ================= 2. 故障复位帧 =================
+    if (faultCode == 0x0000) {
+        qDebug() << "[CAN] 故障复位通知 (对应 0x6040 控制字 Bit7 上升沿)";
+        return;
+    }
+
+    // ================= 3. 协议自校验 (联调抓错用) =================
+    const quint8 expectBit = classToRegBit(faultCode);
+    if (expectBit && (errorReg & expectBit) == 0) {
+        qWarning() << "[CAN] 协议校验异常: 故障码" << hex16(faultCode)
+                   << "属于" << faultClassText(faultCode)
+                   << ", 但 0x1001 =" << hex8(errorReg) << "对应位未置位";
+    }
+    if ((errorReg & 0x01) == 0) {
+        qWarning() << "[CAN] 协议校验异常: 存在激活故障但 0x1001 Bit0(通用错误)未置位";
+    }
+
+    // ================= 4. 字段翻译 =================
+    QString channelText;
+    switch (channel) {
+    case 0x00:  channelText = QStringLiteral("整机");                  break;
+    case 0x01:  channelText = QStringLiteral("TLE92464ED 驱动通道 1"); break;
+    case 0x02:  channelText = QStringLiteral("TLE92464ED 驱动通道 2"); break;
+    case 0x03:  channelText = QStringLiteral("TLE92464ED 驱动通道 3"); break;
+    case 0x04:  channelText = QStringLiteral("TLE92464ED 驱动通道 4"); break;
+    case 0x05:  channelText = QStringLiteral("PWM 通道 1");            break;
+    case 0x06:  channelText = QStringLiteral("PWM 通道 2");            break;
+    case 0x10:  channelText = QStringLiteral("LVDT 位移传感器");       break;
+    case 0x20:  channelText = QStringLiteral("NTC 温度传感器");        break;
+    case 0x30:  channelText = QStringLiteral("主电源");                break;
+    case 0x40:  channelText = QStringLiteral("CAN 通信");              break;
+    default:    channelText = QStringLiteral("未知通道");              break;
+    }
+
+    // 故障码具体描述: 查表, 查不到就显示"大类 + 未知具体码"
+    QString faultText = faultCodeText(faultCode);
+    if (faultText.isEmpty())
+        faultText = faultClassText(faultCode) + QStringLiteral("未知故障码");
+
+    // ★ 等级命名按 9.9.4: A/B = 严重故障, C/D = 轻微故障/警告
+    static const QString kLevelNames[4] = {
+        QStringLiteral("1级(A) 严重故障"),
+        QStringLiteral("2级(B) 严重故障"),
+        QStringLiteral("3级(C) 轻微故障"),
+        QStringLiteral("4级(D) 轻微警告"),
+    };
+    const QString levelText = kLevelNames[levelBits];
+
+    // ================= 5. 图标映射 (A/B 严重 → 红叉, C/D 轻微 → 黄/蓝) =================
+    QMessageBox::Icon icon;
+    switch (levelBits) {
+    case 0:                                  // 1级(A) 严重
+    case 1:  icon = QMessageBox::Critical; break;  // 2级(B) 严重
+    case 2:  icon = QMessageBox::Warning;  break;  // 3级(C) 轻微
+    default: icon = QMessageBox::Information; break; // 4级(D) 提示
+    }
+
+    // ================= 6. 拼装并弹窗 =================
+    const QString title = QStringLiteral("[%1] %2 — %3")
+                              .arg(levelText, channelText, faultText);
+
+    const QString body = QStringLiteral(
+                             "故障码      : %1 (%2)\n"
+                             "故障描述    : %3\n"
+                             "影响通道    : %4 (%5)\n"
+                             "错误寄存器  : %6\n"
+                             "  └ %7\n"
+                             "累计发生    : %8 次\n"
+                             "当前状态    : %9%10")
+                             .arg(hex16(faultCode), faultClassText(faultCode))
+                             .arg(faultText)
+                             .arg(channelText, hex8(channel))
+                             .arg(hex8(errorReg))
+                             .arg(errorRegisterBits(errorReg).join(QStringLiteral("; ")))
+                             .arg(eventCount)
+                             .arg(stillActive ? QStringLiteral("故障激活") : QStringLiteral("已恢复"))
+                             .arg(derating    ? QStringLiteral(", 降额运行中") : QString());
+
+    QMessageBox *box = new QMessageBox(icon, title, body,
+                                       QMessageBox::Ok, this,
+                                       Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setModal(false);
+    box->show();
 }
 
 void CanController::InitData() {

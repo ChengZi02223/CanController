@@ -410,5 +410,127 @@ static std::vector<TestFrame> kBatchReadTestFrames = {
     {0x4C0, {0xFF,0xFF,0x37,0x3D,0x7E,0x00,0x00,0x00}},
 };
 
+// ===================== 测试用报警帧 =====================
+// 说明: 除 0x3110(电源电压过低) 来自你的规范外,
+//       其余故障码为自造测试值, 含义以注释为准
+static std::vector<TestFrame> kTestWarningFrames = {
+    // 1. 0x3110 电源电压过低 | 主电源 | 0x05(Bit0通用+Bit2电压) | 4次 | 1级(A)
+    {0x0C0, {0x10, 0x31, 0x05, 0x30, 0x04, 0x00, 0x00, 0x00}},
+    // 2. 0x3110 电源电压过低 | 主电源 | 12次 | 2级(B)+仍激活
+    {0x0C0, {0x10, 0x31, 0x05, 0x30, 0x0C, 0x00, 0x05, 0x00}},
+    // 3. 0x3111 电源电压过高 | 主电源 | 21次 | 4级(D)+仍激活
+    {0x0C0, {0x11, 0x31, 0x05, 0x30, 0x15, 0x00, 0x07, 0x00}},
+    // 4. 0x2320 驱动通道过流 | TLE通道1 | 0x03(通用+电流) | 2次 | 3级(C)+激活+降额
+    {0x0C0, {0x20, 0x23, 0x03, 0x01, 0x02, 0x00, 0x0E, 0x00}},
+    // 5. 0x2321 驱动通道短路 | TLE通道2 | 0x03 | 1次 | 2级(B)+仍激活
+    {0x0C0, {0x21, 0x23, 0x03, 0x02, 0x01, 0x00, 0x05, 0x00}},
+    // 6. 0x2322 驱动通道开路 | TLE通道3 | 0x03 | 1次 | 1级(A)   ← reg 由0x01改为0x03
+    {0x0C0, {0x22, 0x23, 0x03, 0x03, 0x01, 0x00, 0x00, 0x00}},
+    // 7. 0x4310 驱动通道过温 | TLE通道4 | 0x09(通用+温度) | 3次 | 2级(B)  ← 码由0x2330改为0x4310
+    {0x0C0, {0x10, 0x43, 0x09, 0x04, 0x03, 0x00, 0x01, 0x00}},
+    // 8. 0x2440 PWM输出故障 | PWM通道1 | 0x03 | 6次 | 3级(C)+仍激活  ← reg 由0x01改为0x03
+    {0x0C0, {0x40, 0x24, 0x03, 0x05, 0x06, 0x00, 0x06, 0x00}},
+    // 9. 0x2441 PWM占空比异常 | PWM通道2 | 0x03 | 2次 | 1级(A)       ← reg 由0x01改为0x03
+    {0x0C0, {0x41, 0x24, 0x03, 0x06, 0x02, 0x00, 0x00, 0x00}},
+    // 10. 0x5110 LVDT信号丢失 | LVDT位移传感器 | 0x11(通用+硬件) | 8次 | 2级(B)+仍激活 ← reg 0x01→0x11
+    {0x0C0, {0x10, 0x51, 0x11, 0x10, 0x08, 0x00, 0x05, 0x00}},
+    // 11. 0x4220 NTC超温 | NTC温度传感器 | 0x09 | 10次 | 3级(C)+激活+降额 ← 码由0x5220改为0x4220
+    {0x0C0, {0x20, 0x42, 0x09, 0x20, 0x0A, 0x00, 0x0E, 0x00}},
+    // 12. 0x8410 CAN通信中断 | CAN通信 | 0x41(通用+通信) | 1次 | 4级(D)+仍激活 ← 码0x5410→0x8410, reg 0x11→0x41
+    {0x0C0, {0x10, 0x84, 0x41, 0x40, 0x01, 0x00, 0x07, 0x00}},
+    // 13. 0x6090 整机软件故障 | 整机 | 0x21(通用+软件) | 1次 | 2级(B)
+    {0x0C0, {0x90, 0x60, 0x21, 0x00, 0x01, 0x00, 0x01, 0x00}},
+    // 14. ★故意错误帧: 0x55AA是0x5xxx硬件类, 但reg=0x80(液压位)且缺Bit0 → 应触发2条协议自校验警告;
+    //     通道0x7F测未知通道default分支, 码不在表内测"硬件类未知故障码"回退 | 9次 | 4级+激活+降额
+    {0x0C0, {0xAA, 0x55, 0x80, 0x7F, 0x09, 0x00, 0x0F, 0x00}},
+    // 15. 0x7ABC 未定义大类(0x7无对应位) | 整机 | 0x01(仅Bit0) | 1次 | 3级(C) → 测"未定义大类"回退, 不应有警告
+    {0x0C0, {0xBC, 0x7A, 0x01, 0x00, 0x01, 0x00, 0x02, 0x00}},
+    // 16. 全0 = 故障复位帧 (按协议只打日志, 不弹窗)
+    {0x0C0, {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}}
+};
+
+// ---------- 16 进制格式化: 0x3110 这种格式 ----------
+inline QString hex16(quint16 v, int width = 4) {
+    return QStringLiteral("0x") + QString::number(v, 16)
+                                 .rightJustified(width, QChar('0')).toUpper();
+}
+inline QString hex8(quint8 v) {
+    return QStringLiteral("0x") + QString::number(v, 16)
+                                 .rightJustified(2, QChar('0')).toUpper();
+}
+
+// ---------- 故障码大类 (高 4 位, 与 9.9.3 错误寄存器一一对应) ----------
+inline QString faultClassText(quint16 code) {
+    switch (code >> 12) {
+    case 0x1: return QStringLiteral("通用类");
+    case 0x2: return QStringLiteral("驱动/电流类");
+    case 0x3: return QStringLiteral("电源电压类");
+    case 0x4: return QStringLiteral("温度类");
+    case 0x5: return QStringLiteral("硬件类");
+    case 0x6: return QStringLiteral("软件类");
+    case 0x8: return QStringLiteral("CAN 通信类");
+    case 0x9: return QStringLiteral("液压/应用类");
+    default:  return QStringLiteral("未定义大类");
+    }
+}
+
+// ---------- 具体故障码表 ----------
+// ★ 目前只有 0x3110(电源电压过低) 是规范确认的;
+//   其余为占位, 联调时请按规范里的故障码表逐条替换, 结构不用动
+inline QString faultCodeText(quint16 code) {
+    switch (code) {
+    // 电源电压类 0x3xxx
+    case 0x3110: return QStringLiteral("电源电压过低");
+    case 0x3111: return QStringLiteral("电源电压过高");
+    // 驱动/电流类 0x2xxx
+    case 0x2310: return QStringLiteral("驱动通道过流");
+    case 0x2311: return QStringLiteral("驱动通道短路");
+    case 0x2312: return QStringLiteral("驱动通道开路");
+    case 0x2410: return QStringLiteral("PWM 输出过流");
+    // 温度类 0x4xxx
+    case 0x4310: return QStringLiteral("驱动通道过温");
+    case 0x4210: return QStringLiteral("NTC 温度超限");
+    // 硬件类 0x5xxx
+    case 0x5110: return QStringLiteral("LVDT 信号丢失");
+    case 0x5210: return QStringLiteral("POST 自检失败");
+    // 软件类 0x6xxx
+    case 0x6100: return QStringLiteral("参数配置/写入错误");
+    // CAN 通信类 0x8xxx
+    case 0x8110: return QStringLiteral("CAN 心跳丢失");
+    case 0x8210: return QStringLiteral("通信协议不兼容");
+    // 液压/应用类 0x9xxx
+    case 0x9110: return QStringLiteral("液压油位过低");
+    case 0x9120: return QStringLiteral("液压压力超限");
+    default:     return QString();   // 未知码 → 外层回退为显示大类
+    }
+}
+
+// ---------- 0x1001 错误寄存器 (严格按 9.9.3) ----------
+inline QStringList errorRegisterBits(quint8 reg) {
+    QStringList bits;
+    if (reg & 0x01) bits << QStringLiteral("Bit0 通用错误");
+    if (reg & 0x02) bits << QStringLiteral("Bit1 电流错误(0x2xxx)");
+    if (reg & 0x04) bits << QStringLiteral("Bit2 电压错误(0x3xxx)");
+    if (reg & 0x08) bits << QStringLiteral("Bit3 温度错误(0x4xxx)");
+    if (reg & 0x10) bits << QStringLiteral("Bit4 硬件错误(0x5xxx)");
+    if (reg & 0x20) bits << QStringLiteral("Bit5 软件错误(0x6xxx)");
+    if (reg & 0x40) bits << QStringLiteral("Bit6 通信错误(0x8xxx)");
+    if (reg & 0x80) bits << QStringLiteral("Bit7 液压/应用错误(0x9xxx)");
+    return bits;
+}
+
+// ---------- 故障大类 ↔ 0x1001 对应位 (用于协议自校验) ----------
+inline quint8 classToRegBit(quint16 code) {
+    switch (code >> 12) {
+    case 0x2: return 0x02;
+    case 0x3: return 0x04;
+    case 0x4: return 0x08;
+    case 0x5: return 0x10;
+    case 0x6: return 0x20;
+    case 0x8: return 0x40;
+    case 0x9: return 0x80;
+    default:  return 0x00;
+    }
+}
 
 #endif // _UTILS_H

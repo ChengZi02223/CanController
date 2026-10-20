@@ -15,6 +15,8 @@ public:
     }
     void SetChannelCount(const QString& channel_count);
 
+private slots:
+    void OnWarningFrame(const QByteArray &data);
 private:
     CanController(QWidget* parent = nullptr);
     ~CanController();

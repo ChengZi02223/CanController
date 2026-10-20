@@ -676,10 +676,11 @@ void FunctionBtnArea::InitButtons() {
     progress_dialog_ = new ProgressDialog(this);
     progress_dialog_->setVisible(false);
     progress_dialog_->setButtonText("OK");
-    // confirm_btn_ = new QPushButton("一键确认", this);
-    // confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-    // confirm_btn_->setObjectName("FuncBtn");
-
+#ifdef ON_TEST_MODE
+    confirm_btn_ = new QPushButton("一键确认", this);
+    confirm_btn_->setMinimumSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+    confirm_btn_->setObjectName("FuncBtn");
+#endif
     main_layout->addWidget(load_setting_btn_);
     main_layout->addWidget(save_setting_btn_);
     main_layout->addWidget(mode_change_btn_);
@@ -688,8 +689,9 @@ void FunctionBtnArea::InitButtons() {
     main_layout->addWidget(load_to_table_btn_);
     main_layout->addWidget(clear_setting_btn_);
     main_layout->addStretch();
-    // main_layout->addWidget(confirm_btn_, 0, Qt::AlignBottom);
-
+#ifdef ON_TEST_MODE
+    main_layout->addWidget(confirm_btn_, 0, Qt::AlignBottom);
+#endif
     ConnectSignles();
 }
 
@@ -701,8 +703,9 @@ void FunctionBtnArea::ConnectSignles() {
     connect(save_eeprom_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendSaveToEPROM);
     connect(load_to_table_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnLoadToTableBtnClicked);
     connect(clear_setting_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendClearModifyValue);
-    // connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::SendConfirmValues);
-
+#ifdef ON_TEST_MODE
+    connect(confirm_btn_, &QPushButton::clicked, this, &FunctionBtnArea::OnTestWarning);
+#endif
     connect(CanManager::GetInstance(), &CanManager::SendStartLoadToTable, this, &FunctionBtnArea::OnLoadToTabled);
 
     connect(CanManager::GetInstance(), &CanManager::SendReadFromEPROM, this, &FunctionBtnArea::OnReadFromEPROM);
@@ -721,7 +724,11 @@ void FunctionBtnArea::ConnectSignles() {
         CanDriver::GetInstance()->SendCmd(NMT_COB_ID, PUSH_BUSH_CMD, kCmdTimeOut);
     });
 }
-
+#ifdef ON_TEST_MODE
+void FunctionBtnArea::OnTestWarning() {
+     CanManager::GetInstance()->OnStartReciveTest();
+}
+#endif
 void FunctionBtnArea::OnLoadSettingBtnClicked() {
 #ifdef ON_TEST_MODE
     QString file_path(TEST_CONFIG_FILE);

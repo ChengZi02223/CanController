@@ -187,12 +187,12 @@ void CanManager::SetReceiveBufferLimit(size_t limit) {
 // ---------- 接收线程 ----------
 void CanManager::ReceiverLoop() {
     while (m_running) {
-        // 【新增】CanDriver 未 ready 时什么都不做
+#ifndef ON_TEST_MODE
         if (!CanDriver::GetInstance()->IsInitialized()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-
+#endif
         can_frame frame{};
         if (ReceiveFrame(frame)) {
             ProcessFrame(frame);
@@ -306,20 +306,29 @@ void CanManager::SenderLoop() {
 }
 
 static int text_index_ = 0;
+#ifdef ON_TEST_MODE
+void CanManager::OnStartReciveTest() {
+    onTestMode_ = true;
+}
+#endif
 
 bool CanManager::ReceiveFrame(can_frame &frame) {
 #ifndef ON_TEST_MODE
     return CanDriver::GetInstance()->receive(frame, 100);
 #else
-    if(text_index_ >= kBatchReadTestFrames.size()){
+    if(!onTestMode_){
+        return false;
+    }
+    if(text_index_ >= kTestWarningFrames.size()){
         text_index_ = 0;
         return false;
     }
-    auto test_frame = kBatchReadTestFrames[text_index_];
+    auto test_frame = kTestWarningFrames[text_index_];
     frame.can_id = test_frame.cobId;
     frame.can_dlc = 8;
     std::copy(test_frame.data, test_frame.data + 8, frame.data);
     text_index_ ++;
+    onTestMode_ = false;
     return true;
 #endif
 }
@@ -378,5 +387,11 @@ void CanManager::ProcessFrame(const can_frame &frame) {
             m_lastTpdo3Emit_ = now;
             emit SendTpdo3Current(frame);
         }
+    } else if (id == GetWarningCobId()) {
+        HandleWarningFrame(frame.data);
     }
+}
+
+void CanManager::HandleWarningFrame(const uint8_t data[8]) {
+    emit warningFrameReceived(QByteArray(reinterpret_cast<const char*>(data), 8));
 }
