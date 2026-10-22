@@ -185,6 +185,28 @@ static std::vector<uint8_t> SetPIDCMDValue(const std::array<uint8_t, 8> command,
 }
 
 // RPDO2斜坡配置     0x340   01 FA FA FF 19 19 19 19  RPDO2 的斜坡时间编码为 20ms/bit ，即 0x19=25，25×20=500ms
+static std::vector<uint8_t> RampRadioAndTimeCMDConfig(const std::array<uint8_t, 8> command, double radio, double time) {
+    uint8_t radio_value = static_cast<uint8_t>(radio);
+    uint16_t time_value = static_cast<uint16_t>(time); 
+
+    std::vector<uint8_t> cmd(command.begin(), command.end());
+
+    cmd[1] = radio_value;
+    cmd[2] = radio_value;
+
+    uint8_t value_8 = static_cast<uint8_t>(time_value);
+
+    uint8_t low_byte  = static_cast<uint8_t>(time_value & 0xFF);      // 低字节 0x88
+    uint8_t high_byte = static_cast<uint8_t>((time_value >> 8) & 0xFF); // 高字节 0x13
+
+    cmd[4] = low_byte;
+    cmd[5] = high_byte;
+    cmd[6] = low_byte;
+    cmd[7] = high_byte;
+
+    return cmd;
+}
+
 static std::vector<uint8_t> RampTimeCMDConfig(const std::array<uint8_t, 8> command, double time) {
     uint16_t value = static_cast<uint16_t>(time); 
 
@@ -202,6 +224,7 @@ static std::vector<uint8_t> RampTimeCMDConfig(const std::array<uint8_t, 8> comma
 
     return cmd;
 }
+
 
 //十六进制字符串转 uint16_t
 static uint16_t QStringToUint16Hex(const QString& strVal) {

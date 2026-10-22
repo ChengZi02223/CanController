@@ -285,6 +285,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
 
     // ---------------- 停止 ----------------
     if (!checked) {
+        control_mode_ = ControlAction::kActNone;
         // 取消闭环斜坡：不清定时器/绘图线程，接着周期下发0%目标（斜坡模式），
         // 位移到达标定的0%开度后再停止发送，避免直接按阶跃形式回到中位
         if (ctx.need_ramp_close) {
@@ -352,6 +353,7 @@ void CalibrationPage::OnControl1BtnClicked(bool checked) {
     ctx.factor = 10;
     ctx.loop_mode = kOpenLoop;
 
+    control_mode_ = ControlAction::kControlSide1;
     HandleControlEvent(checked, ctx);
 }
 
@@ -374,6 +376,7 @@ void CalibrationPage::OnControl2BtnClicked(bool checked) {
     ctx.factor = 10;
     ctx.loop_mode = kOpenLoop;
 
+    control_mode_ = ControlAction::kControlSide2;
     HandleControlEvent(checked, ctx);
 }
 
@@ -402,6 +405,7 @@ void CalibrationPage::OnControlCur1BtnClicked(bool checked) {
     ctx.factor = 1;
     ctx.loop_mode = kOpenLoop;
 
+    control_mode_ = ControlAction::kControlCurr1;
     HandleControlEvent(checked, ctx);
 }
 
@@ -429,6 +433,7 @@ void CalibrationPage::OnControlCur2BtnClicked(bool checked) {
     ctx.factor = 1;
     ctx.loop_mode = kOpenLoop;
 
+    control_mode_ = ControlAction::kControlCurr2;
     HandleControlEvent(checked, ctx);
 }
 
@@ -453,7 +458,9 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
     if (!StartLoopCycle()) {
         // 启动失败，将按钮恢复为未选中，避免状态误导
         cycle_btn_->setChecked(false);
+        return;
     }
+    control_mode_ = ControlAction::kOpenCycle;
 }
 
 bool CalibrationPage::StartLoopCycle() {
@@ -490,6 +497,50 @@ void CalibrationPage::StopLoopCycle() {
 
     stop_requested_.store(false);           // 原子写，为下次启动复位
     is_stopping_.store(false);
+    control_mode_ = ControlAction::kActNone;
+}
+
+void CalibrationPage::OnCloseControl() {
+    switch (control_mode_) {
+    case ControlAction::kControlSide1:
+        control_1_btn_->setChecked(false);
+        OnControl1BtnClicked(false);
+        break;
+    case ControlAction::kControlSide2:
+        control_2_btn_->setChecked(false);
+        OnControl2BtnClicked(false);
+        break;
+    case ControlAction::kControlCurr1:
+        control_cur_1_btn_->setChecked(false);
+        OnControlCur1BtnClicked(false);
+        break;
+    case ControlAction::kControlCurr2:
+        control_cur_2_btn_->setChecked(false);
+        OnControlCur2BtnClicked(false);
+        break;
+    case ControlAction::kOpenCycle:
+        cycle_btn_->setChecked(false);
+        OnCycleBtnClicked(false);
+        break;
+    case ControlAction::kCloseStep:
+        step_btn_->setChecked(false);
+        OnPIDStepBtnClicked(false);
+        break;    
+    case ControlAction::kCloseRamp:
+        ramp_btn_->setChecked(false);
+        OnPIDRampBtnClicked(false);
+        break;
+    case ControlAction::kMotionActive:
+        motion_btn_->setChecked(false);
+        OnPIDMotionBtnClicked(false);
+        break;
+    case ControlAction::kCalib:
+    case ControlAction::kConfirmCalib:
+        StopCalib();
+        return;
+    default:
+        break;
+    }
 }
 
 void CalibrationPage::ExecuteLoopCycle() {
@@ -765,6 +816,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     ctx.loop_mode   = kClosedLoop;
     ctx.need_set_pid = true;
 
+    control_mode_ = ControlAction::kCloseStep;
     HandleControlEvent(checked, ctx);
 }
 
@@ -787,6 +839,7 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
         return;
     }
 
+    control_mode_ = ControlAction::kCloseRamp;
     HandleControlEvent(true, MakeRampContext());
     ramp_response_running_ = true;
 }
@@ -802,7 +855,7 @@ ControlContext CalibrationPage::MakeRampContext() {
     ctx.loop_mode   = kClosedLoop;
     ctx.need_set_pid = true;
     // 斜率限制型斜坡（缩放比FA FA，斜坡时间），启动时只下发一次
-    ctx.rpdo2_cfg_cmd = RampTimeCMDConfig(SDO_RPDO2_SLOPE_RAMP_CMD, (double)GetRampTime());
+    ctx.rpdo2_cfg_cmd = RampRadioAndTimeCMDConfig(SDO_RPDO2_SLOPE_RAMP_CMD, GetRampRadio(), (double)GetRampTime());
     PrintCmd(GetRPDO2obId(), ctx.rpdo2_cfg_cmd, "rrrr xxx: ");
     ctx.need_ramp_close = true;
     return ctx;
@@ -927,10 +980,23 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
         SetPIDParam();
     }
 
-    auto ramp_time_cmd = RampTimeCMDConfig(SDO_RPDO2_RAMP_TIME_CMD, 5000);
+    auto ramp_time_cmd = RampRadioAndTimeCMDConfig(SDO_RPDO2_RAMP_TIME_CMD, GetRampRadio(), 5000);
     CAN_MGR_PUSH_CMD(GetRPDO2obId(), ramp_time_cmd);
     
+    control_mode_ = ControlAction::kMotionActive;
     StartLoopCycle();
+}
+
+void CalibrationPage::SetRampRadio(int radio) {
+    if(IsOnSideControl1()) {
+        ramp_radio_1_ = (double)radio;
+    } else {
+        ramp_radio_2_ = (double)radio;
+    }
+}
+
+double CalibrationPage::GetRampRadio() {
+    return IsOnSideControl1() ? ramp_radio_1_ : ramp_radio_2_;
 }
 
 int CalibrationPage::GetRampTime() const {
@@ -1103,6 +1169,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
 
         if (!isCalibrating) {
             // 开始标定
+            control_mode_ = ControlAction::kCalib;
             item->setText("结束标定");
             calib_state_ = kStart;
             on_calibrat_ = true;
@@ -1125,23 +1192,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             StartDrawThread();
         } else {
             // 结束标定
-            item->setText("开始标定");
-            calib_state_ = kEnd;
-            on_calibrat_ = false;
-            SetRowCalib(row, false);
-            if (!already_on_calib_) {
-                if (row < 6) {
-                    CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
-                } else {
-                    CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
-                }
-                LoopSide side = row < 6 ? kSideOne : kSideTwo;
-                StopDrawThread();
-                CloseTimer(side);
-                // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
-                emit SendStopReadNMTCmd();
-            }
-            calib_row_value_[row] = range_slider_->value();
+            StopCalib();
         }
         // 更新高亮（选中前三列）
         for (int c = 0; c < 3; ++c) {
@@ -1161,6 +1212,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
         // 判断当前是否正在验证（通过文本或额外标志，此处用文本）
         bool isVerifying = (item->text() == "验证中");  // 可自行定义
         if (!isVerifying) {
+            control_mode_ = ControlAction::kConfirmCalib;
             item->setText("验证中");
             // 执行启动验证代码（原 checked==true 分支）
             // 闭环验证：下发标定预估值作为RPDO1目标值（模式0x21/0x22）
@@ -1188,19 +1240,41 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             }
         } else {
             // 停止验证
-            item->setText("验证标定");
+            StopCalib();
+        }
+    }
+}
+
+void CalibrationPage::StopCalib() {
+    int row = select_calib_;
+    int col = control_mode_ == ControlAction::kCalib ? 3 : 4;
+    auto item = displace_table_->item(row, col);
+    if (col == 3) {
+        item->setText("开始标定");
+        calib_state_ = kEnd;
+        on_calibrat_ = false;
+        SetRowCalib(row, false);
+        if (!already_on_calib_) {
             if (row < 6) {
                 CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
             } else {
                 CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
             }
-            LoopSide side = row < 6 ? kSideOne : kSideTwo;
-            StopDrawThread();
-            CloseTimer(side);
-            // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
-            emit SendStopReadNMTCmd();
+        }
+        calib_row_value_[row] = range_slider_->value();
+    } else if(col == 4) {
+        item->setText("验证标定");
+        if (row < 6) {
+            CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
+        } else {
+            CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
         }
     }
+    control_mode_ = ControlAction::kActNone;
+    LoopSide side = row < 6 ? kSideOne : kSideTwo;
+    StopDrawThread();
+    CloseTimer(side);
+    emit SendStopReadNMTCmd();
 }
 
 void CalibrationPage::UpdateCalibInfo() {
@@ -1238,6 +1312,7 @@ void CalibrationPage::OnSaveCalibValueBtnCLicked() {
         }
         SetRowCalib(r, false);
     }
+    control_mode_ = ControlAction::kActNone;
     on_calibrat_ = false;
     calib_state_ = kEnd;
     for(int i = 0; i < displace_table_->rowCount(); i++) {
@@ -1392,6 +1467,9 @@ void CalibrationPage::OnSineWaveBtnClicked() {
 
 void CalibrationPage::OnSawtoothWaveBtnClicked() {
     // Implementation for sawtooth wave button click
+#ifdef ON_TEST_MODE
+    CanManager::GetInstance()->OnStartReciveTest();
+#endif
 }
 
 static const QStringList y_axis_labels = {"阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM输出占空比", "电磁铁实际电流", "电磁铁目标电流"};

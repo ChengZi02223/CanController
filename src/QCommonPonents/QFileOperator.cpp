@@ -18,7 +18,6 @@ bool QFileOperator::openFile(const QString &filePath)
     if (suffix == "csv") {
         return openCSV(filePath);
     } else if (suffix == "xlsx" || suffix == "xls") {
-        // return openExcel(filePath);
         return ParseExcel(filePath);
     } else {
         qWarning() << "Unsupported file format:" << suffix;

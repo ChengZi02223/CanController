@@ -52,8 +52,10 @@ void CanController::InitWindow() {
         }
         emit calibration_page_->SendInfoChanged(type, value);
     });
+    connect(setting_page_, &SettingPage::SendRampRadio, calibration_page_,  &CalibrationPage::SetRampRadio);
     connect(calibration_page_, &CalibrationPage::SendRowValue, setting_page_, &SettingPage::SendRowValue);
     connect(CanManager::GetInstance(), &CanManager::warningFrameReceived,  this, &CanController::OnWarningFrame, Qt::QueuedConnection);
+    connect(this, &CanController::SendCloseControl, calibration_page_, &CalibrationPage::OnCloseControl);
     InitData();
 }
 
@@ -121,7 +123,9 @@ void CanController::OnWarningFrame(const QByteArray &data) {
         QStringLiteral("4级(D) 轻微警告"),
     };
     const QString levelText = kLevelNames[levelBits];
-
+    if(levelBits < 2) {
+        emit SendCloseControl();
+    }
     // ================= 5. 图标映射 (A/B 严重 → 红叉, C/D 轻微 → 黄/蓝) =================
     QMessageBox::Icon icon;
     switch (levelBits) {

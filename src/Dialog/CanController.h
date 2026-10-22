@@ -14,7 +14,8 @@ public:
         return &instance;
     }
     void SetChannelCount(const QString& channel_count);
-
+signals:
+    void SendCloseControl();
 private slots:
     void OnWarningFrame(const QByteArray &data);
 private:

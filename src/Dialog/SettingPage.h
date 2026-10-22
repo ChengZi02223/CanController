@@ -31,6 +31,7 @@ signals:
     void SendInputMode(InputMode mode);
     void SendInfoChanged(InfoType type, QString value);
     void SendRowValue(QString value, QString idx, QString sub_idx);
+    void SendRampRadio(int radio);
 
 public slots:
     void OnValueChanged(QTableWidgetItem *item);
@@ -38,6 +39,7 @@ public slots:
 private:
     void InitPage();
     void CheckCobIdChanged(QTableWidgetItem *item);
+    void CheckRampRadioChanged(QTableWidgetItem *item);
 
 private:
     QVBoxLayout* main_layout_ = nullptr;
@@ -67,6 +69,7 @@ protected:
 signals:    
     void updateProgress(int percent);
     void SendReadFinished(QString text);
+    void SendRampRadio(int radio);
 
 public slots:
     void OnLoadSettings();

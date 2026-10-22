@@ -12,8 +12,8 @@
 #include "CanDriver.h"
 #include <QTimer>
 
+enum ControlAction {kActNone, kControlSide1, kControlSide2, kControlCurr1, kControlCurr2, kOpenCycle, kCloseStep, kCloseRamp, kMotionActive, kCalib, kConfirmCalib};
 enum CalibState {kEnd, kStart, kConfirm};
-enum CalibStatus {kOnCalib, kStopCalib, kConfirmCalib};
 
 enum LoopMode { kOpenLoop, kClosedLoop };
 
@@ -99,6 +99,7 @@ public:
     ~CalibrationPage(){}
     void InitBasicInfo(BasicInfo info);
     void SetChannelCount(const QString& channel_count);
+    double GetRampRadio();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -163,6 +164,7 @@ private:
     bool IsRampClosing() const { return ramp_closing_.load(); }
 
    int GetRampTime() const;
+   void StopCalib();
 
 signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);
@@ -172,6 +174,10 @@ signals:
     void SendCalibCurrentValue(double value);
     void SendStopReadNMTCmd();
      void SendMarkGapAllCurves(); 
+
+public slots:
+    void SetRampRadio(int radio);
+    void OnCloseControl();
 
 private slots:
     void OnControl1BtnClicked(bool checked);
@@ -262,6 +268,9 @@ private:
 
     QLineEdit* target_flow_edit_ = nullptr;
 
+    double ramp_radio_1_ = 250.0;
+    double ramp_radio_2_ = 250.0;
+
     QTableWidget* displace_table_ = nullptr;
     QRangeSlider* range_slider_ = nullptr;
     QLabel* info_label_ = nullptr;
@@ -271,7 +280,6 @@ private:
     std::vector<QPushButton*> calib_btns_;
     std::vector<QPushButton*> verify_btns_;
     CalibState calib_state_ = kEnd; //标定按钮
-    CalibStatus calib_status_ = kStopCalib;   // 标定状态按钮
     bool already_on_calib_ = false;
 
     QLineEdit *displace_target_edit_ = nullptr;
@@ -300,6 +308,8 @@ private:
 
    QMap<int, int> calib_row_value_;
    int ramp_check_min_ = 10000000;
+
+   ControlAction control_mode_ = ControlAction::kActNone;
 };
 
 

@@ -156,6 +156,7 @@ void SettingPage::InitPage() {
 
     // connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
     connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
+    connect(setting_info_table_, &SettingInfoTable::SendRampRadio, this,  &SettingPage::SendRampRadio);
     CustomDelegate* m_delegate = new CustomDelegate(this);
     setting_info_table_->setItemDelegate(m_delegate);
     connect(m_delegate, &CustomDelegate::cellEditReturnPressed,
@@ -167,6 +168,7 @@ void SettingPage::InitPage() {
             item->setText(newText);
             OnValueChanged(item);
             CheckCobIdChanged(item);
+            CheckRampRadioChanged(item);
         }
     });
 }
@@ -188,6 +190,24 @@ void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
                 SetNodeId(static_cast<uint8_t>(node_id));
                 basic_info_bar_->SetChannelCount(QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
                 emit basic_info_bar_->SendInfoChanged(InfoType::kChannelCount, QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
+            } 
+        }
+    }
+}
+
+void SettingPage::CheckRampRadioChanged(QTableWidgetItem *item) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    if(obj_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        if(obj_str == "0x6322" || obj_str == "0x6323"){
+            // 发送修改的值
+            auto new_value = item->text().trimmed();
+            bool ok;
+            int radio = new_value.toInt(&ok);
+            if(ok) {
+                emit SendRampRadio(radio);
+                qDebug() << "--> radio : " << radio;
             } 
         }
     }
@@ -933,7 +953,7 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
     //========锁外面发送信号，避免锁内emit死锁风险========
     if(final_index == "0X2000" && final_subindex == "0X02") {
         bool ok;
-        final_str_value = QString("0x%1").arg(final_str_value.toInt(&ok,10),2,16,QLatin1Char('0')).toLower();
+        final_str_value = QString("%1").arg(final_str_value.toInt(&ok,10),2,16,QLatin1Char('0')).toLower();
     }
     emit SendReadValue(final_str_value, final_index, final_subindex);
     // qDebug() << "ParseEPROMFrame: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
