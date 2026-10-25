@@ -55,8 +55,13 @@ void CanController::InitWindow() {
     connect(setting_page_, &SettingPage::SendRampRadio, calibration_page_,  &CalibrationPage::SetRampRadio);
     connect(calibration_page_, &CalibrationPage::SendRowValue, setting_page_, &SettingPage::SendRowValue);
     connect(CanManager::GetInstance(), &CanManager::warningFrameReceived,  this, &CanController::OnWarningFrame, Qt::QueuedConnection);
+    connect(CanManager::GetInstance(), &CanManager::SendWarningMessage,  this, &CanController::OnWarningMessage, Qt::QueuedConnection);
     connect(this, &CanController::SendCloseControl, calibration_page_, &CalibrationPage::OnCloseControl);
     InitData();
+}
+
+void CanController::OnWarningMessage(const QString &msg) {
+    QMessageBox::warning(nullptr, tr("Warnning"), msg);
 }
 
 void CanController::OnWarningFrame(const QByteArray &data) {

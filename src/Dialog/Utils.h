@@ -13,7 +13,7 @@
 #define kThreadWaitTime 200
 
 #define kCloseCycleWaitTime 5 //s
-// #define ON_TEST_MODE
+#define ON_TEST_MODE
 
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
@@ -433,6 +433,11 @@ static std::vector<TestFrame> kBatchReadTestFrames = {
     {0x4C0, {0xFF,0xFF,0x37,0x3D,0x7E,0x00,0x00,0x00}},
 };
 
+// 心跳包
+static std::vector<TestFrame> kHeartTestCmd = {
+    {0x740, {0x01,0x00,0x00,0x00,0x40,0x00,0x00,0x00}}  // 心跳包
+};
+
 // ===================== 测试用报警帧 =====================
 // 说明: 除 0x3110(电源电压过低) 来自你的规范外,
 //       其余故障码为自造测试值, 含义以注释为准
@@ -554,6 +559,111 @@ inline quint8 classToRegBit(quint16 code) {
     case 0x9: return 0x80;
     default:  return 0x00;
     }
+}
+
+struct SettingRange {
+    QString index_;
+    QString sub_idx_;
+    int min_value_;    
+    int max_value_;
+};
+
+static std::vector<SettingRange> kSettingRanges {
+    {"0x2002", "0x03", 0, 127},
+    {"0x6322", "-", 0, 250},
+    {"0x6323", "-", 0, 250},
+    {"0x2003", "0x02", 83, 162},
+    {"0x2003", "0x03", 83, 162},
+    {"0x2003", "0x04", 83, 162},
+    {"0x2003", "0x05", 83, 162},
+    {"0x2003", "0x06", 83, 162},
+
+    {"0x2003", "0x0A", 5, 83},
+    {"0x2003", "0x0B", 5, 83},
+    {"0x2003", "0x0C", 5, 83},
+    {"0x2003", "0x0D", 5, 83},
+    {"0x2003", "0x0E", 5, 83}
+};
+
+static bool IsValueOutOfRanged(QString index, QString sub_idx, int value) {
+    auto it = std::find_if(kSettingRanges.begin(), kSettingRanges.end(), [&](SettingRange range){
+        return (range.index_ == index) && (range.sub_idx_ == sub_idx);
+    });
+
+    if(it != kSettingRanges.end()) {
+        auto range = (*it);
+        return (range.min_value_ < value) && (value < range.max_value_);
+    }
+
+    return false;
+}
+
+static QString GetOutOfRangeString(QString index, QString sub_idx) {
+    auto it = std::find_if(kSettingRanges.begin(), kSettingRanges.end(), [&](SettingRange range){
+        return (range.index_ == index) && (range.sub_idx_ == sub_idx);
+    });
+
+    if(it != kSettingRanges.end()) {
+        auto range = (*it);
+        return QString("(%1, %2)").arg(range.min_value_).arg(range.max_value_);
+    }
+
+    return "";
+}
+
+static int limitCurrent1 = 0;
+static int limitCurrent2 = 0;
+
+static void gSetLimitCurrent(int side, int value) {
+    if(side == 1) {
+        limitCurrent1 = value;
+    } else if(side == 2) {
+        limitCurrent2 = value;
+    }
+}
+
+static bool IsOutOfRangeLimitCur(int side, int value) {
+    if(side == 1) {
+        return limitCurrent1 < value;
+    } else if(side == 2) {
+        return limitCurrent2 < value;
+    }
+    return false;
+}
+
+static int GetLimitCur(int side) {
+    if(side == 1) {
+        return limitCurrent1;
+    } else if(side == 2) {
+        return limitCurrent2;
+    }
+    return 0;
+}
+
+static const QSet<QString> targetSet = {
+    "0x12",
+    "0x13",
+    "0x14",
+    "0x15",
+    "0x16",
+    "0x1A",
+    "0x1B",
+    "0x1C",
+    "0x1D",
+    "0x1E"
+};
+
+inline bool IsCurSubIndex(QString index) {
+    return targetSet.contains(index);
+}
+
+inline int GetIndexSide(QString index) {
+    if(index == "0x12" || index == "0x13"|| index == "0x14"|| index == "0x15"|| index == "0x16") {
+        return 1;
+    } else if (index == "0x1A" || index == "0x1B" || index == "0x1C" || index == "0x1D" || index == "0x1E") {
+        return 2;
+    }
+    return 0;
 }
 
 #endif // _UTILS_H

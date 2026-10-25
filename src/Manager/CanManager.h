@@ -16,6 +16,7 @@
 #include <chrono>
 #include <deque>
 #include <QDateTime>
+#include <QTimer>
 
 #include "CanDriver.h"
 #include "CO_CMD.h"
@@ -56,7 +57,7 @@ public:
     void Stop();
     bool IsRunning() const { return m_running; }
 
-    void PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd);
+    void PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd, bool answer = false, uint32_t re_id = 0x00);
     void PushCommand(const CanCmdItem& item);
     void PushCommands(const std::vector<CanCmdItem>& items);
 
@@ -89,6 +90,8 @@ signals:
     void SendTpdo2Position(can_frame frame);
     void SendTpdo3Current(can_frame frame);
     void warningFrameReceived(const QByteArray &data);
+
+    void SendWarningMessage(const QString &msg);
 
 public slots:
     void OnStopNMTRead();
@@ -151,6 +154,12 @@ private:
     int tx_backoff_ms_ = 5;                  // 当前退避间隔
     long long tx_first_fail_ms_ = 0;         // 本轮连续失败起点
     bool tx_stall_logged_ = false;           // 本轮是否已打过停顿日志
+
+    QTime *heart_time_ = nullptr;
+    QTime *receive_time_ = nullptr;
+    uint16_t curr_check_id_ = 0x00;
+    bool check_answer_ = false;
+    
 };
 
 #endif // _CAN_MANAGER_H_

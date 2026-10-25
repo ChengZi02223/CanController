@@ -24,7 +24,7 @@
 #define COLUMN_COUNT 7
 #define ROW_HEIGHT 42
 
-#define TEST_CONFIG_FILE "D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明V1.xlsx"
+#define TEST_CONFIG_FILE "D:/Desktop/yc/PartTimeJobs/Windows/CanController_Docs/CANopen对象字典功能说明V3.xlsx"
 
 static int info_table_count = 0;
 static bool on_Save_default_ = false;
@@ -163,12 +163,22 @@ void SettingPage::InitPage() {
             this, [this](int row, int col, const QString &newText){
         auto item = setting_info_table_->item(row, col);
         if(item) {
-            // qDebug() << "Old value: " << item->text() << ", New value: " << newText;
             old_item_value_ = item->text();
+            if(!CheckItemRanged(item)) {
+                item->setText(old_item_value_);
+                return;
+            }
+
+            if(!(CheckItemCurrRanged(item, newText))) {
+                item->setText(old_item_value_);
+                return;                
+            }
+            // qDebug() << "Old value: " << item->text() << ", New value: " << newText;
             item->setText(newText);
             OnValueChanged(item);
             CheckCobIdChanged(item);
             CheckRampRadioChanged(item);
+            SetLimitCurrent(item);
         }
     });
 }
@@ -180,7 +190,7 @@ void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
     if(obj_itm && idx_itm) {
         QString obj_str = obj_itm->text().trimmed();
         QString idx_str = idx_itm->text().trimmed();
-        if(obj_str == "0x2002" && idx_str == "0x02"){
+        if(obj_str == "0x2002" && idx_str == "0x03"){
             // 发送修改的值
             auto new_value = item->text().trimmed();
             bool ok;
@@ -209,6 +219,68 @@ void SettingPage::CheckRampRadioChanged(QTableWidgetItem *item) {
                 emit SendRampRadio(radio);
                 qDebug() << "--> radio : " << radio;
             } 
+        }
+    }
+}
+
+bool SettingPage::CheckItemRanged(QTableWidgetItem *item) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        // 发送修改的值
+        auto value = item->text().trimmed();
+        auto warn = IsValueOutOfRanged(obj_str, idx_str, value.toInt());
+        if(warn) {
+            QString msg = QString("修改值 %1 超出设定范围%2!").arg(value).arg(GetOutOfRangeString(obj_str, idx_str));
+            emit CanManager::GetInstance()->SendWarningMessage(msg);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SettingPage::CheckItemCurrRanged(QTableWidgetItem *item, QString new_value) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        // qDebug() << "CheckItemCurrRanged--> " << obj_str << "  -  " << idx_str;
+        if(obj_str == "0x2003" && IsCurSubIndex(idx_str)){
+            int side = GetIndexSide(idx_str);
+            // qDebug() << "CheckItemCurrRanged value--> " << side << "  -  " << value << " - " << item->text();
+            if(IsOutOfRangeLimitCur(side, new_value.toInt())) {
+                QString msg = QString("电流修改值 %1 超出极限电流 %2 !").arg(new_value).arg(GetLimitCur(side));
+                emit CanManager::GetInstance()->SendWarningMessage(msg);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool SettingPage::SetLimitCurrent(QTableWidgetItem *item) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        // qDebug() << "SetLimitCurrent--> " << obj_str << "  -  " << idx_str;
+        if(obj_str == "0x2003" && ((idx_str == "0x11") || (idx_str == "0x1F"))) {
+            int side = 0;
+            if(idx_str == "0x11") {
+                side = 1;
+            } else if(idx_str == "0x1F") {
+                side = 2;
+            }
+            auto value = item->text().trimmed();
+            qDebug() << "SetLimitCurrent--> value: " << side << "  -  " << value;
+            gSetLimitCurrent(side, value.toInt());
         }
     }
 }
@@ -267,7 +339,7 @@ SettingInfoTable::SettingInfoTable(QWidget* parent) : QTableWidget(parent) {
 void SettingInfoTable::InsterRow(ParaItem item) {
     bool ok;
     int serialNum = item.serialNum.toInt(&ok);
-    if(!ok || serialNum < 0) return;
+    // if(!ok || serialNum < 0) return;
     if(item.objDictName.trimmed().isEmpty()) return;  // 跳过空行(序号33)
     int row = rowCount();          // 顺序追加，不用序号算
     insertRow(row);
@@ -385,9 +457,6 @@ std::vector<uint8_t> SettingInfoTable::CreateRowCmd(ParaItem item) {
     }
 
     std::vector<uint8_t> vec_cmd(command.begin(), command.end());
-
-    // PrintCmd(GetSDOCobId(), vec_cmd, "Create Row CMD: ");
-
     return vec_cmd;
 }
 
@@ -441,7 +510,6 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
         Fill32ValueToCmd(QStringToUint32Dec(item_text), cmd, 4);
     } 
 
-    // CanDriver::GetInstance()->SendCmd(GetSDOCobId(), cmd, kCmdTimeOut);
     CAN_MGR_PUSH_CMD(GetSDOCobId(), cmd);
 }
 
@@ -487,7 +555,7 @@ void SettingInfoTable::OnLoadSettings() {
             setItem(i, j, value_item);
         }
     }
-    info_table_count = rowCount();
+    info_table_count = rowCount();   
 }
 
 void SettingInfoTable::OnSaveSettings() {
@@ -787,15 +855,6 @@ void FunctionBtnArea::OnModeChangeBtnClicked() {
 }
 
 void FunctionBtnArea::OnLoadToTableBtnClicked() {
-    // can_frame frame;
-    // frame.can_id = GetSDOCobId();
-    // frame.can_dlc = 8;
-    // std::vector<uint8_t> cmd = {0x01, 0x00, 0x20, 0x02, 0x11, 0x00, 0x00, 0x00};
-    // std::copy(cmd.begin(), cmd.end(), frame.data);
-    // ParseEPROMFrame(frame);
-    // return;
-
-
     if (info_table_count == 0) {
         return;
     }
@@ -808,15 +867,9 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
         return;
     }
     qDebug()<<"OnLoadToTableBtnClicked read_req_pending_: "<< read_req_pending_;
-    // 兜底：若校准页的周期 02 40 还在发送（心跳丢失时标志不会自动清除），
-    // 先停掉，避免它中断本次表格读取
-    // CanManager::GetInstance()->StopNmtCloseRepeat();
-    // CanManager::GetInstance()->ClearCommands();
-    // CanDriver::GetInstance()->HardReset();
-    // 队列是后进先出：先压读取请求、再压 02 40，
-    // 设备会先收到 02 40 结束残留的位移读取状态，再收到读取参数请求
+
     CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_READ_PARAM_TO_TABLE);
-    // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
+
     read_req_pending_ = true;
     read_req_timer_->start(500);   // 2s 内没等到设备应答则允许重试
     start_read_eprom_ = true;
@@ -951,13 +1004,21 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
     } //锁释放
 
     //========锁外面发送信号，避免锁内emit死锁风险========
-    if(final_index == "0X2000" && final_subindex == "0X02") {
+    if(((final_index == "0X2000") &&(final_subindex == "0X02")) || ((final_index == "0X2002") && final_subindex == "0X03")) {
         bool ok;
         final_str_value = QString("%1").arg(final_str_value.toInt(&ok,10),2,16,QLatin1Char('0')).toLower();
     }
     emit SendReadValue(final_str_value, final_index, final_subindex);
     // qDebug() << "ParseEPROMFrame: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
-
+    if(final_index == "0X2003") {
+        int side = 0;
+        if(final_subindex == "0X11") {
+            side = 1;
+        } else if(final_subindex == "0X1F") {
+            side = 2;
+        }
+        gSetLimitCurrent(side, final_str_value.toInt());
+    }
     int percent = 0;
     if(info_table_count > 0) {
         percent = static_cast<int>(100.0 * local_parse_count / info_table_count);

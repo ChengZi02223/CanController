@@ -18,6 +18,7 @@ signals:
     void SendCloseControl();
 private slots:
     void OnWarningFrame(const QByteArray &data);
+    void OnWarningMessage(const QString &msg);
 private:
     CanController(QWidget* parent = nullptr);
     ~CanController();

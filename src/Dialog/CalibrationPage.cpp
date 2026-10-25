@@ -91,10 +91,10 @@ void CalibrationPage::OnTimePushCmd() {
     }
     switch (curr_side_) {
     case kSideOne:
-        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_1_cmd_);
+        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_1_cmd_);
         break;
     case kSideTwo:
-        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_2_cmd_);
+        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_2_cmd_);
         break;
     break;    
     default:
@@ -301,7 +301,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
             cur_fa_val_2_cmd_ = ctx.close_cmd;
         }
 
-        CAN_MGR_PUSH_CMD(GetSendCobId(), ctx.close_cmd);
+        CAN_MGR_PUSH_CMD(GetRPDOCobId(), ctx.close_cmd);
         QThread::msleep(200);
         // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         emit SendStopReadNMTCmd();
@@ -320,7 +320,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
 
     // 斜坡响应：先下发RPDO2斜坡类型（只发一次），再周期发RPDO1目标值
     if (!ctx.rpdo2_cfg_cmd.empty()) {
-        CAN_MGR_PUSH_CMD(GetRPDO2obId(), ctx.rpdo2_cfg_cmd);
+        CAN_MGR_PUSH_CMD(GetRPDO2CobId(), ctx.rpdo2_cfg_cmd);
     }
 
     // 保存命令帧
@@ -609,10 +609,10 @@ void CalibrationPage::PushOpenLoopCmd(LoopSide side,
 {
     if (side == kSideOne) {
         cur_fa_val_1_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_1_cmd_);
+        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_1_cmd_);
     } else if (side == kSideTwo) {
         cur_fa_val_2_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(GetSendCobId(), cur_fa_val_2_cmd_);
+        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_2_cmd_);
     }
 }
 
@@ -772,15 +772,15 @@ void CalibrationPage::SetPIDParamForSide(bool side_one) {
     std::vector<CanCmdItem> cmds;
     if(side_one) {
         cmds = {
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_P_CMD, p_v)},
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_I_CMD, i_v)},
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_D_CMD, d_v)}
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_P_CMD, p_v), true, CUR_STAY_ID},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_I_CMD, i_v), true, CUR_STAY_ID},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_1_D_CMD, d_v), true, CUR_STAY_ID}
         };
     } else {
         cmds = {
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_P_CMD, p_v)},
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_I_CMD, i_v)},
-            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_D_CMD, d_v)}
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_P_CMD, p_v), true, CUR_STAY_ID},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_I_CMD, i_v), true, CUR_STAY_ID},
+            {GetSDOCobId(), SetPIDCMDValue(SDO_WRITE_PID_2_D_CMD, d_v), true, CUR_STAY_ID}
         };
     }
     qDebug() << "SetPIDParamForSide: "<<cmds.size();
@@ -802,7 +802,7 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
 
     if (checked) {
         // 每次阶跃前先清除斜坡，防止仍按斜坡形式到达目标值
-        CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_CLEAN_RAMP_CMD);
+        CAN_MGR_PUSH_CMD(GetRPDO2CobId(), SDO_RPDO2_CLEAN_RAMP_CMD);
     }
 
     ControlContext ctx;
@@ -856,7 +856,7 @@ ControlContext CalibrationPage::MakeRampContext() {
     ctx.need_set_pid = true;
     // 斜率限制型斜坡（缩放比FA FA，斜坡时间），启动时只下发一次
     ctx.rpdo2_cfg_cmd = RampRadioAndTimeCMDConfig(SDO_RPDO2_SLOPE_RAMP_CMD, GetRampRadio(), (double)GetRampTime());
-    PrintCmd(GetRPDO2obId(), ctx.rpdo2_cfg_cmd, "rrrr xxx: ");
+    PrintCmd(GetRPDO2CobId(), ctx.rpdo2_cfg_cmd, "rrrr xxx: ");
     ctx.need_ramp_close = true;
     return ctx;
 }
@@ -885,7 +885,7 @@ void CalibrationPage::StartRampClose(LoopSide side, const std::vector<uint8_t>& 
         cur_fa_val_2_cmd_ = zero_cmd;
     }
     // 立即下发一帧，后续由stay_timer_按500ms周期保活
-    CAN_MGR_PUSH_CMD(GetSendCobId(), zero_cmd);
+    CAN_MGR_PUSH_CMD(GetRPDOCobId(), zero_cmd);
 
     SetRampClosingUI(true);
     ramp_close_start_ms_ = QDateTime::currentMSecsSinceEpoch();
@@ -981,7 +981,7 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
     }
 
     auto ramp_time_cmd = RampRadioAndTimeCMDConfig(SDO_RPDO2_RAMP_TIME_CMD, GetRampRadio(), 5000);
-    CAN_MGR_PUSH_CMD(GetRPDO2obId(), ramp_time_cmd);
+    CAN_MGR_PUSH_CMD(GetRPDO2CobId(), ramp_time_cmd);
     
     control_mode_ = ControlAction::kMotionActive;
     StartLoopCycle();
@@ -1133,7 +1133,7 @@ QWidget* CalibrationPage::CreateDisplacementArea() {
         }else {
             cur_fa_val_2_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_2_VALUE_CMD, value, 1);
         }
-        // PrintCmd(GetSendCobId(), cur_fa_val_1_cmd_);
+        // PrintCmd(GetRPDOCobId(), cur_fa_val_1_cmd_);
         UpdateCalibInfo();
     });
     connect(displace_table_, &QTableWidget::cellClicked, [this](int row, int col){
@@ -1180,7 +1180,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             // 然后周期下发RPDO1目标值（模式0x21/0x22，目标值跟随滑块改变）
             CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
             SetPIDParamForSide(row < 6);
-            CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_RAMP_TYPE_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDO2CobId(), SDO_RPDO2_RAMP_TYPE_CMD);
             int value = GetCalibratValue(row) * 10;   // 50%对应500
             if (row < 6) {
                 cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_1_VALUE_CMD, value, 1);
@@ -1221,7 +1221,7 @@ void CalibrationPage::OnCalibButtonClicked(int row, int column) {
             // int target_v = displace_table_->item(row, 2)->text().toInt();
             CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
             SetPIDParamForSide(row < 6);
-            CAN_MGR_PUSH_CMD(GetRPDO2obId(), SDO_RPDO2_RAMP_TYPE_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDO2CobId(), SDO_RPDO2_RAMP_TYPE_CMD);
             if (row < 6) {
                 cur_fa_val_1_cmd_ = SetTargetCMDValue(SDO_CALIB_TARGET_1_VALUE_CMD, target_v, 1);
             } else {
@@ -1256,18 +1256,18 @@ void CalibrationPage::StopCalib() {
         SetRowCalib(row, false);
         if (!already_on_calib_) {
             if (row < 6) {
-                CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
+                CAN_MGR_PUSH_CMD(GetRPDOCobId(), SDO_WRITE_CLOSE_1_CMD);
             } else {
-                CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
+                CAN_MGR_PUSH_CMD(GetRPDOCobId(), SDO_WRITE_CLOSE_2_CMD);
             }
         }
         calib_row_value_[row] = range_slider_->value();
     } else if(col == 4) {
         item->setText("验证标定");
         if (row < 6) {
-            CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_1_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDOCobId(), SDO_WRITE_CLOSE_1_CMD);
         } else {
-            CAN_MGR_PUSH_CMD(GetSendCobId(), SDO_WRITE_CLOSE_2_CMD);
+            CAN_MGR_PUSH_CMD(GetRPDOCobId(), SDO_WRITE_CLOSE_2_CMD);
         }
     }
     control_mode_ = ControlAction::kActNone;

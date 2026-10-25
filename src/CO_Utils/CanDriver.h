@@ -31,9 +31,12 @@ struct CanCmdItem
 {
     uint32_t cobId;
     std::vector<uint8_t> cmd;
+    bool wait_for_answer = false;
+    uint32_t receive_id;
 
     CanCmdItem() : cobId(0) {}
-    CanCmdItem(uint32_t id, const std::vector<uint8_t>& c) : cobId(id), cmd(c) {}
+    CanCmdItem(uint32_t id, const std::vector<uint8_t>& c, bool answer = false, uint32_t re_id = 0x00) : 
+                cobId(id), cmd(c), wait_for_answer(answer), receive_id(re_id) {}
 };
 
 class CanDriver {

@@ -2,6 +2,8 @@
 #include "Utils.h"
 #include "can_cmd.h"
 
+#define HeartTimeOut 2000
+#define CmdCheckTimeOut 2000
 namespace {
 // 命令队列长度上限：防止队列无限膨胀（丢最旧的）
 constexpr size_t kMaxQueueLen = 100;
@@ -20,7 +22,10 @@ long long SteadyNowMs() {
 } // namespace
 
 CanManager::CanManager(QObject *parent)
-    : QObject(parent), m_running(false) {}
+    : QObject(parent), m_running(false) {
+        heart_time_ = new QTime();
+        receive_time_= new QTime();
+    }
 
 CanManager::~CanManager() {
     Stop();
@@ -78,7 +83,7 @@ void CanManager::SetHeartbeatTimeout(uint8_t nodeId, uint32_t timeoutMs) {
 
 
 // ========== 【新增】命令栈接口 ==========
-void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd) {
+void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd, bool answer, uint32_t re_id) {
     PrintCmd(cobId, cmd, "PushCommand");
     if(!CanDriver::GetInstance()->IsInitialized()){
         return;
@@ -95,7 +100,7 @@ void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd) {
         if (m_cmdQueue.size() >= kMaxQueueLen) {
             m_cmdQueue.pop_back();   // 防止队列无限膨胀，丢最旧的
         }
-        m_cmdQueue.push_front(CanCmdItem(cobId, cmd));
+        m_cmdQueue.push_front(CanCmdItem(cobId, cmd, answer, re_id));
     }
     m_cmdCv.notify_one();   // 唤醒发送线程，立即出栈发送
 }
@@ -247,6 +252,11 @@ void CanManager::SenderLoop() {
             // 先发，避免旧帧把新命令堵住几秒、把曲线时序挤乱。
             // 命令始终留在发送线程手里不回驱动排队，PCAN 驱动队列里最多
             // 只有当前这一条，不会积压出一串"缓存"旧帧。
+            if(item.wait_for_answer) {
+                check_answer_ = true;
+                curr_check_id_ = item.receive_id;
+                receive_time_->start();
+            }
             if (!CanDriver::GetInstance()->SendCmd(item.cobId, item.cmd, kCmdTimeOut)) {
                 // 失败：放回队尾轮转
                 {
@@ -319,11 +329,12 @@ bool CanManager::ReceiveFrame(can_frame &frame) {
     if(!onTestMode_){
         return false;
     }
-    if(text_index_ >= kTestWarningFrames.size()){
-        text_index_ = 0;
-        return false;
-    }
-    auto test_frame = kTestWarningFrames[text_index_];
+    // if(text_index_ >= kTestWarningFrames.size()){
+    //     text_index_ = 0;
+    //     return false;
+    // }
+    // auto test_frame = kTestWarningFrames[text_index_];
+    auto test_frame = kHeartTestCmd[0];
     frame.can_id = test_frame.cobId;
     frame.can_dlc = 8;
     std::copy(test_frame.data, test_frame.data + 8, frame.data);
@@ -349,13 +360,29 @@ void CanManager::ProcessFrame(const can_frame &frame) {
     int dlc      = frame.can_dlc;
     uint32_t id  = frame.can_id;
 
-    if (id == 0x740) {
+    auto time_trval = receive_time_->elapsed();
+    if(check_answer_ && id == curr_check_id_ && time_trval > CmdCheckTimeOut){
+        QString msg = QString("指令执行已超时：%1 毫秒，执行失败！").arg(time_trval);
+        emit SendWarningMessage(msg); 
+        check_answer_ = false;
+    }
+
+    if (id == GetHeartCobId()) {
         if(dlc == 1) {
             if(frame.data[0] == 0x04) {
                 // 收到0x04，停止持续发送NMT_CLOSE_READ_CMD
                 stop_nmt_read_ = false;
             } 
         }
+        QMutexLocker locker(&m_nodeMutex);
+        {
+            int intervalMs = heart_time_->restart();
+            if(intervalMs > HeartTimeOut) {
+                QString msg = QString("心跳包超时告警：已超过 %1 毫秒未收到心跳包，通信异常！").arg(intervalMs);
+                emit SendWarningMessage(msg);
+            }
+        }
+
         // 心跳处理 ...
     } else if (id == 0x5C0) {
         // SDO 响应：低频，保持原样逐帧 emit

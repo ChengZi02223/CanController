@@ -40,6 +40,9 @@ private:
     void InitPage();
     void CheckCobIdChanged(QTableWidgetItem *item);
     void CheckRampRadioChanged(QTableWidgetItem *item);
+    bool CheckItemRanged(QTableWidgetItem *item);
+    bool CheckItemCurrRanged(QTableWidgetItem *item, QString new_value);
+    bool SetLimitCurrent(QTableWidgetItem *item);
 
 private:
     QVBoxLayout* main_layout_ = nullptr;

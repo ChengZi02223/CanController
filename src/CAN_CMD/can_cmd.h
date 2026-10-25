@@ -15,9 +15,10 @@
 extern uint8_t g_kNodeId;
 extern void SetNodeId(uint8_t nodeId);
 
-extern uint16_t GetSendCobId();
+extern uint16_t GetRPDOCobId();
+extern uint16_t GetRPDO2CobId();
 extern uint16_t GetSDOCobId();
-extern uint16_t GetRPDO2obId();
+extern uint16_t GetHeartCobId();
 extern uint16_t GetWarningCobId();
 
 /// 切换CANopen

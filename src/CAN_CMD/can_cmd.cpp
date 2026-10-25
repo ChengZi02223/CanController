@@ -6,21 +6,11 @@ void SetNodeId(uint8_t nodeId) {
     g_kNodeId = nodeId;
 }
 
-uint16_t GetSendCobId() {
-    return 0x200u + g_kNodeId;
-}
-
-uint16_t GetSDOCobId() {
-    return 0x600u + g_kNodeId;
-}
-
-uint16_t GetRPDO2obId() {
-    return 0x300u + g_kNodeId;
-}
-
-uint16_t GetWarningCobId() {
-    return 0x80u + g_kNodeId;
-}
+uint16_t GetRPDOCobId() { return 0x200u + g_kNodeId; }
+uint16_t GetRPDO2CobId() { return 0x300u + g_kNodeId; }
+uint16_t GetSDOCobId() { return 0x600u + g_kNodeId; }
+uint16_t GetHeartCobId() { return 0x700u + g_kNodeId; }
+uint16_t GetWarningCobId() { return 0x80u + g_kNodeId; }
 
 //切换CANopen
 
