@@ -13,7 +13,7 @@
 #define kThreadWaitTime 200
 
 #define kCloseCycleWaitTime 5 //s
-#define ON_TEST_MODE
+// #define ON_TEST_MODE
 
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
@@ -313,12 +313,14 @@ static void PrintCmd(const uint32_t cobId, const std::vector<uint8_t> &cmd, QStr
     //     std::cout << QString("%1").arg(byte, 2, 16, QChar('0')).toUpper().toStdString() << " ";
     // }
     // std::cout << std::endl;
+#ifdef ON_TEST_MODE
     QString hexPayload;
     for (auto byte : cmd)
     {
         hexPayload += QString("%1 ").arg(byte,2,16,QLatin1Char('0')).toUpper();
     }
     qDebug().noquote() << prefix << "(0x" <<QString("%1):").arg(cobId,4,16,QLatin1Char('0')).toUpper() << hexPayload;
+#endif
 }
 
 static void PrintCanFrame(const can_frame &frame, QString prefix = "can_frame")
@@ -435,7 +437,9 @@ static std::vector<TestFrame> kBatchReadTestFrames = {
 
 // 心跳包
 static std::vector<TestFrame> kHeartTestCmd = {
-    {0x740, {0x01,0x00,0x00,0x00,0x40,0x00,0x00,0x00}}  // 心跳包
+    // {0x740, {0x01,0x00,0x00,0x00,0x40,0x00,0x00,0x00}}  // 心跳包
+    {0x4C0, {0x01,0x00,0x20,0x02,0x0B,0x00,0x00,0x00}},  // 心跳包
+    {0x4C0, {0x01,0x02,0x20,0x03,0x40,0x00,0x00,0x00}}  // 心跳包
 };
 
 // ===================== 测试用报警帧 =====================
@@ -570,8 +574,6 @@ struct SettingRange {
 
 static std::vector<SettingRange> kSettingRanges {
     {"0x2002", "0x03", 0, 127},
-    {"0x6322", "-", 0, 250},
-    {"0x6323", "-", 0, 250},
     {"0x2003", "0x02", 83, 162},
     {"0x2003", "0x03", 83, 162},
     {"0x2003", "0x04", 83, 162},
@@ -592,7 +594,7 @@ static bool IsValueOutOfRanged(QString index, QString sub_idx, int value) {
 
     if(it != kSettingRanges.end()) {
         auto range = (*it);
-        return (range.min_value_ < value) && (value < range.max_value_);
+        return (range.min_value_ > value) && (value > range.max_value_);
     }
 
     return false;

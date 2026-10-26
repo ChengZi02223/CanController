@@ -77,6 +77,8 @@ public:
     int  TpdoEmitIntervalMs() const    { return m_tpdoEmitIntervalMs_.load(); }
 
     void HandleWarningFrame(const uint8_t data[8]);
+    uint64_t BeginEpoch();
+    uint64_t CurrentEpoch() const { return m_epoch_.load(std::memory_order_acquire); }
 
 signals:
     void SendRowValue(QString value, QString idx, QString sub_idx);
@@ -155,11 +157,26 @@ private:
     long long tx_first_fail_ms_ = 0;         // 本轮连续失败起点
     bool tx_stall_logged_ = false;           // 本轮是否已打过停顿日志
 
-    QTime *heart_time_ = nullptr;
     QTime *receive_time_ = nullptr;
     uint16_t curr_check_id_ = 0x00;
     bool check_answer_ = false;
-    
+
+    // ========== 【修改】心跳超时检测 ==========
+    // 原实现只在"收到心跳"时才比较两次心跳的间隔，掉电后永远收不到帧，
+    // 因此超时永远不会触发。改为由接收线程轮询检查"距上次心跳已过多久"。
+    // 【再修改】只有在"已经连接成功并收到过心跳"之后才启用检测：
+    //   软件刚打开、CAN 还没初始化（或设备本来就没上电）时，不会有任何告警弹窗。
+    static constexpr long long kHeartbeatCheckIntervalMs = 100;  // 轮询周期
+    long long heart_last_ms_   = 0;      // 最近一次收到心跳的时刻（steady_clock）
+    bool      heart_alarm_on_  = false;  // 当前是否已处于超时告警态（防重复弹窗）
+    bool      heart_online_    = false;  // 是否已"建立过通信"（收到过心跳）；为 false 时不做任何检测
+
+    void CheckHeartbeatTimeout();        // 由接收线程周期调用
+    void ResetHeartbeatState();          // Start() 时重置：首次连接前保持"不检测"
+
+    // ===== 命令纪元（仅发送线程 / Push 接口访问）=====
+    std::atomic<uint64_t> m_epoch_{1};      // 下一个可用纪元号
+    std::atomic<uint64_t> m_minEpoch_{1};   // 小于该值的命令一律丢弃
 };
 
 #endif // _CAN_MANAGER_H_

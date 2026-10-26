@@ -34,9 +34,17 @@ struct CanCmdItem
     bool wait_for_answer = false;
     uint32_t receive_id;
 
+    uint64_t epoch = 0;
+    bool latest_value = false;
+    bool allow_retry = true;
+
     CanCmdItem() : cobId(0) {}
     CanCmdItem(uint32_t id, const std::vector<uint8_t>& c, bool answer = false, uint32_t re_id = 0x00) : 
                 cobId(id), cmd(c), wait_for_answer(answer), receive_id(re_id) {}
+    CanCmdItem(uint32_t id, const std::vector<uint8_t>& c,
+               bool answer, uint32_t re_id, bool latest, bool retry) :
+        cobId(id), cmd(c), wait_for_answer(answer), receive_id(re_id),
+        latest_value(latest), allow_retry(retry) {}
 };
 
 class CanDriver {

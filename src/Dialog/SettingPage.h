@@ -39,9 +39,10 @@ public slots:
 private:
     void InitPage();
     void CheckCobIdChanged(QTableWidgetItem *item);
-    void CheckRampRadioChanged(QTableWidgetItem *item);
+    bool CheckRampRadioChanged(QTableWidgetItem *item, QString new_value);
     bool CheckItemRanged(QTableWidgetItem *item);
     bool CheckItemCurrRanged(QTableWidgetItem *item, QString new_value);
+    bool CheckConnNum(QTableWidgetItem *item, QString new_value); // 检查联数
     bool SetLimitCurrent(QTableWidgetItem *item);
 
 private:
@@ -184,7 +185,7 @@ private:
     // 读取参数请求的去重：请求已发出、尚未收到设备应答期间忽略重复点击，
     // 防止设备把多余的读取请求排队，之后每条命令都触发一次补发的读取
     bool read_req_pending_ = false;
-    QTimer* read_req_timer_ = nullptr;   // 应答超时定时器，超时后允许重新点击
+    // QTimer* read_req_timer_ = nullptr;   // 应答超时定时器，超时后允许重新点击
 
     std::map<QString,QString> str_fragment_cache_;
 };

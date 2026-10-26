@@ -8,8 +8,8 @@ namespace {
 // 命令队列长度上限：防止队列无限膨胀（丢最旧的）
 constexpr size_t kMaxQueueLen = 100;
 // TX 满时重发的退避间隔（5ms 起步指数翻倍，封顶到此值）
-constexpr int kStartSendBackoffMs = 5;
-constexpr int kMaxSendBackoffMs = 100;
+constexpr int kStartSendBackoffMs = 2;
+constexpr int kMaxSendBackoffMs = 20;
 // 连续 TX 满超过该时长打一条日志（设备可能未应答）
 constexpr long long kTxStallLogMs = 2000;
 // 周期 02 40 的兜底时长：心跳丢失时最多重发这么久，防止无限占用总线
@@ -23,7 +23,6 @@ long long SteadyNowMs() {
 
 CanManager::CanManager(QObject *parent)
     : QObject(parent), m_running(false) {
-        heart_time_ = new QTime();
         receive_time_= new QTime();
     }
 
@@ -34,6 +33,7 @@ CanManager::~CanManager() {
 // ---------- 启动/停止（现在管理两个线程） ----------
 void CanManager::Start() {
     if (m_running) return;
+    ResetHeartbeatState();   // 【新增】清掉上一次运行遗留的超时状态
     m_running = true;
 
     // 接收线程
@@ -81,6 +81,16 @@ void CanManager::SetHeartbeatTimeout(uint8_t nodeId, uint32_t timeoutMs) {
     }
 }
 
+uint64_t CanManager::BeginEpoch() {
+    const uint64_t e = m_epoch_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    m_minEpoch_.store(e, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+        m_cmdQueue.clear();      // 丢弃上一阶段残留，让新阶段命令立刻排到最前
+    }
+    m_cmdCv.notify_all();
+    return e;
+}
 
 // ========== 【新增】命令栈接口 ==========
 void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd, bool answer, uint32_t re_id) {
@@ -88,52 +98,60 @@ void CanManager::PushCommand(uint32_t cobId, const std::vector<uint8_t>& cmd, bo
     if(!CanDriver::GetInstance()->IsInitialized()){
         return;
     }
-    {
-        std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
-        // 队列去重：同一条命令（周期重发场景）已在队列中时不重复入队，
-        // 防止 TX 停顿期间堆积一串相同的旧帧，恢复后被逐条"缓存"式送达
-        for (const auto& it : m_cmdQueue) {
-            if (it.cobId == cobId && it.cmd == cmd) {
-                return;
-            }
-        }
-        if (m_cmdQueue.size() >= kMaxQueueLen) {
-            m_cmdQueue.pop_back();   // 防止队列无限膨胀，丢最旧的
-        }
-        m_cmdQueue.push_front(CanCmdItem(cobId, cmd, answer, re_id));
-    }
-    m_cmdCv.notify_one();   // 唤醒发送线程，立即出栈发送
+    PushCommand(CanCmdItem(cobId, cmd, answer, re_id));
 }
 
 void CanManager::PushCommand(const CanCmdItem& item) {
+    PrintCmd(item.cobId, item.cmd, "PushCommand");
     if(!CanDriver::GetInstance()->IsInitialized()){
         return;
     }
     {
         std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+        CanCmdItem it = item;
+        it.epoch = m_epoch_.load(std::memory_order_acquire);
+        if (it.latest_value) {
+            for (auto q = m_cmdQueue.begin(); q != m_cmdQueue.end(); ) {
+                if (q->cobId == it.cobId) {
+                    q = m_cmdQueue.erase(q);
+                } else {
+                    ++q;
+                }
+            }
+        }        
         if (m_cmdQueue.size() >= kMaxQueueLen) {
             m_cmdQueue.pop_back();
         }
-        PrintCmd(item.cobId, item.cmd, "PushCommand");
-        m_cmdQueue.push_front(item);
+        PrintCmd(it.cobId, it.cmd, "PushCommand");
+        m_cmdQueue.push_front(it);
     }
     m_cmdCv.notify_one();
 }
 
 void CanManager::PushCommands(const std::vector<CanCmdItem>& items) {
-    for(auto &item: items) {
-        PrintCmd(item.cobId, item.cmd, "PushCommands");
-    }
     if(items.empty() || !CanDriver::GetInstance()->IsInitialized()) {
         return;
-    }
-    for(auto &item: items) {
+    }{
         std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
-        if (m_cmdQueue.size() >= kMaxQueueLen) {
-            m_cmdQueue.pop_back();
-        }
-        PrintCmd(item.cobId, item.cmd, "PushCommands");
-        m_cmdQueue.push_front(item);
+        const uint64_t ep = m_epoch_.load(std::memory_order_acquire);
+        for (auto rit = items.rbegin(); rit != items.rend(); ++rit) {
+            CanCmdItem it = *rit;
+            it.epoch = ep;
+            if (it.latest_value) {
+                for (auto q = m_cmdQueue.begin(); q != m_cmdQueue.end(); ) {
+                    if (q->cobId == it.cobId) {
+                        q = m_cmdQueue.erase(q);
+                    } else {
+                        ++q;
+                    }
+                }
+            }
+            if (m_cmdQueue.size() >= kMaxQueueLen) {
+                m_cmdQueue.pop_back();
+            }
+            PrintCmd(it.cobId, it.cmd, "PushCommands");
+            m_cmdQueue.push_front(it);
+        }        
     }
     m_cmdCv.notify_one();
 }
@@ -191,6 +209,7 @@ void CanManager::SetReceiveBufferLimit(size_t limit) {
 }
 // ---------- 接收线程 ----------
 void CanManager::ReceiverLoop() {
+    long long lastHeartCheck = SteadyNowMs();   // 【新增】心跳轮询计时
     while (m_running) {
 #ifndef ON_TEST_MODE
         if (!CanDriver::GetInstance()->IsInitialized()) {
@@ -204,7 +223,38 @@ void CanManager::ReceiverLoop() {
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+
+        // 【新增】心跳超时检查：无收包时 ReceiveFrame 会在 100ms 后返回 false，
+        // 这里不依赖"收到心跳"这个事件，掉电（完全没有帧）也能按时报警。
+        long long nowMs = SteadyNowMs();
+        if (nowMs - lastHeartCheck >= kHeartbeatCheckIntervalMs) {
+            lastHeartCheck = nowMs;
+            CheckHeartbeatTimeout();
+        }
     }
+}
+
+// 【新增】心跳超时检查：只看"距离上次心跳过了多久"，与是否收到新帧无关。
+// 前提：必须先"建立过通信"（收到过至少一帧心跳）。软件刚打开、CAN 未初始化、
+// 设备本来就没上电时 heart_online_ 为 false，这里直接返回，绝不弹窗。
+// 一旦建立过通信，之后掉电超过 HeartTimeOut 就报警（只报一次）。
+void CanManager::ResetHeartbeatState() {
+    heart_last_ms_  = 0;
+    heart_alarm_on_ = false;
+    heart_online_   = false;   // 连接成功并收到心跳前，不做超时检测
+}
+
+void CanManager::CheckHeartbeatTimeout() {
+    if (!heart_online_) {
+        return;    // 从未建立通信：不检测、不报警（避免软件一启动就弹窗）
+    }
+    const long long silentMs = SteadyNowMs() - heart_last_ms_;
+    if (silentMs > HeartTimeOut && !heart_alarm_on_) {   // 上升沿才报，不重复弹窗
+        heart_alarm_on_ = true;
+        emit SendWarningMessage(
+            QString("心跳包超时告警：已超过 %1 毫秒未收到心跳包，通信异常！").arg(silentMs));
+    }
+    // 未超时不做任何事：heart_alarm_on_ 由收到心跳时清除
 }
 
 // ---------- 发送线程 ----------
@@ -238,6 +288,9 @@ void CanManager::SenderLoop() {
         }
 
         if (hasItem) {
+            if (item.epoch < m_minEpoch_.load(std::memory_order_acquire)) {
+                continue;
+            }
             // 再次确认驱动就绪，防止在 wait 期间驱动被 close
             if (!CanDriver::GetInstance()->IsInitialized()) {
                 // 把命令塞回队列（放回头部，保持原顺序）
@@ -258,31 +311,31 @@ void CanManager::SenderLoop() {
                 receive_time_->start();
             }
             if (!CanDriver::GetInstance()->SendCmd(item.cobId, item.cmd, kCmdTimeOut)) {
-                // 失败：放回队尾轮转
-                {
-                    std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
-                    if (m_cmdQueue.size() >= kMaxQueueLen) {
-                        m_cmdQueue.pop_back();
+                if (item.allow_retry) {
+                    {
+                        std::lock_guard<std::mutex> lk(m_cmdQueueMutex);
+                        if (m_cmdQueue.size() >= kMaxQueueLen) {
+                            m_cmdQueue.pop_back();
+                        }
+                        m_cmdQueue.push_back(item);
                     }
-                    m_cmdQueue.push_back(item);
-                }
-                if (tx_first_fail_ms_ == 0) {
-                    tx_first_fail_ms_ = SteadyNowMs();
-                } else if (!tx_stall_logged_ &&
-                           SteadyNowMs() - tx_first_fail_ms_ >= kTxStallLogMs) {
-                    std::cerr << "[CanManager] TX 连续 " << kTxStallLogMs
-                              << "ms 写入失败，设备可能未应答（总线拥塞/掉线）" << std::endl;
-                    tx_stall_logged_ = true;
+                    if (tx_first_fail_ms_ == 0) {
+                        tx_first_fail_ms_ = SteadyNowMs();
+                    } else if (!tx_stall_logged_ &&
+                               SteadyNowMs() - tx_first_fail_ms_ >= kTxStallLogMs) {
+                        std::cerr << "[CanManager] TX 连续 " << kTxStallLogMs
+                                  << "ms 写入失败，设备可能未应答（总线拥塞/掉线）" << std::endl;
+                        tx_stall_logged_ = true;
+                    }
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(tx_backoff_ms_));
                 if (tx_backoff_ms_ < kMaxSendBackoffMs) {
                     tx_backoff_ms_ *= 2;
                 }
             } else {
-                // 发送成功：复位退避与停顿计时
-                tx_backoff_ms_ = kStartSendBackoffMs;
+                tx_backoff_ms_   = kStartSendBackoffMs;
                 tx_first_fail_ms_ = 0;
-                tx_stall_logged_ = false;
+                tx_stall_logged_  = false;
             }
         }
 
@@ -334,7 +387,7 @@ bool CanManager::ReceiveFrame(can_frame &frame) {
     //     return false;
     // }
     // auto test_frame = kTestWarningFrames[text_index_];
-    auto test_frame = kHeartTestCmd[0];
+    auto test_frame = kHeartTestCmd[1];
     frame.can_id = test_frame.cobId;
     frame.can_dlc = 8;
     std::copy(test_frame.data, test_frame.data + 8, frame.data);
@@ -374,14 +427,12 @@ void CanManager::ProcessFrame(const can_frame &frame) {
                 stop_nmt_read_ = false;
             } 
         }
-        QMutexLocker locker(&m_nodeMutex);
-        {
-            int intervalMs = heart_time_->restart();
-            if(intervalMs > HeartTimeOut) {
-                QString msg = QString("心跳包超时告警：已超过 %1 毫秒未收到心跳包，通信异常！").arg(intervalMs);
-                emit SendWarningMessage(msg);
-            }
-        }
+        // 【修改】心跳只负责"刷新时间戳 + 清除告警态"，超时判断交给
+        // CheckHeartbeatTimeout() 轮询完成（掉电时收不到帧也能报警）
+        // heart_online_ 置 true 即"通信已建立"，从这一刻起才允许超时检测
+        heart_last_ms_  = SteadyNowMs();
+        heart_online_   = true;
+        heart_alarm_on_ = false;   // 已恢复，允许下次超时再次报警
 
         // 心跳处理 ...
     } else if (id == 0x5C0) {

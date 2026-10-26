@@ -164,7 +164,7 @@ void SettingPage::InitPage() {
         auto item = setting_info_table_->item(row, col);
         if(item) {
             old_item_value_ = item->text();
-            if(!CheckItemRanged(item)) {
+            if(!CheckItemRanged(item) || !CheckConnNum(item, newText) || !CheckRampRadioChanged(item, newText)) {
                 item->setText(old_item_value_);
                 return;
             }
@@ -177,7 +177,6 @@ void SettingPage::InitPage() {
             item->setText(newText);
             OnValueChanged(item);
             CheckCobIdChanged(item);
-            CheckRampRadioChanged(item);
             SetLimitCurrent(item);
         }
     });
@@ -196,31 +195,67 @@ void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
             bool ok;
             int node_id = new_value.toInt(&ok, 16);
             if(ok) {
-                qDebug() << "SettingPage::CheckCobIdChanged: Node ID changed to " << node_id;
+                // qDebug() << "SettingPage::CheckCobIdChanged: Node ID changed to " << node_id;
                 SetNodeId(static_cast<uint8_t>(node_id));
-                basic_info_bar_->SetChannelCount(QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
-                emit basic_info_bar_->SendInfoChanged(InfoType::kChannelCount, QString("%1").arg(node_id, 2, 16, QLatin1Char('0')));
+                QString node_str = QString("%1").arg(node_id, 2, 16, QLatin1Char('0'));
+                basic_info_bar_->SetChannelCount(node_str);
+                emit basic_info_bar_->SendInfoChanged(InfoType::kChannelCount, node_str);
             } 
         }
     }
 }
 
-void SettingPage::CheckRampRadioChanged(QTableWidgetItem *item) {
+bool SettingPage::CheckConnNum(QTableWidgetItem *item, QString new_value) {
+    auto row = item->row();
+    auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        if(obj_str == "0x2000" && idx_str == "0x02"){
+            bool ok;
+            int node_id = new_value.toInt(&ok);
+            if(ok) {
+                QString msg;
+                if((node_id < 10 && node_id > 99)) {
+                    msg = QString("联数不得超过两位！");
+                    emit CanManager::GetInstance()->SendWarningMessage(msg);
+                    return false;
+                } else if((node_id % 10) > (node_id / 10)) {
+                    msg = QString("修改联数为 %1 错误， 当前联数不能超过总联数!\n总联数是高字节为:%2 < 当前联数低字节：%3 ").arg(node_id).arg(node_id / 10).arg(node_id % 10);
+                    emit CanManager::GetInstance()->SendWarningMessage(msg);
+                    return false;
+                }
+            } else {
+                QString msg = QString("联数请用两位数十进制表示！");
+                emit CanManager::GetInstance()->SendWarningMessage(msg);
+                return false;
+            }
+        }
+    }
+    return true;
+} // 检查联数
+
+bool SettingPage::CheckRampRadioChanged(QTableWidgetItem *item, QString new_value) {
     auto row = item->row();
     auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
     if(obj_itm) {
         QString obj_str = obj_itm->text().trimmed();
         if(obj_str == "0x6322" || obj_str == "0x6323"){
-            // 发送修改的值
-            auto new_value = item->text().trimmed();
             bool ok;
             int radio = new_value.toInt(&ok);
             if(ok) {
+                if(radio < 0 || radio > 250) {
+                    QString msg = QString("缩放百分比：%1 超出允许范围（0 - 250）！").arg(new_value);
+                    emit CanManager::GetInstance()->SendWarningMessage(msg);
+                    return false;
+                }
                 emit SendRampRadio(radio);
-                qDebug() << "--> radio : " << radio;
+                // qDebug() << "--> radio : " << radio;
             } 
         }
     }
+    return true;
 }
 
 bool SettingPage::CheckItemRanged(QTableWidgetItem *item) {
@@ -807,10 +842,10 @@ void FunctionBtnArea::ConnectSignles() {
     });
 
     // 读取参数请求应答超时：超时后允许重新点击重发
-    read_req_timer_ = new QTimer(this);
-    connect(read_req_timer_, &QTimer::timeout, this, [this](){
-        CanDriver::GetInstance()->SendCmd(NMT_COB_ID, PUSH_BUSH_CMD, kCmdTimeOut);
-    });
+    // read_req_timer_ = new QTimer(this);
+    // connect(read_req_timer_, &QTimer::timeout, this, [this](){
+    //     CanDriver::GetInstance()->SendCmd(NMT_COB_ID, PUSH_BUSH_CMD, kCmdTimeOut);
+    // });
 }
 #ifdef ON_TEST_MODE
 void FunctionBtnArea::OnTestWarning() {
@@ -871,7 +906,7 @@ void FunctionBtnArea::OnLoadToTableBtnClicked() {
     CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_READ_PARAM_TO_TABLE);
 
     read_req_pending_ = true;
-    read_req_timer_->start(500);   // 2s 内没等到设备应答则允许重试
+    // read_req_timer_->start(500);   // 2s 内没等到设备应答则允许重试
     start_read_eprom_ = true;
     progress_dialog_->setTitleText("正在读取参数，请稍候...");
     progress_dialog_->Exec();
@@ -891,10 +926,10 @@ void FunctionBtnArea::OnLoadToTabled(can_frame frame) {
 
     // 收到设备应答，本次读取请求完成，解除去重
     read_req_pending_ = false;
-    if (read_req_timer_) {
-        read_req_timer_->stop();
-        qDebug() << "read_req_timer_ stoped";
-    }
+    // if (read_req_timer_) {
+    //     read_req_timer_->stop();
+    //     qDebug() << "read_req_timer_ stoped";
+    // }
 
     // 忽略重复/迟到的应答：读取进行中又收到 60 10 10 03，
     // 通常是设备在补处理之前排队的读取请求，直接丢弃，避免重复弹窗重复读取
@@ -921,9 +956,11 @@ void FunctionBtnArea::ClearStringFragmentCache() {
 }
 
 void FunctionBtnArea::OnReadFromEPROM(can_frame frame) {
+#ifndef ON_TEST_MODE
     if(!start_read_eprom_){
         return;
     }
+#endif
     ParseEPROMFrame(frame);
 }
 
@@ -933,7 +970,7 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
     QString final_str_value;
     QString final_index;
     QString final_subindex;
-
+    // PrintCmd(frame.can_id, frame.data, "ParseEPROMFrame");
     {
         // std::lock_guard<std::mutex> lk(m_mtx_);
         if(frame.can_dlc < 8) {
@@ -1002,14 +1039,13 @@ void FunctionBtnArea::ParseEPROMFrame(const can_frame &frame) {
             is_string_final_segment = false;
         }
     } //锁释放
-
+    qDebug() << "ParseEPROMFrame 1: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
     //========锁外面发送信号，避免锁内emit死锁风险========
-    if(((final_index == "0X2000") &&(final_subindex == "0X02")) || ((final_index == "0X2002") && final_subindex == "0X03")) {
-        bool ok;
-        final_str_value = QString("%1").arg(final_str_value.toInt(&ok,10),2,16,QLatin1Char('0')).toLower();
+    if(final_index == "0X2002" && final_subindex == "0X03") {
+        final_str_value = QString("%1").arg(final_str_value.toInt(),2,16,QLatin1Char('0')).toLower();
     }
     emit SendReadValue(final_str_value, final_index, final_subindex);
-    // qDebug() << "ParseEPROMFrame: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
+    qDebug() << "ParseEPROMFrame 2: " << final_str_value << " " << final_index << " " << final_subindex << " is_string_final_segment: " << is_string_final_segment;
     if(final_index == "0X2003") {
         int side = 0;
         if(final_subindex == "0X11") {

@@ -86,20 +86,20 @@ void CalibrationPage::InitPageTimer() {
 }
 
 void CalibrationPage::OnTimePushCmd() {
-    if(curr_side_ == kSideNone) {
+    const int side = curr_side_.load(std::memory_order_acquire);
+    if (side == kSideNone) {
         return;
     }
-    switch (curr_side_) {
-    case kSideOne:
-        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_1_cmd_);
-        break;
-    case kSideTwo:
-        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_2_cmd_);
-        break;
-    break;    
-    default:
-        break;
+    std::vector<uint8_t> cmd;
+    {
+        std::lock_guard<std::mutex> lk(cmd_mtx_);
+        cmd = (side == kSideOne) ? cur_fa_val_1_cmd_ : cur_fa_val_2_cmd_;
     }
+    if (cmd.empty()) return;    // 尚未初始化，跳过本周期
+
+    CanManager::GetInstance()->PushCommand(
+        CanCmdItem(GetRPDOCobId(), cmd, false, 0x00,
+                   /*latest_value=*/true, /*allow_retry=*/false));
 }
 
 void CalibrationPage::OpenTimer(LoopSide side) {
@@ -289,12 +289,12 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
         // 取消闭环斜坡：不清定时器/绘图线程，接着周期下发0%目标（斜坡模式），
         // 位移到达标定的0%开度后再停止发送，避免直接按阶跃形式回到中位
         if (ctx.need_ramp_close) {
-            CanManager::GetInstance()->ClearCommands();
+            CanManager::GetInstance()->BeginEpoch();
             StartRampClose(ctx.side, ctx.close_cmd);
             return;
         }
         CloseTimer(ctx.side);
-        CanManager::GetInstance()->ClearCommands();
+        CanManager::GetInstance()->BeginEpoch();
         if (ctx.side == kSideOne) {
             cur_fa_val_1_cmd_ = ctx.close_cmd;
         } else if (ctx.side == kSideTwo) {
@@ -302,7 +302,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
         }
 
         CAN_MGR_PUSH_CMD(GetRPDOCobId(), ctx.close_cmd);
-        QThread::msleep(200);
+        // QThread::msleep(200);
         // CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_CLOSE_READ_CMD);
         emit SendStopReadNMTCmd();
         StopDrawThread();
@@ -311,6 +311,7 @@ void CalibrationPage::HandleControlEvent(bool checked, const ControlContext& ctx
     }
 
     // ---------------- 启动 ----------------
+    CanManager::GetInstance()->BeginEpoch();
     CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
 
     // 闭环时下发 PID
@@ -464,11 +465,13 @@ void CalibrationPage::OnCycleBtnClicked(bool checked) {
 }
 
 bool CalibrationPage::StartLoopCycle() {
-
     // 已经在运行，禁止重复启动
     if (is_open_running_.load() || open_loop_thread_ != nullptr) {
         return false;
     }
+    CloseTimer(kSideOne);
+    CloseTimer(kSideTwo);
+
     is_open_running_.store(true);
     open_loop_thread_ = QThread::create([this]() {
         ExecuteLoopCycle();
@@ -498,6 +501,23 @@ void CalibrationPage::StopLoopCycle() {
     stop_requested_.store(false);           // 原子写，为下次启动复位
     is_stopping_.store(false);
     control_mode_ = ControlAction::kActNone;
+}
+
+bool CalibrationPage::WaitCommandsDrained(int timeout_ms) {
+    using clock = std::chrono::steady_clock;
+    const auto deadline = clock::now() + std::chrono::milliseconds(timeout_ms);
+    auto interrupted = [this]() {
+        return stop_requested_.load(std::memory_order_acquire)
+            || !is_open_running_.load(std::memory_order_acquire);
+    };
+
+    while (CanManager::GetInstance()->CommandCount() > 0) {
+        if (interrupted()) return false;
+        if (clock::now() >= deadline) return false;
+        std::unique_lock<std::mutex> lock(cv_mtx_);
+        cv_.wait_for(lock, std::chrono::milliseconds(5), interrupted);
+    }
+    return true;
 }
 
 void CalibrationPage::OnCloseControl() {
@@ -576,6 +596,7 @@ void CalibrationPage::ExecuteLoopCycle() {
     // 循环次数
     int loop_count = 0;
     CAN_MGR_PUSH_CMD(NMT_COB_ID, NMT_READ_VALUE_CMD);
+    WaitCommandsDrained();
     if(!draw_curve_running_.load()) {
         StartDrawThread();
     }
@@ -607,13 +628,21 @@ void CalibrationPage::PushOpenLoopCmd(LoopSide side,
                                       const std::array<uint8_t, 8>& target_cmd,
                                       int percent, int factor)
 {
-    if (side == kSideOne) {
-        cur_fa_val_1_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_1_cmd_);
-    } else if (side == kSideTwo) {
-        cur_fa_val_2_cmd_ = SetTargetCMDValue(target_cmd, percent, factor);
-        CAN_MGR_PUSH_CMD(GetRPDOCobId(), cur_fa_val_2_cmd_);
+    // 先在锁外算好，缩短持锁时间
+    std::vector<uint8_t> cmd = SetTargetCMDValue(target_cmd, percent, factor);
+    {
+        std::lock_guard<std::mutex> lk(cmd_mtx_);
+        if (side == kSideOne) {
+            cur_fa_val_1_cmd_ = cmd;
+        } else if (side == kSideTwo) {
+            cur_fa_val_2_cmd_ = cmd;
+        }
     }
+    // 【修改】latest_value=true：新帧覆盖队列中同 cobId 的旧帧，杜绝跨阶段补发；
+    //        allow_retry=false：周期刷新帧失败不回队，等下一周期即可。
+    CanManager::GetInstance()->PushCommand(
+        CanCmdItem(GetRPDOCobId(), cmd, false, 0x00,
+                   /*latest_value=*/true, /*allow_retry=*/false));
 }
 
 // ------------------------------------------------------------------
@@ -624,34 +653,32 @@ bool CalibrationPage::WaitAndResend(int total_ms, LoopSide side,
                                     int percent, int factor)
 {
     using clock = std::chrono::steady_clock;
-    const auto deadline = clock::now() + std::chrono::milliseconds(total_ms);
 
-    while (!stop_requested_.load() && is_open_running_.load()) {
-        // 1) 先判断是否到时：过期后不再重发，避免把本阶段的旧命令压进队列，
-        //    被下一阶段开头"补发"出去，造成阀状态回跳、平段时间被切乱
+    auto interrupted = [this]() {
+        return stop_requested_.load(std::memory_order_acquire)
+            || !is_open_running_.load(std::memory_order_acquire);
+    };
+
+    const auto t0       = clock::now();
+    const auto deadline = t0 + std::chrono::milliseconds(total_ms);
+
+    long long seq = 0;
+    while (!interrupted()) {
+        const auto next = t0 + std::chrono::milliseconds(seq * (long long)kResendIntervalMs);
+        if (next >= deadline) break;      // 到期后不再重发，防止旧帧拖进下一阶段
+
         const auto now = clock::now();
-        if (now >= deadline) break;
+        if (next > now) {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            cv_.wait_until(lock, next, interrupted);
+            if (interrupted()) break;
+        }
 
-        // 2) 未过期才发一帧（保证 t=0 时刻命令已下发，之后每 500ms 重发保活）
-        PushOpenLoopCmd(side, target_cmd, percent, factor);
-
-        const auto remain_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
-        if (remain_ms <= 0) break;
-
-        // 3) 只睡 min(剩余, 重发间隔)，保证能及时醒来重发
-        const auto wait_ms = std::min<long long>(remain_ms, 500);
-
-        // 注意：CAN 发送在锁外完成，持锁期间只做 wait
-        std::unique_lock<std::mutex> lock(cv_mtx_);
-        cv_.wait_for(lock, std::chrono::milliseconds(wait_ms),
-                     [this] {
-                         return stop_requested_.load()
-                             || !is_open_running_.load();
-                     });
+        PushOpenLoopCmd(side, target_cmd, percent, factor);   // 到点发送
+        ++seq;
     }
 
-    return !stop_requested_.load() && is_open_running_.load();
+    return !interrupted();
 }
 
 // ------------------------------------------------------------------
@@ -661,20 +688,25 @@ bool CalibrationPage::RunOpenLoopSide(LoopSide side, int percent,
                                       const std::array<uint8_t, 8>& target_cmd,
                                       int neutral_ms, int work_ms, int factor)
 {
-    curr_side_ = side;
+    curr_side_.store(side, std::memory_order_release);
     const char *tag = (side == kSideOne) ? "1" : "2";
+
+    // 【新增】阶段隔离：清掉队列中上一阶段未发出的 RPDO1 帧并作废其纪元。
+    // 否则 TX 满时回队的旧帧会在本阶段中途冒出来，形成命令交叉。
+    CanManager::GetInstance()->BeginEpoch();
 
     qDebug() << tag << " 中位停留： " << neutral_ms / 1000 << "s";
     if (!WaitAndResend(neutral_ms, side, target_cmd, 0, factor)) return false;
 
+    CanManager::GetInstance()->BeginEpoch();
     qDebug() << tag << " 工作位停留： " << work_ms / 1000 << "s";
     if (!WaitAndResend(work_ms, side, target_cmd, percent, factor)) return false;
 
-
+    CanManager::GetInstance()->BeginEpoch();
     qDebug() << tag << " 中位停留： " << neutral_ms / 1000 << "s";
     if (!WaitAndResend(neutral_ms, side, target_cmd, 0, factor)) return false;
 
-    emit SendMarkGapAllCurves(); 
+    emit SendMarkGapAllCurves();
 
     return true;
 }

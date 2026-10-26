@@ -18,7 +18,7 @@ enum CalibState {kEnd, kStart, kConfirm};
 enum LoopMode { kOpenLoop, kClosedLoop };
 
 enum LoopSide { kSideNone, kSideOne, kSideTwo};
-
+static constexpr int kResendIntervalMs = 500;
 struct ControlContext {
     LoopSide side = kSideNone;
     int value = 0;                             // 已解析好的目标值
@@ -100,6 +100,7 @@ public:
     void InitBasicInfo(BasicInfo info);
     void SetChannelCount(const QString& channel_count);
     double GetRampRadio();
+    bool WaitCommandsDrained(int timeout_ms = 3000);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -223,7 +224,7 @@ private:
     LoopSide ramp_close_side_ = kSideNone;
     qint64 ramp_close_start_ms_ = 0;
     bool ramp_response_running_ = false;   // 斜坡响应是否在运行（区分"取消"与"未启动时误点"）
-
+    std::mutex cmd_mtx_;
     std::vector<uint8_t> cur_fa_val_1_cmd_; //当前开阀1 cmd
     std::vector<uint8_t> cur_fa_val_2_cmd_;    
 
@@ -241,7 +242,8 @@ private:
     std::atomic<bool> is_open_running_{false};
     QThread *open_loop_thread_ = nullptr;
     bool is_on_cycle_ = false;
-    LoopSide curr_side_ = kSideNone;
+    // LoopSide curr_side_ = kSideNone;
+    std::atomic<int> curr_side_{kSideNone};
 
     QPushButton* control_1_btn_ = nullptr;
     QPushButton* control_2_btn_ = nullptr;
