@@ -40,7 +40,7 @@ private:
     void InitPage();
     void CheckCobIdChanged(QTableWidgetItem *item);
     bool CheckRampRadioChanged(QTableWidgetItem *item, QString new_value);
-    bool CheckItemRanged(QTableWidgetItem *item);
+    bool CheckItemRanged(QTableWidgetItem *item, QString new_value);
     bool CheckItemCurrRanged(QTableWidgetItem *item, QString new_value);
     bool CheckConnNum(QTableWidgetItem *item, QString new_value); // 检查联数
     bool SetLimitCurrent(QTableWidgetItem *item);
@@ -96,6 +96,8 @@ private:
     void UpdateParams();
     bool IsItemReadOnly(QTableWidgetItem *item);
     bool IsPIDParam(QTableWidgetItem *it);
+
+    QString CheckIsChangedNodeId(QTableWidgetItem *itm); // 联数显示是16进制，就直接填入cmd即可
 
 private:
     std::map<int, QString> default_values_;

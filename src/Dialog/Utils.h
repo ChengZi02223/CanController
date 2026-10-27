@@ -13,7 +13,7 @@
 #define kThreadWaitTime 200
 
 #define kCloseCycleWaitTime 5 //s
-// #define ON_TEST_MODE
+#define ON_TEST_MODE
 
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};
@@ -278,6 +278,17 @@ static uint32_t QStringToUint32Dec(const QString& strVal) {
     // toUInt 本身已保证范围，无需额外检查（但若需严格，可追加）
     return val;
 }
+
+// static void Fill10ValueToCmd(int indexValue, std::vector<uint8_t>& command, int start_index) {
+//     //16位占用2字节，需要 start_index +1 < command.size()
+//     if(start_index < 0 || (start_index + 1) >= static_cast<int>(command.size())) {
+//         qWarning() << "Invalid start_index or span for Fill10ValueToCmd";
+//         return;
+//     }
+    
+//     command[start_index]     = static_cast<uint8_t>(indexValue);         // 低字节
+//     command[start_index + 1] = static_cast<uint8_t>((indexValue >> 8) & 0xFF); // 高字节
+// }
 
 static void Fill16ValueToCmd(uint16_t indexValue, std::vector<uint8_t>& command, int start_index) {
     //16位占用2字节，需要 start_index +1 < command.size()
@@ -594,19 +605,22 @@ static bool IsValueOutOfRanged(QString index, QString sub_idx, int value) {
 
     if(it != kSettingRanges.end()) {
         auto range = (*it);
-        return (range.min_value_ > value) && (value > range.max_value_);
+        return (range.min_value_ > value) || (value > range.max_value_);
     }
 
     return false;
 }
 
-static QString GetOutOfRangeString(QString index, QString sub_idx) {
+static QString GetOutOfRangeString(QString index, QString sub_idx, bool sl = false) {
     auto it = std::find_if(kSettingRanges.begin(), kSettingRanges.end(), [&](SettingRange range){
         return (range.index_ == index) && (range.sub_idx_ == sub_idx);
     });
 
     if(it != kSettingRanges.end()) {
         auto range = (*it);
+        if(sl) {
+            return QString("(0x%1, 0x%2)").arg(QString::number(range.min_value_, 16)).arg(QString::number(range.max_value_, 16));
+        }
         return QString("(%1, %2)").arg(range.min_value_).arg(range.max_value_);
     }
 

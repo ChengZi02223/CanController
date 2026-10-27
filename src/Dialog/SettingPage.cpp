@@ -164,7 +164,7 @@ void SettingPage::InitPage() {
         auto item = setting_info_table_->item(row, col);
         if(item) {
             old_item_value_ = item->text();
-            if(!CheckItemRanged(item) || !CheckConnNum(item, newText) || !CheckRampRadioChanged(item, newText)) {
+            if(!CheckItemRanged(item, newText) || !CheckConnNum(item, newText) || !CheckRampRadioChanged(item, newText)) {
                 item->setText(old_item_value_);
                 return;
             }
@@ -258,7 +258,7 @@ bool SettingPage::CheckRampRadioChanged(QTableWidgetItem *item, QString new_valu
     return true;
 }
 
-bool SettingPage::CheckItemRanged(QTableWidgetItem *item) {
+bool SettingPage::CheckItemRanged(QTableWidgetItem *item, QString new_value) {
     auto row = item->row();
     auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
     auto idx_itm = setting_info_table_->item(row, INFO_TABLE_IDX_COLUMN);
@@ -266,10 +266,18 @@ bool SettingPage::CheckItemRanged(QTableWidgetItem *item) {
         QString obj_str = obj_itm->text().trimmed();
         QString idx_str = idx_itm->text().trimmed();
         // 发送修改的值
-        auto value = item->text().trimmed();
-        auto warn = IsValueOutOfRanged(obj_str, idx_str, value.toInt());
+        // auto value = item->text().trimmed();
+        int value = new_value.toInt();
+        bool is_node_id = false;
+        if(obj_str == "0x2002" && idx_str == "0x03"){
+            // qDebug() << "node id CheckItemRanged: " << new_value;
+            value = new_value.toInt(nullptr, 16);
+            is_node_id = true;
+        }
+        // qDebug() << "CheckItemRanged: " << value << "--- " << GetOutOfRangeString(obj_str, idx_str, is_node_id);
+        auto warn = IsValueOutOfRanged(obj_str, idx_str, value);
         if(warn) {
-            QString msg = QString("修改值 %1 超出设定范围%2!").arg(value).arg(GetOutOfRangeString(obj_str, idx_str));
+            QString msg = QString("修改值 %1 超出设定范围%2!").arg(new_value).arg(GetOutOfRangeString(obj_str, idx_str, is_node_id));
             emit CanManager::GetInstance()->SendWarningMessage(msg);
             return false;
         }
@@ -502,6 +510,21 @@ bool SettingInfoTable::IsPIDParam(QTableWidgetItem *it) {
 
 }
 
+QString SettingInfoTable::CheckIsChangedNodeId(QTableWidgetItem *itm) {
+    auto row = itm->row();
+    auto obj_itm = item(row, INFO_TABLE_OBJ_COLUMN);
+    auto idx_itm = item(row, INFO_TABLE_IDX_COLUMN);
+    auto item_text = itm->text();
+    if(obj_itm && idx_itm) {
+        QString obj_str = obj_itm->text().trimmed();
+        QString idx_str = idx_itm->text().trimmed();
+        if(obj_str == "0x2002" && idx_str == "0x03"){
+            return QString::number(item_text.toInt(nullptr, 16));
+        }
+    }
+    return item_text;
+}
+
 void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) {
     auto cmd = GetRowCMD(item->row());
     if(cmd.empty()) {
@@ -513,8 +536,9 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
     }
     auto type = GetRowParamType(item->row());
     bool ok = false;
-    auto item_text = item->text();
+    auto item_text = CheckIsChangedNodeId(item);
     qulonglong val = item_text.toULongLong(&ok);
+    // qDebug() << "ChangRowValue: "<<item_text;
     qulonglong paramMax = static_cast<qulonglong>(GetParamTypeMaxValue(type));
 
     bool outOfRange = false;
@@ -524,6 +548,10 @@ void SettingInfoTable::ChangRowValue(QTableWidgetItem *item, QString old_value) 
         if(val > paramMax) {
             outOfRange = true;
         }
+    }
+
+    if(item_text != item->text()) {
+        outOfRange = false;
     }
 
     if(outOfRange) {

@@ -665,7 +665,11 @@ bool CalibrationPage::WaitAndResend(int total_ms, LoopSide side,
     long long seq = 0;
     while (!interrupted()) {
         const auto next = t0 + std::chrono::milliseconds(seq * (long long)kResendIntervalMs);
-        if (next >= deadline) break;      // 到期后不再重发，防止旧帧拖进下一阶段
+        if (next >= deadline) {
+            std::unique_lock<std::mutex> lock(cv_mtx_);
+            cv_.wait_until(lock, deadline, interrupted);
+            break;
+        }
 
         const auto now = clock::now();
         if (next > now) {
@@ -1504,14 +1508,15 @@ void CalibrationPage::OnSawtoothWaveBtnClicked() {
 #endif
 }
 
-static const QStringList y_axis_labels = {"阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM输出占空比", "电磁铁实际电流", "电磁铁目标电流"};
+static const QStringList y_axis_labels = {"阀芯实时位移", "位移闭环控制偏差", "最终需求值", "PWM输出占空比", "电磁铁实际电流", "电磁铁目标电流", "开度"};
 static const QMap<QString, AxisUnit> axis_label_unit_map = {
     {"阀芯实时位移", AxisUnit::kmm},
     {"位移闭环控制偏差", AxisUnit::kmm},
     {"最终需求值", AxisUnit::kmm},
     {"PWM输出占空比", AxisUnit::kp},
     {"电磁铁实际电流", AxisUnit::kmA},
-    {"电磁铁目标电流", AxisUnit::kmA}
+    {"电磁铁目标电流", AxisUnit::kmA},
+    {"开度", AxisUnit::kp}
 };
 
     QString name;
