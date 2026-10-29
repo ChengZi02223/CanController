@@ -26,7 +26,7 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
     model_edit_->setEnabled(false);
     channel_count_edit_ = new QInfoEdit("联数：", this);  //联数
     channel_count_edit_->setAlignment(Qt::AlignCenter);
-    // channel_count_edit_->setReadOnly(true);
+    channel_count_edit_->setReadOnly(true);
     channel_count_edit_->setEnabled(false);
     manufacturer_edit_ = new QInfoEdit("厂家：", this);   //厂家
     manufacturer_edit_->setAlignment(Qt::AlignCenter);
@@ -58,7 +58,7 @@ void BasicInfoBar::InitBar(LayoutStyle style) {
     connect(channel_count_edit_, &QLineEdit::textChanged, this, [this](QString text){ 
         emit SendInfoChanged(InfoType::kChannelCount, text);
         auto node_id = static_cast<uint8_t>(channel_count_edit_->GetText().toUInt(nullptr, 16));
-        SetNodeId(node_id);
+        SetLocalNodeId(node_id);
     });
     connect(manufacturer_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kManufacturer, text);});
     connect(version_edit_, &QLineEdit::textChanged, this, [this](QString text){ emit SendInfoChanged(InfoType::kVersion, text);});

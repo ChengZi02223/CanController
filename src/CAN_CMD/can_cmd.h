@@ -21,6 +21,9 @@ extern uint16_t GetSDOCobId();
 extern uint16_t GetHeartCobId();
 extern uint16_t GetWarningCobId();
 
+extern uint8_t g_kLocalNodeId;
+extern void SetLocalNodeId(uint8_t nodeId);
+extern uint8_t GetLocalNodeId();
 /// 切换CANopen
 #define CHANGE_TO_CANOPEN_COB_ID  0x18EF8122
 #define CHANGE_TO_CANOPEN_RPS_COB_ID  0x18EF2281

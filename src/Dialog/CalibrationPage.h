@@ -41,6 +41,7 @@ struct DrawCurveInfo {
     double pwm_ratio = 0.0; // PWM输出值占空比
     double real_curr = 0.0; // 实际电流
     double target_curr = 0.0; // 目标电流
+    double opening = 0.0; // 开度(%)：1侧为正，2侧为负
 };
 
 struct Tpdo2PositionInfo {
@@ -131,6 +132,9 @@ private:
     void StartDrawThread();
     void StopDrawThread();
     void DrawStay(const DrawCurveInfo &info);
+    // 开度计算：根据0x6301原始位移，在标定表的开度-位移映射点间线性插值
+    // 开度 = 区间下限开度 + (当前位移-下限位移)/(上限位移-下限位移) * 区间开度跨度
+    double ComputeOpening(int side, double raw_pos) const;
 
     bool StartLoopCycle();
     void StopLoopCycle();
@@ -166,6 +170,7 @@ private:
 
    int GetRampTime() const;
    void StopCalib();
+   void SetTargetOpening();
 
 signals:
     void SendDrawStayFaInfo(const DrawCurveInfo &info);

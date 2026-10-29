@@ -22,6 +22,7 @@
 static constexpr int kRampCloseTimeoutMs = 60 * 1000;
 // 判定到达0%开度的位置容差（0x6301原始位置刻度0~1000）
 static constexpr int kZeroPosTolerance = 2;
+static constexpr int kPhaseTailGuardMs = 20;
 
 CalibrationPage::CalibrationPage(QWidget* parent)
     : QWidget(parent) {
@@ -667,7 +668,7 @@ bool CalibrationPage::WaitAndResend(int total_ms, LoopSide side,
         const auto next = t0 + std::chrono::milliseconds(seq * (long long)kResendIntervalMs);
         if (next >= deadline) {
             std::unique_lock<std::mutex> lock(cv_mtx_);
-            cv_.wait_until(lock, deadline, interrupted);
+            cv_.wait_for(lock, std::chrono::milliseconds(kPhaseTailGuardMs), interrupted);
             break;
         }
 
@@ -822,6 +823,15 @@ void CalibrationPage::SetPIDParamForSide(bool side_one) {
     qDebug() << "SetPIDParamForSide: "<<cmds.size();
     CAN_MGR_PUSH_CMDS(cmds);
 }
+
+
+void CalibrationPage::SetTargetOpening() {
+    if(m_wavePlot) {
+        double opening = target_edit_->text().toDouble() / 10.0;
+        m_wavePlot->setTargetOpening1(opening);
+        m_wavePlot->setTargetOpening2(opening);
+    }
+}
 // 闭环阶跃
 void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
     qDebug() << "OnPIDStepBtnClicked: "<<checked;
@@ -854,6 +864,8 @@ void CalibrationPage::OnPIDStepBtnClicked(bool checked) {
 
     control_mode_ = ControlAction::kCloseStep;
     HandleControlEvent(checked, ctx);
+
+    SetTargetOpening();
 }
 
 // 闭环斜坡
@@ -878,6 +890,8 @@ void CalibrationPage::OnPIDRampBtnClicked(bool checked) {
     control_mode_ = ControlAction::kCloseRamp;
     HandleControlEvent(true, MakeRampContext());
     ramp_response_running_ = true;
+
+    SetTargetOpening();
 }
 
 ControlContext CalibrationPage::MakeRampContext() {
@@ -1020,6 +1034,7 @@ void CalibrationPage::OnPIDMotionBtnClicked(bool checked) {
     CAN_MGR_PUSH_CMD(GetRPDO2CobId(), ramp_time_cmd);
     
     control_mode_ = ControlAction::kMotionActive;
+    SetTargetOpening();
     StartLoopCycle();
 }
 
@@ -1542,6 +1557,8 @@ static const std::vector<WaveCurve> wave_curves = {
     WaveCurve{"阀2实时位移",     2, QPen(Qt::black,2), false, false, WaveCurveType::kRealDisp,      {}},
     WaveCurve{"阀2闭环控制偏差", 2, QPen(Qt::black,2), false, false, WaveCurveType::kCloseLoopErr,  {}},
     WaveCurve{"阀2最终需求值",   2, QPen(Qt::black,2), false, false, WaveCurveType::kDemandVal,     {}},
+    // 全局唯一的开度曲线：1侧存正值(中线上方)、2侧存负值(中线下方)，见 DrawStay
+    WaveCurve{"开度",            1, QPen(Qt::blue,2),  false, false, WaveCurveType::kOpening,       {}},
 
     // ========== 右侧Y轴 useRightY = true ==========
     WaveCurve{"阀1PWM输出占空比", 1, QPen(Qt::red,2),    true, false, WaveCurveType::kPWMRatio,      {}},
@@ -1672,10 +1689,18 @@ QWidget* CalibrationPage::CreateWaveformArea() {
     connect(left_agix_combo, &QComboBox::currentTextChanged, this, [=](const QString &text){
         m_wavePlot->updateAxis(AxisName::kLeftY, text, GetAxisUnit(text));
         m_wavePlot->showCurveType(false, GetWaveCurveType(text));
+        auto is_on_opening = (text == "开度");
+        m_wavePlot->setYAxisVisible(2, !is_on_opening);
+        m_wavePlot->setOnOpening(is_on_opening);
+        right_agix_combo->setDisabled(is_on_opening);
     });
     connect(right_agix_combo, &QComboBox::currentTextChanged, this, [=](const QString &text){
         m_wavePlot->updateAxis(AxisName::kRightY, text, GetAxisUnit(text));
         m_wavePlot->showCurveType(true, GetWaveCurveType(text));
+        auto is_on_opening = (text == "开度");
+        m_wavePlot->setYAxisVisible(1, !is_on_opening);
+        m_wavePlot->setOnOpening(is_on_opening);
+        left_agix_combo->setDisabled(is_on_opening);
     });
     connect(bottom_agix_combo, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index){
         AxisUnit uint = index == 0? AxisUnit::ks : AxisUnit::kms;
@@ -1779,6 +1804,54 @@ void CalibrationPage::OnReadTpdo2Position(can_frame frame) {
     // std::cout << "====================================\n" << std::endl;
 }
 
+// ------------------------------------------------------------------
+// 开度计算（往复运动-开度计算笔记）：
+// 1. 按当前控制侧确定开度-位移映射点（标定表"位移标定值"列）：
+//    1侧 rows0-4  → 开度 {100%, 50%, 25%, 10%, 0%}（开度越大位移越大）
+//    2侧 rows6-10 → 开度 {0%, 10%, 25%, 50%, 100%}（开度越大位移越小）
+// 2. 找到当前位移所在的相邻开度点区间
+// 3. 线性插值：开度 = 区间下限开度
+//    + (当前位移-下限位移)/(上限位移-下限位移) × 区间开度跨度
+// 端点外限幅取最近开度点的值；表项无效时回退标称预估值
+// ------------------------------------------------------------------
+double CalibrationPage::ComputeOpening(int side, double raw_pos) const {
+    static const double kOpenings1[5] = {100, 50, 25, 10, 0};
+    static const double kOpenings2[5] = {0, 10, 25, 50, 100};
+    const bool side_two = (side == 2);
+    const int base_row = side_two ? 6 : 0;
+    const double* openings = side_two ? kOpenings2 : kOpenings1;
+
+    // 读取该侧5个开度点对应的位移标定值
+    std::pair<double, double> pts[5];   // {位移, 开度}
+    for (int i = 0; i < 5; ++i) {
+        double disp = GetCalibratYuGuValue(base_row + i);   // 标称预估值兜底
+        auto item = displace_table_ ? displace_table_->item(base_row + i, 0) : nullptr;
+        if (item) {
+            bool ok = false;
+            const double v = item->text().toDouble(&ok);
+            if (ok) disp = v;
+        }
+        pts[i] = {disp, openings[i]};
+    }
+
+    // 端点限幅（两侧的位移均按行序递减：row0/row6位移最大）
+    if (raw_pos >= pts[0].first) return pts[0].second;
+    if (raw_pos <= pts[4].first) return pts[4].second;
+
+    // 区间查找 + 线性插值
+    for (int i = 0; i < 4; ++i) {
+        const double d0 = pts[i].first,   o0 = pts[i].second;
+        const double d1 = pts[i + 1].first, o1 = pts[i + 1].second;
+        const bool in_range = (d0 >= d1) ? (raw_pos <= d0 && raw_pos >= d1)
+                                         : (raw_pos >= d0 && raw_pos <= d1);
+        if (in_range) {
+            if (std::abs(d1 - d0) < 1e-9) return o0;
+            return o0 + (raw_pos - d0) / (d1 - d0) * (o1 - o0);
+        }
+    }
+    return pts[4].second;
+}
+
 // 位移曲线绘制
 void CalibrationPage::OnDrawStayFa() {
     DrawCurveInfo info;
@@ -1833,6 +1906,15 @@ void CalibrationPage::DrawStay(const DrawCurveInfo &info) {
     m_wavePlot->appendData(control_side, WaveCurveType::kPWMRatio, info.time, info.pwm_ratio);
     m_wavePlot->appendData(control_side, WaveCurveType::kRealCurrent, info.time, info.real_curr);
     m_wavePlot->appendData(control_side, WaveCurveType::kTargetCurrent, info.time, info.target_curr);
+
+    // 开度：全局唯一一条"开度"曲线，两侧数据都写入该曲线。
+    // 1侧存正值(中线上方)、2侧存负值(中线下方)；开度模式下数值标注显示绝对值，
+    // 注意：导出数据时2侧为负值
+    double opening = ComputeOpening(control_side, info.pos_mm);
+    if (control_side == 2) {
+        opening = -opening;
+    }
+    m_wavePlot->appendDataByType(WaveCurveType::kOpening, info.time, opening);
 
     if(on_calibrat_) {
         actual_value_edit_->setText(QString::number(info.pos_mm));

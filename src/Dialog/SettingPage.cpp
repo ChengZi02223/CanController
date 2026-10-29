@@ -147,7 +147,6 @@ void SettingPage::InitPage() {
     connect(function_btn_area_, &FunctionBtnArea::SendSaveToEPROM, setting_info_table_, &SettingInfoTable::OnSaveToEPROM);
     connect(function_btn_area_, &FunctionBtnArea::SendReadValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
     // connect(function_btn_area_, &FunctionBtnArea::SendInputMode, this, &SettingPage::SendInputMode);
-
     connect(basic_info_bar_, &BasicInfoBar::SendTestState, [=](TestState state){
         setting_info_table_->setEnabled(state == kTestStart);
         function_btn_area_->setEnabled(state == kTestStart);
@@ -157,6 +156,8 @@ void SettingPage::InitPage() {
     // connect(setting_info_table_, &QTableWidget::itemChanged, this, &SettingPage::OnValueChanged);
     connect(this, &SettingPage::SendRowValue, setting_info_table_, &SettingInfoTable::OnSetRowValue);
     connect(setting_info_table_, &SettingInfoTable::SendRampRadio, this,  &SettingPage::SendRampRadio);
+    connect(setting_info_table_, &SettingInfoTable::SendSetNodeIdInfo, this,  &SettingPage::OnSetNodeIdInfo);
+    
     CustomDelegate* m_delegate = new CustomDelegate(this);
     setting_info_table_->setItemDelegate(m_delegate);
     connect(m_delegate, &CustomDelegate::cellEditReturnPressed,
@@ -182,6 +183,10 @@ void SettingPage::InitPage() {
     });
 }
 
+void SettingPage::OnSetNodeIdInfo(QString node) {
+    basic_info_bar_->SetChannelCount(node);
+}
+
 void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
     auto row = item->row();
     auto obj_itm = setting_info_table_->item(row, INFO_TABLE_OBJ_COLUMN);
@@ -196,9 +201,8 @@ void SettingPage::CheckCobIdChanged(QTableWidgetItem *item) {
             int node_id = new_value.toInt(&ok, 16);
             if(ok) {
                 // qDebug() << "SettingPage::CheckCobIdChanged: Node ID changed to " << node_id;
-                SetNodeId(static_cast<uint8_t>(node_id));
-                QString node_str = QString("%1").arg(node_id, 2, 16, QLatin1Char('0'));
-                basic_info_bar_->SetChannelCount(node_str);
+                SetLocalNodeId(static_cast<uint8_t>(node_id));
+                QString node_str = QString("%1").arg(node_id, 2, 16, QLatin1Char('0'));                
                 emit basic_info_bar_->SendInfoChanged(InfoType::kChannelCount, node_str);
             } 
         }
@@ -786,6 +790,8 @@ void SettingInfoTable::UpdateParams() {
         if(on_Save_eeprom_) {
             CAN_MGR_PUSH_CMD(GetSDOCobId(), SDO_SAVE_EEPROM_CMD);
             emit SendReadFinished(QString("保存到EEPROM完成"));
+            SetNodeId(GetLocalNodeId());
+            emit SendSetNodeIdInfo(QString::number(GetLocalNodeId(), 16));
         }
     });
     save_thread_->start();

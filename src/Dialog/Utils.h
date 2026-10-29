@@ -13,7 +13,7 @@
 #define kThreadWaitTime 200
 
 #define kCloseCycleWaitTime 5 //s
-#define ON_TEST_MODE
+// #define ON_TEST_MODE
 
 static const std::vector<int> Calibrat_list = {100, 50, 25, 10, 0, 0, 0, 10, 25, 50, 100};
 static const std::vector<double> flow_table = {1.0, 0.5, 0.25, 0.1, 0, 0, 0, 0.1, 0.25, 0.5, 1.0};

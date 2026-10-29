@@ -35,6 +35,7 @@ signals:
 
 public slots:
     void OnValueChanged(QTableWidgetItem *item);
+    void OnSetNodeIdInfo(QString node);
 
 private:
     void InitPage();
@@ -74,6 +75,7 @@ signals:
     void updateProgress(int percent);
     void SendReadFinished(QString text);
     void SendRampRadio(int radio);
+    void SendSetNodeIdInfo(QString node_str);
 
 public slots:
     void OnLoadSettings();
@@ -145,6 +147,7 @@ signals:
     // void SendConfirmValues();
     void updateProgress(int percent);
     void SendReadFinished(QString text);
+
 
 public slots:
     void OnReadFromEPROM(can_frame frame);

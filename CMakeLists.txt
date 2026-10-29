@@ -62,11 +62,14 @@ file(GLOB QRC_FILE
 
 add_executable(${PROJECT_NAME} ${SRCS} ${HDRS} ${QRC_FILE})
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(WIN32 AND MINGW)
+        set_target_properties(CanController PROPERTIES WIN32_EXECUTABLE TRUE)
+        target_link_options(CanController PRIVATE -mwindows)
+    endif()
+endif()
 # ========== 新增：Release隐藏控制台窗口 ==========
-# if(WIN32 AND MINGW)
-#     set_target_properties(CanController PROPERTIES WIN32_EXECUTABLE TRUE)
-#     target_link_options(CanController PRIVATE -mwindows)
-# endif()
+
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}

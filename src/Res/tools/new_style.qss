@@ -597,6 +597,11 @@ QComboBox::drop-down {
     border: none;
     width: 20px;
 }
+QComboBox:disabled {
+    background-color: #f3f4f6;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+}
 /* ---------- CheckBox / RadioButton ---------- */
 QCheckBox, QRadioButton {
     spacing: 8px;

@@ -32,6 +32,7 @@ public:
     int addCurve(WaveCurve curve);
     void appendData(int curveIndex, double time, double value);
     void appendData(int side, WaveCurveType type, double time, double value);
+    void appendDataByType(WaveCurveType type, double time, double value);
     void setMaxPointCount(int cnt);
     void setTimeWindow(double sec);
     void clearAll();
@@ -46,6 +47,14 @@ public:
     void markGapAllCurves();
     void setLeftYMaxFloor(double maxClamp);
     void setRightYMaxFloor(double maxClamp);
+
+    void setOnOpening(bool opening);
+    void setYAxisVisible(int side, bool visible);
+    // 目标开度标记透传（开度模式下左轴上/下半区红色刻度）
+    void setTargetOpening1(double v);   // 阀1目标开度：上半区
+    void setTargetOpening2(double v);   // 阀2目标开度：下半区
+    double targetOpening1() const;
+    double targetOpening2() const;
 private:
     // 刷新图例：只保留有数据的曲线图例，无数据则销毁
     void refreshLegend();

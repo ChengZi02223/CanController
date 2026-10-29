@@ -1,10 +1,16 @@
 #include "can_cmd.h"
 
 uint8_t g_kNodeId = 0x40;
-
+uint8_t g_kLocalNodeId = 0x40;
 void SetNodeId(uint8_t nodeId) {
     g_kNodeId = nodeId;
 }
+
+void SetLocalNodeId(uint8_t nodeId) {
+    g_kLocalNodeId = nodeId;
+}
+
+uint8_t GetLocalNodeId() {return g_kLocalNodeId; }
 
 uint16_t GetRPDOCobId() { return 0x200u + g_kNodeId; }
 uint16_t GetRPDO2CobId() { return 0x300u + g_kNodeId; }

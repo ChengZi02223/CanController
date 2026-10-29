@@ -189,6 +189,10 @@ void QWavePlotWithLegendWidget::appendData(int side, WaveCurveType type, double 
     m_plot->appendData(side, type, time, value);
 }
 
+void QWavePlotWithLegendWidget::appendDataByType(WaveCurveType type, double time, double value) {
+    m_plot->appendDataByType(type, time, value);
+}
+
 void QWavePlotWithLegendWidget::setMaxPointCount(int cnt)
 {
     m_plot->setMaxPointCount(cnt);
@@ -271,4 +275,59 @@ void QWavePlotWithLegendWidget::setRightYMaxFloor(double maxClamp)
         m_right_max_y->setText(QString::number(maxClamp, 'f', 2));
         m_right_max_y->blockSignals(false);
     }
+}
+
+void QWavePlotWithLegendWidget::setOnOpening(bool opening) {
+    m_plot->setOnOpening(opening);
+    // 进入/退出开度模式会批量修改曲线 visible，图例需要同步刷新
+    tryRefreshLegend();
+    if (opening) {
+        // 进入开度模式：输入框显示100并置灰禁用（blockSignals防止触发textChanged改floor）
+        if (m_left_max_y) {
+            m_left_max_y->blockSignals(true);
+            m_left_max_y->setText(QString::number(100.0, 'f', 2));
+            m_left_max_y->blockSignals(false);
+            m_left_max_y->setDisabled(true);
+        }
+        if (m_right_max_y) {
+            m_right_max_y->blockSignals(true);
+            m_right_max_y->setText(QString::number(100.0, 'f', 2));
+            m_right_max_y->blockSignals(false);
+            m_right_max_y->setDisabled(true);
+        }
+    } else {
+        // 退出开度模式：恢复可编辑，并把显示值同步回 floor（实际量程已由m_plot恢复）
+        if (m_left_max_y) {
+            m_left_max_y->setEnabled(true);
+            m_left_max_y->blockSignals(true);
+            m_left_max_y->setText(QString::number(m_plot->leftYMaxFloor(), 'f', 2));
+            m_left_max_y->blockSignals(false);
+        }
+        if (m_right_max_y) {
+            m_right_max_y->setEnabled(true);
+            m_right_max_y->blockSignals(true);
+            m_right_max_y->setText(QString::number(m_plot->rightYMaxFloor(), 'f', 2));
+            m_right_max_y->blockSignals(false);
+        }
+    }
+}
+
+void QWavePlotWithLegendWidget::setYAxisVisible(int side, bool visible) {
+    m_plot->setYAxisVisible(side, visible);
+}
+
+void QWavePlotWithLegendWidget::setTargetOpening1(double v) {
+    m_plot->setTargetOpening1(v);
+}
+
+void QWavePlotWithLegendWidget::setTargetOpening2(double v) {
+    m_plot->setTargetOpening2(v);
+}
+
+double QWavePlotWithLegendWidget::targetOpening1() const {
+    return m_plot->targetOpening1();
+}
+
+double QWavePlotWithLegendWidget::targetOpening2() const {
+    return m_plot->targetOpening2();
 }
